@@ -64,11 +64,11 @@
 
 <p>ただし、前述の通り、本章の実装では、独立したトークン列を先にすべて作るのではなく、整数やキーワードを入力の先頭から切り出す小さな字句解析の関数を、構文解析器から直接呼び出す。したがって、以下で作成する <code>int_p</code> や <code>keyword_p</code> などは、構文解析器の内部で利用する字句解析の部品として位置付ける。</p>
 
-<h3>1. 字句解析器（lexer）の実装：最小単位からの組み立て</h3>
+<h3>1. 字句解析器（lexer）の実装</h3>
 
 <p>字句解析器は、入力された文字のリスト（<code>char list</code>）を受け取り、意味のあるデータ（トークン）と残りの文字列のペアを返す。ここではAST（構文木）の構築はまだ行わず、あくまで「文字の列からトークンを切り出す」ことだけに専念する。</p>
 
-<p>最初に、対象とするミニOCaml言語の式の構文を限定して、「整数の定数」と「足し算」「かけ算」だけを持つ式とし、これに対する字句解析および構文解析を考える。したがって、現段階の処理系には <code>if</code> 式や真理値定数などは含まないことに注意してほしい。まずはこの限定された構文に対して「文字列から構文木を完全に構築する」という一連の流れを完成させる。それが完了したその後から、徐々に機能を足していくことにする。</p>
+<p>最初に、対象とするミニOCaml言語の式の構文を限定して、「整数の定数」と「足し算」「かけ算」だけを持つ式とし、これに対する字句解析および構文解析を考える。したがって、現段階の処理系には <code>if</code> 式や真偽値定数などは含まないことに注意してほしい。まずはこの限定された構文に対して「文字列から構文木を完全に構築する」という一連の流れを完成させる。それが完了したその後から、徐々に機能を足していくことにする。</p>
 
 <p>これを簡単に実装するために、先ほどの4つの処理（サブ目標）を、さらに具体的な「ミニ目標」に分割してコードを記述していく。</p>
 
@@ -762,7 +762,7 @@ let test5 = lex_one "@ 3" ;;
 <h3>構文解析器 (parser) の実装方針</h3>
 
 <p>構文解析器は、字句解析の機能を利用してトークンの列を読み込み、文法の定義に応じた木（構文木、すなわち <code>exp</code> 型のデータ）を組み立てる。これも字句解析と同様に、以下のように要素ごとに処理を分割できる。</p>
-<p>（※前述の通り、現段階では 整数、足し算、かけ算のみを対象とし、<code>if</code> 式や真理値などの複合的な構文は後から追加していく。）</p>
+<p>（※前述の通り、現段階では 整数、足し算、かけ算のみを対象とし、<code>if</code> 式や真偽値などの複合的な構文は後から追加していく。）</p>
 
 <ul>
 <li> <b>式の基本要素を組み立てる:</b> 整数など、それ以上分割できない最小単位の式を読み取って構文木（<code>IntLit</code>）にする機能を作る。</li>
@@ -773,7 +773,7 @@ let test5 = lex_one "@ 3" ;;
 <p>
 それでは、最も基本的な部品の作成から順番に見ていこう。
 
-<h3>2. 構文解析器（parser）の実装：構文木の組み立て</h3>
+<h3>2. 構文解析器（parser）の実装</h3>
 
 <p>字句解析の部品（<code>int_p</code> や <code>keyword_p</code> など）が揃ったので、これらを利用して構文解析器を作っていく。
 ここでの目標は、入力された文字のリストから意味のあるトークンを読み取り、最終的に <code>exp</code> 型の「抽象構文木（AST）」を構築することである。</p>
@@ -918,16 +918,86 @@ let rec plus_expr input =
 
 
 
-<h4>サブ目標 7: エントリーポイントの作成</h4>
+<h4>サブ目標 7: 括弧で囲まれた算術式の追加</h4>
+<p>これまでの実装では、かけ算を足し算よりも先に結合するという通常の優先順位に従って構文木を作っていた。しかし、<code>(1 + 2) * 3</code> のように、括弧によって通常とは異なる順番で式を結合したい場合もある。</p>
+<p>括弧は新しい計算を表すものではないため、括弧そのものに対応する構文木は作らない。開き括弧を読み、内部の式を解析し、閉じ括弧を確認した後、内部で作られた構文木をそのまま返す。</p>
+<p>現段階で扱える式全体は足し算式までなので、括弧の内部は <code>plus_expr</code> を使って解析する。後の節で <code>if</code> 式や <code>let</code> 式などを追加した後には、括弧の内部を、すべての式を扱う入口である <code>expr</code> で解析するように一般化する。</p>
+<ul>
+<li> <b>ミニ目標 7-1: 開き括弧、内部の算術式、閉じ括弧の読み取り</b><br>
+<code>(</code> を読み、その内部を <code>plus_expr</code> で解析した後、<code>)</code> を読む。括弧そのものに対応するASTは作らず、内部の式をそのまま返す。
+<li> <b>ミニ目標 7-2: <code>primary_expr</code> への括弧の追加</b><br>
+整数の読み取りに失敗した場合には <code>paren_expr</code> を試し、括弧で囲まれた式も基本要素として扱えるようにする。
+</ul>
+<p><code>primary_expr</code> は <code>paren_expr</code> を呼び、<code>paren_expr</code> は <code>plus_expr</code> を呼ぶ。また、<code>plus_expr</code> は <code>times_expr</code> を通じて再び <code>primary_expr</code> を呼ぶ。そのため、この4つの関数は <code>let rec ... and ...</code> による相互再帰として定義する。</p>
+<pre>
+(* primary_expr : input -&gt; (exp * input) option *)
+let rec primary_expr input =
+  let input_after_spaces = skip_spaces input in
+  match int_p input_after_spaces with
+  | Some (n, rest) -&gt;
+      Some (IntLit n, rest)
+  | None -&gt;
+      paren_expr input_after_spaces
+
+(* paren_expr : input -&gt; (exp * input) option *)
+and paren_expr input =
+  match symbol_p "(" input with
+  | None -&gt; None
+  | Some (_, rest1) -&gt;
+      (match plus_expr rest1 with
+       | None -&gt; None
+       | Some (e, rest2) -&gt;
+           let rest2 = skip_spaces rest2 in
+           match symbol_p ")" rest2 with
+           | Some (_, rest3) -&gt; Some (e, rest3)
+           | None -&gt; None)
+
+(* times_expr : input -&gt; (exp * input) option *)
+and times_expr input =
+  match primary_expr input with
+  | None -&gt; None
+  | Some (e1, rest1) -&gt;
+      let rec parse_rest current_e current_rest =
+        let r = skip_spaces current_rest in
+        match symbol_p "*" r with
+        | Some (_, rest2) -&gt;
+            (match primary_expr rest2 with
+             | Some (e2, rest3) -&gt;
+                 parse_rest (Times (current_e, e2)) rest3
+             | None -&gt; Some (current_e, current_rest))
+        | None -&gt; Some (current_e, current_rest)
+      in
+      parse_rest e1 rest1
+
+(* plus_expr : input -&gt; (exp * input) option *)
+and plus_expr input =
+  match times_expr input with
+  | None -&gt; None
+  | Some (e1, rest1) -&gt;
+      let rec parse_rest current_e current_rest =
+        let r = skip_spaces current_rest in
+        match symbol_p "+" r with
+        | Some (_, rest2) -&gt;
+            (match times_expr rest2 with
+             | Some (e2, rest3) -&gt;
+                 parse_rest (Plus (current_e, e2)) rest3
+             | None -&gt; Some (current_e, current_rest))
+        | None -&gt; Some (current_e, current_rest)
+      in
+      parse_rest e1 rest1
+</pre>
+<p>この定義により、<code>parse "(1 + 2) * 3"</code> は、通常の優先順位を括弧によって変更した <code>Times (Plus (IntLit 1, IntLit 2), IntLit 3)</code> という構文木を生成できる。</p>
+
+<h4>サブ目標 8: エントリーポイントの作成</h4>
 最後に、文字列を受け取って最終的な AST を一つだけ返す便利な関数を作る。
 
 <ul>
-<li> <b>ミニ目標 7-1: 全体を統括する <code>parse</code> 関数の作成</b><br>
+<li> <b>ミニ目標 8-1: 全体を統括する <code>parse</code> 関数の作成</b><br>
 文字列を <code>char list</code> に変換し、一番優先順位の低い <code>plus_expr</code> を呼び出す。成功した場合、文字列が最後まで消費されているかを確認する。
 </ul>
 
 <pre>
-(* ミニ目標 7-1: 構文解析の実行関数 *)
+(* ミニ目標 8-1: 構文解析の実行関数 *)
 (* 入力: ソースコードの文字列 (string) *)
 (* 出力: 完成した構文木 (exp) *)
 (* parse : string -&gt; exp *)
@@ -974,69 +1044,92 @@ let test2 = parse "6 / 3" ;;
 let test3 = parse "1 * 5 - 3" ;;  (* ※引き算よりかけ算が先に結合されるか注意 *)
 
 (* 期待されるAST: Div(IntLit 10, IntLit 0) *)
-let test4 = eval1 (parse "10 / 0") ;;
+let test4 = parse "10 / 0" ;;
+
+(* 期待されるAST: Times(Plus(IntLit 1, IntLit 2), IntLit 3) *)
+let test5 = parse "(1 + 2) * 3" ;;
+
+(* 期待されるAST: Div(IntLit 20, Plus(IntLit 2, IntLit 3)) *)
+let test6 = parse "20 / (2 + 3)" ;;
+
+(* 期待されるAST: Times(Div(IntLit 20, IntLit 2), IntLit 3) *)
+let test7 = parse "20 / 2 * 3" ;;
+
+(* 期待されるAST: Minus(Minus(IntLit 10, IntLit 3), IntLit 2) *)
+let test8 = parse "10 - 3 - 2" ;;
+
+(* 期待されるAST: Minus(IntLit 10, Minus(IntLit 3, IntLit 2)) *)
+let test9 = parse "10 - (3 - 2)" ;;
+
+(* 期待されるAST:
+   Plus(
+     Div(IntLit 18, Times(IntLit 2, IntLit 3)),
+     Times(Minus(IntLit 7, IntLit 4), IntLit 5)
+   )
+*)
+let test10 = parse "(18 / (2 * 3)) + (7 - 4) * 5" ;;
 </pre>
 
 <p>ただし、<code>test4</code> はゼロ除算である為、これを評価した場合はエラーになる。構文解析器の役割は、あくまで構文として正しいかどうかを判定するだけであり、評価時のエラー（ゼロ除算など）を検出することはない。
 </p>
 
-<h3>3. 真理値と比較演算子の追加：型の拡張と優先順位</h3>
+<h3>3. 真偽値と比較演算子の追加</h3>
 
-<p>これまでの実装で、整数と四則演算（<code>+</code>, <code>*</code> など）をパースする処理系が完成した。次は、プログラムに条件分岐などを導入するための準備として、「真理値（<code>true</code>, <code>false</code>）」と「比較演算子（今回はまず <code>=</code> のみ）」を追加する。
+<p>これまでの実装で、整数と四則演算（<code>+</code>, <code>*</code> など）をパースする処理系が完成した。次は、プログラムに条件分岐などを導入するための準備として、「真偽値（<code>true</code>, <code>false</code>）」と「比較演算子（今回はまず <code>=</code> のみ）」を追加する。
 </p>
 
 <p>一気に全てを書き換えるのではなく、<b>「データ型の拡張」</b>と<b>「新しい優先順位の階層の追加」</b>という手順で段階的に実装していく。全体の見通しを良くするため、まずは本節で順番に取り組むサブ目標を列挙しておこう。
 </p>
 
 <ul>
-<li> <b>サブ目標 8: 抽象構文木（AST）の拡張</b><br>
-新しく追加する真理値と等価演算子を表現できるように、<code>exp</code> 型を拡張する。</li>
-<li> <b>サブ目標 9: 字句解析器（lexer）の確認</b><br>
+<li> <b>サブ目標 9: 抽象構文木（AST）の拡張</b><br>
+新しく追加する真偽値と等価演算子を表現できるように、<code>exp</code> 型を拡張する。</li>
+<li> <b>サブ目標 10: 字句解析器（lexer）の確認</b><br>
 新しい構文を読み取るための字句解析の機能が、既存の関数で十分にまかなえることを確認する。</li>
-<li> <b>サブ目標 10: 構文解析器の基本要素（葉）の拡張</b><br>
+<li> <b>サブ目標 11: 構文解析器の基本要素（葉）の拡張</b><br>
 ASTの末端となる <code>primary_expr</code> を拡張し、<code>true</code> と <code>false</code> をパースできるようにする。</li>
-<li> <b>サブ目標 11: 比較演算式のパース（新しい優先順位の追加）</b><br>
+<li> <b>サブ目標 12: 比較演算式のパース（新しい優先順位の追加）</b><br>
 足し算よりも優先順位が低い比較演算子のパース処理（<code>comp_expr</code>）を新しく作成する。</li>
-<li> <b>サブ目標 12: エントリーポイントの更新</b><br>
+<li> <b>サブ目標 13: エントリーポイントの更新</b><br>
 構文解析の開始地点を <code>plus_expr</code> から、一番優先順位の低い <code>comp_expr</code> へと変更する。</li>
 </ul>
 
 それでは、それぞれのサブ目標について具体的な実装を見ていこう。
 
-<h4>サブ目標 8: 抽象構文木（AST）の拡張</h4>
+<h4>サブ目標 9: 抽象構文木（AST）の拡張</h4>
 まずは、新しく追加する要素を表現できるように <code>exp</code> 型を拡張する。
 
 <ul>
-<li> <b>ミニ目標 8-1: 真理値と等価演算子の追加</b><br>
-真理値を表す <code>BoolLit of bool</code> と、等しいか判定する <code>Eq of exp * exp</code> を追加する。
+<li> <b>ミニ目標 9-1: 真偽値と等価演算子の追加</b><br>
+真偽値を表す <code>BoolLit of bool</code> と、等しいか判定する <code>Eq of exp * exp</code> を追加する。
 </ul>
 
 <pre>
-(* ミニ目標 8-1: ASTの拡張 *)
+(* ミニ目標 9-1: ASTの拡張 *)
 type exp =
   | IntLit of int
-  | BoolLit of bool     (* 追加: 真理値の定数 *)
+  | BoolLit of bool     (* 追加: 真偽値の定数 *)
   | Plus of exp * exp
   | Times of exp * exp
   | Eq of exp * exp     (* 追加: e1 = e2 *)
 </pre>
 
-<h4>サブ目標 9: 字句解析器（lexer）の確認</h4>
+<h4>サブ目標 10: 字句解析器（lexer）の確認</h4>
 新しい構文を読み取るにあたり、字句解析器に新しい関数を追加する必要があるだろうか？
 実は、<b>追加する必要はない。</b>
 
-すでに作成した <code>keyword_p</code> は、「指定した文字列と一致するか」を判定する汎用的な関数である。したがって、<code>keyword_p "true"</code> や <code>symbol_p "="</code> と呼び出すだけで、真理値や比較演算子も独立したトークンとして簡単に切り出すことができる。これが、問題を小さな関数に分割して組み立てる手法（モジュール化という）の大きな利点である。
+すでに作成した <code>keyword_p</code> は、「指定した文字列と一致するか」を判定する汎用的な関数である。したがって、<code>keyword_p "true"</code> や <code>symbol_p "="</code> と呼び出すだけで、真偽値や比較演算子も独立したトークンとして簡単に切り出すことができる。これが、問題を小さな関数に分割して組み立てる手法（モジュール化という）の大きな利点である。
 
-<h4>サブ目標 10: 構文解析器の基本要素（葉）の拡張</h4>
-字句解析の準備ができているので、さっそく構文解析器を拡張する。まずは一番優先度が高く、ASTの末端（葉）となる <code>primary_expr</code> に真理値を追加する。
+<h4>サブ目標 11: 構文解析器の基本要素（葉）の拡張</h4>
+字句解析の準備ができているので、さっそく構文解析器を拡張する。まずは一番優先度が高く、ASTの末端（葉）となる <code>primary_expr</code> に真偽値を追加する。
 
 <ul>
-<li> <b>ミニ目標 10-1: <code>true</code> と <code>false</code> のパース</b><br>
+<li> <b>ミニ目標 11-1: <code>true</code> と <code>false</code> のパース</b><br>
 入力文字列が整数でなかった場合、次に <code>"true"</code> であるか試し、それも失敗したら <code>"false"</code> であるか試すように <code>match</code> 式をネスト（入れ子）にして処理を繋ぐ。
 </ul>
 
 <pre>
-(* ミニ目標 10-1: 最小単位（整数と真理値）のパース *)
+(* ミニ目標 11-1: 最小単位（整数と真偽値）のパース *)
 (* primary_expr : input -&gt; (exp * input) option *)
 let rec primary_expr input =
   let input = skip_spaces input in
@@ -1057,7 +1150,7 @@ let rec primary_expr input =
             | None -&gt; None)) (* 全てに失敗したら None を返す *)
 </pre>
 
-<h4>サブ目標 11: 比較演算式のパース（新しい優先順位の追加）</h4>
+<h4>サブ目標 12: 比較演算式のパース（新しい優先順位の追加）</h4>
 
 <p>次に、比較演算子 <code>=</code> のパース処理を追加する。
 ここで文法の「優先順位」について考えてみよう。
@@ -1091,7 +1184,7 @@ Eq (Eq (IntLit 1, IntLit 2), IntLit 3)
 <p>
 ただし、このような構文木を作れることと、
 その式が正しい型を持つことは別の問題である。
-<code>1 = 2</code> の結果は真理値なので、
+<code>1 = 2</code> の結果は真偽値なので、
 その結果と整数 <code>3</code> を比較する式は、
 後の型検査または評価の段階でエラーになる。
 構文解析器の役割は、ここでは入力の構造に従って
@@ -1100,7 +1193,7 @@ Eq (Eq (IntLit 1, IntLit 2), IntLit 3)
 
 <ul>
 <li>
-<b>ミニ目標 11-1: 左辺（足し算式）の読み取り</b><br>
+<b>ミニ目標 12-1: 左辺（足し算式）の読み取り</b><br>
 比較演算の構成要素は、より優先度の高い
 <code>plus_expr</code> であるため、
 まずはこれを呼び出して左辺
@@ -1108,7 +1201,7 @@ Eq (Eq (IntLit 1, IntLit 2), IntLit 3)
 </li>
 
 <li>
-<b>ミニ目標 11-2: 連続する比較演算のためのアキュムレータの準備</b><br>
+<b>ミニ目標 12-2: 連続する比較演算のためのアキュムレータの準備</b><br>
 最初に読み取った左辺をアキュムレータ
 <code>current_e</code> として保持し、
 比較演算子が続く限り構文木を更新する
@@ -1116,13 +1209,13 @@ Eq (Eq (IntLit 1, IntLit 2), IntLit 3)
 </li>
 
 <li>
-<b>ミニ目標 11-3: <code>=</code> と右辺の読み取り</b><br>
+<b>ミニ目標 12-3: <code>=</code> と右辺の読み取り</b><br>
 入力の先頭に <code>=</code> があれば、
 その右辺を <code>plus_expr</code> で読み取る。
 </li>
 
 <li>
-<b>ミニ目標 11-4: 構文木の結合と再帰</b><br>
+<b>ミニ目標 12-4: 構文木の結合と再帰</b><br>
 現在の構文木 <code>current_e</code> と
 新しく読み取った右辺 <code>e2</code> から
 <code>Eq (current_e, e2)</code> を作り、
@@ -1130,7 +1223,7 @@ Eq (Eq (IntLit 1, IntLit 2), IntLit 3)
 </li>
 
 <li>
-<b>ミニ目標 11-5: 比較演算子がない場合の処理</b><br>
+<b>ミニ目標 12-5: 比較演算子がない場合の処理</b><br>
 <code>=</code> が続かなければ、
 現在までに作った構文木をそのまま返す。
 </li>
@@ -1141,57 +1234,42 @@ Eq (Eq (IntLit 1, IntLit 2), IntLit 3)
 (* comp_expr : input -&gt; (exp * input) option *)
 let rec comp_expr input =
   
-  (* ミニ目標 11-1:
+  (* ミニ目標 12-1:
      最初の左辺を plus_expr で読み取る *)
   match plus_expr input with
-  | None -&gt;
-      None
-      
+  | None -&gt;None
   | Some (e1, rest1) -&gt;
       
-      (* ミニ目標 11-2:
-         current_e に、ここまでに作った構文木を保持する *)
+      (* ミニ目標 12-2:current_e に、ここまでに作った構文木を保持する *)
       (* parse_rest : exp -&gt; input -&gt; (exp * input) option *)
       let rec parse_rest current_e current_rest =
         let r = skip_spaces current_rest in
         
-        (* ミニ目標 11-3:
-           比較演算子 "=" が続くか確認する *)
+        (* ミニ目標 12-3:比較演算子 "=" が続くか確認する *)
         match symbol_p "=" r with
-        | None -&gt;
-            (* ミニ目標 11-5:
-               比較演算子がなければ現在の木を返す *)
-            Some (current_e, current_rest)
-            
+        | None -&gt; Some (current_e, current_rest) (* ミニ目標 12-5:比較演算子がなければ現在の木を返す *)
         | Some (_, rest2) -&gt;
             (* "=" の右辺を読み取る *)
             (match plus_expr rest2 with
-             | None -&gt;
-                 (* "=" があるのに右辺がないため、
-                    比較式として失敗する *)
-                 None
-                 
+             | None -&gt; None (* "=" があるのに右辺がないため、比較式として失敗する *)
              | Some (e2, rest3) -&gt;
-                 (* ミニ目標 11-4:
-                    左右の式から新しい Eq を作り、
-                    さらに比較演算子が続くか調べる *)
+                 (* ミニ目標 12-4:左右の式から新しい Eq を作り、さらに比較演算子が続くか調べる *)
                  let new_e = Eq (current_e, e2) in
                  parse_rest new_e rest3)
       in
-      
       parse_rest e1 rest1
 </pre>
 
-<h4>サブ目標 12: エントリーポイントの更新</h4>
+<h4>サブ目標 13: エントリーポイントの更新</h4>
 最後に、文字列を受け取ってパースを開始する <code>parse</code> 関数を更新する。一番優先順位の低い関数が <code>plus_expr</code> から <code>comp_expr</code> に変わったため、呼び出し元を変更するだけでよい。
 
 <ul>
-<li> <b>ミニ目標 12-1: <code>parse</code> 関数の呼び出し先変更</b><br>
+<li> <b>ミニ目標 13-1: <code>parse</code> 関数の呼び出し先変更</b><br>
 <code>match plus_expr chars with</code> となっていた部分を <code>match comp_expr chars with</code> に書き換える。
 </ul>
 
 <pre>
-(* ミニ目標 12-1: エントリーポイントの更新 *)
+(* ミニ目標 13-1: エントリーポイントの更新 *)
 (* parse : string -&gt; exp *)
 let parse s =
   let chars = chars_of_string s in
@@ -1205,7 +1283,7 @@ let parse s =
   | None -&gt; failwith "Parse Error"
 </pre>
 
-これで、真理値と等価演算子（<code>=</code>）が正しくパースできるようになった。
+これで、真偽値と等価演算子（<code>=</code>）が正しくパースできるようになった。
 
 
 <h2>課題 4-2-3 (比較演算子の拡張)</h2>
@@ -1243,26 +1321,26 @@ let test4 = parse "5 &gt; 2 + 1" ;;
 実装の手順はこれまでと全く同じである。まずは全体の見通しを良くするため、本節で順番に取り組むサブ目標を列挙する。
 
 <ul>
-<li> <b>サブ目標 13: 抽象構文木（AST）の拡張</b><br>
+<li> <b>サブ目標 14: 抽象構文木（AST）の拡張</b><br>
 条件分岐を表現できるように、<code>exp</code> 型に新しい構成子を追加する。</li>
-<li> <b>サブ目標 14: <code>if</code> 式のパース処理の実装</b><br>
+<li> <b>サブ目標 15: <code>if</code> 式のパース処理の実装</b><br>
 これまでに作成した関数を組み合わせ、<code>if</code>、条件式、<code>then</code>、真の場合の式、<code>else</code>、偽の場合の式を順番に読み取る処理を作成する。</li>
-<li> <b>サブ目標 15: エントリーポイントの更新</b><br>
+<li> <b>サブ目標 16: エントリーポイントの更新</b><br>
 構文解析の開始地点を、一番優先順位が低く設定される <code>if_expr</code> へと変更する。</li>
 </ul>
 
 それでは、それぞれのサブ目標について具体的な実装を見ていこう。
 
-<h4>サブ目標 13: 抽象構文木（AST）の拡張</h4>
+<h4>サブ目標 14: 抽象構文木（AST）の拡張</h4>
 まずは、新しく追加する要素を表現できるように <code>exp</code> 型を拡張する。
 
 <ul>
-<li> <b>ミニ目標 13-1: <code>If</code> の追加</b><br>
+<li> <b>ミニ目標 14-1: <code>If</code> の追加</b><br>
 条件式、真の場合の式、偽の場合の式の3つの <code>exp</code> を保持する <code>If of exp * exp * exp</code> を追加する。
 </ul>
 
 <pre>
-(* ミニ目標 13-1: ASTの拡張 *)
+(* ミニ目標 14-1: ASTの拡張 *)
 type exp =
   | IntLit of int
   | BoolLit of bool
@@ -1273,41 +1351,41 @@ type exp =
   | If of exp * exp * exp   (* 追加: if e1 then e2 else e3 *)
 </pre>
 
-<h4>サブ目標 14: <code>if</code> 式のパース処理の実装</h4>
+<h4>サブ目標 15: <code>if</code> 式のパース処理の実装</h4>
 次に、文字列から <code>if</code> 式を読み取る関数 <code>if_expr</code> を作成する。
 文法規則 <code>if e1 then e2 else e3</code> に従って、先頭から順番に文字列や式が並んでいるかを確認していく。この処理は、以下の4つのミニ目標に分割して実装する。
 
 <ul>
-<li> <b>ミニ目標 14-1: <code>if</code> と条件式 (<code>e1</code>) の読み取り</b><br>
+<li> <b>ミニ目標 15-1: <code>if</code> と条件式 (<code>e1</code>) の読み取り</b><br>
 先頭が <code>"if"</code> という文字列で始まっているか確認する。一致すれば、それに続く条件式（<code>e1</code>）を再帰的にパースする。
-<li> <b>ミニ目標 14-2: <code>then</code> と真の場合の式 (<code>e2</code>) の読み取り</b><br>
+<li> <b>ミニ目標 15-2: <code>then</code> と真の場合の式 (<code>e2</code>) の読み取り</b><br>
 条件式 <code>e1</code> の後ろの空白を読み飛ばし、<code>"then"</code> が続くか確認する。一致すれば、それに続く式（<code>e2</code>）をパースする。
-<li> <b>ミニ目標 14-3: <code>else</code> と偽の場合の式 (<code>e3</code>) の読み取りおよびAST構築</b><br>
+<li> <b>ミニ目標 15-3: <code>else</code> と偽の場合の式 (<code>e3</code>) の読み取りおよびAST構築</b><br>
 式 <code>e2</code> の後ろの空白を読み飛ばし、<code>"else"</code> が続くか確認する。一致すれば、それに続く式（<code>e3</code>）をパースし、これまでに読み取った3つの式を使って <code>If(e1, e2, e3)</code> という構文木を構築する。
-<li> <b>ミニ目標 14-4: <code>if</code> で始まらない場合の処理</b><br>
+<li> <b>ミニ目標 15-4: <code>if</code> で始まらない場合の処理</b><br>
 もし最初の段階で <code>"if"</code> が見つからなければ、この文字列は <code>if</code> 式ではない（単なる比較式や足し算などである）とみなし、比較式のパース処理（<code>comp_expr</code>）にそのまま処理を委譲する。
 </ul>
 
 <pre>
-(* ミニ目標 14: if式のパース *)
+(* サブ目標 15: if式のパース *)
 (* if_expr : input -&gt; (exp * input) option *)
 let rec if_expr input =
   let r1 = skip_spaces input in
   
-  (* ミニ目標 14-1: "if" と条件式(e1)の読み取り *)
+  (* ミニ目標 15-1: "if" と条件式(e1)の読み取り *)
   match keyword_p "if" r1 with
   | Some (_, rest1) -&gt;
       (match if_expr rest1 with
        | Some (e1, rest2) -&gt;
            
-           (* ミニ目標 14-2: "then" と真の場合の式(e2)の読み取り *)
+           (* ミニ目標 15-2: "then" と真の場合の式(e2)の読み取り *)
            let r2 = skip_spaces rest2 in
            (match keyword_p "then" r2 with
             | Some (_, rest3) -&gt;
                 (match if_expr rest3 with
                  | Some (e2, rest4) -&gt;
                      
-                     (* ミニ目標 14-3: "else" と偽の場合の式(e3)の読み取りおよびAST構築 *)
+                     (* ミニ目標 15-3: "else" と偽の場合の式(e3)の読み取りおよびAST構築 *)
                      let r3 = skip_spaces rest4 in
                      (match keyword_p "else" r3 with
                       | Some (_, rest5) -&gt;
@@ -1322,20 +1400,20 @@ let rec if_expr input =
        | None -&gt; None)
        
   | None -&gt;
-      (* ミニ目標 14-4: "if" で始まらない場合は comp_expr に任せる *)
+      (* ミニ目標 15-4: "if" で始まらない場合は comp_expr に任せる *)
       comp_expr input
 </pre>
 
-<h4>サブ目標 15: エントリーポイントの更新</h4>
+<h4>サブ目標 16: エントリーポイントの更新</h4>
 最後に、文字列を受け取ってパースを開始する <code>parse</code> 関数を更新する。<code>if</code> 式は <code>=</code> などの比較演算子よりもさらに大きな範囲を囲む（優先順位が最も低い）構文であるため、ここから処理を開始する。
 
 <ul>
-<li> <b>ミニ目標 15-1: <code>parse</code> 関数の呼び出し先変更</b><br>
+<li> <b>ミニ目標 16-1: <code>parse</code> 関数の呼び出し先変更</b><br>
 <code>match comp_expr chars with</code> となっていた部分を <code>match if_expr chars with</code> に書き換える。
 </ul>
 
 <pre>
-(* ミニ目標 15-1: エントリーポイントの更新 *)
+(* ミニ目標 16-1: エントリーポイントの更新 *)
 (* parse : string -&gt; exp *)
 let parse s =
   let chars = chars_of_string s in
@@ -1350,29 +1428,6 @@ let parse s =
 </pre>
 
 これで、条件分岐を持つ本格的なプログラムの構文解析ができるようになった。
-
-<h4>サブ目標 16: 括弧で囲まれた式の追加</h4>
-<p><code>if</code> 式のテストでは <code>1 * (2 + 3)</code> のような括弧を使用する。そのため、括弧の処理を発展課題ではなく、ここで正式に <code>primary_expr</code> へ追加する。</p>
-<ul>
-<li> <b>ミニ目標 16-1: 開き括弧、内部の式、閉じ括弧の読み取り</b><br>
-<code>(</code> を読み、その内部を <code>if_expr</code> で解析した後、<code>)</code> を読む。括弧そのものに対応するASTは作らず、内部の式をそのまま返す。
-</ul>
-<pre>
-(* paren_expr : input -&gt; (exp * input) option *)
-let rec paren_expr input =
-  let input = skip_spaces input in
-  match symbol_p "(" input with
-  | None -&gt; None
-  | Some (_, rest1) -&gt;
-      (match if_expr rest1 with
-       | None -&gt; None
-       | Some (e, rest2) -&gt;
-           let rest2 = skip_spaces rest2 in
-           match symbol_p ")" rest2 with
-           | Some (_, rest3) -&gt; Some (e, rest3)
-           | None -&gt; None)
-</pre>
-<p><code>primary_expr</code> では、整数と真理値の解析に失敗した後で <code>paren_expr</code> を試す。<code>paren_expr</code> は <code>if_expr</code> を呼び、<code>if_expr</code> は最終的に <code>primary_expr</code> を呼ぶため、実際のOCamlコードでは関係する関数を <code>let rec ... and ...</code> で相互再帰として定義する。</p>
 
 <h2>課題 4-2-4 (if式のパースと動作確認)</h2>
 
@@ -1391,7 +1446,7 @@ let test2 = parse "if 2 = 1 then 1 * 2 else 1 * (2 + 3)" ;;
 (* （※if式の中にさらにif式が含まれるネストされた条件分岐） *)
 let test3 = parse "if 0 &lt; 10 then if false then 3 else 4 else 5" ;;
 </pre>
-（※ <code>test2</code> の括弧は、サブ目標16で追加した <code>paren_expr</code> によって解析される。）
+（※ <code>test2</code> の括弧は、サブ目標7で追加した <code>paren_expr</code> によって解析される。）
 
 <h3>5. 高階関数の導入とパーサコンビネータによる構文解析</h3>
 <p>前節で <code>if</code> 式のパースを実装したが、<code>match</code> 式の中に <code>match</code> 式が入る「入れ子」が深くなり、冗長なコードとなってしまった。
@@ -1477,6 +1532,20 @@ let rec if_expr input =
   input
 </pre>
 <p><code>let* x = p in e</code> は、ここでは <code>bind p (fun x -&gt; e)</code> と同じ意味になる。以後はこの形式を標準とする。</p>
+<h4><code>let*</code> による括弧パーサの書き換え</h4>
+<p>サブ目標7では、括弧の処理を <code>match</code> 式の入れ子として実装した。ここまでで <code>bind</code> と <code>let*</code> を導入したため、同じ処理を、パーサを上から順番に実行する形へ書き直すことができる。</p>
+<pre>
+(* paren_expr : input -&gt; (exp * input) option *)
+let rec paren_expr input =
+  (let* _ = token (symbol_p "(") in
+   let* e = plus_expr in
+   let* _ = token (symbol_p ")") in
+   return e)
+  input
+</pre>
+<p>このコードは、開き括弧、内部の式、閉じ括弧を順番に読むという処理を、その実行順序のまま記述している。いずれかのパーサが失敗した場合は、<code>bind</code> が後続の処理を実行せずに <code>None</code> を返すため、個々の段階で <code>match ... with | None -&gt; None</code> を書く必要がない。</p>
+<p>なお、この時点では括弧の内部を <code>plus_expr</code> で読んでいる。後に <code>let</code> 式、<code>if</code> 式、無名関数などをまとめたトップレベルの <code>expr</code> を定義した後、括弧内の呼び出し先を <code>plus_expr</code> から <code>expr</code> へ変更する。</p>
+
 <h4>独自の中置演算子による書き方（補足）</h4>
 <pre>
 let ( &gt;&gt;= ) = bind
@@ -1540,14 +1609,14 @@ let rec comp_expr input =
 上記の例を参考に、まだコンビネータのスタイルに書き換えられていない以下の機能について、<code>let*</code> と <code>token</code>（および <code>&lt;|&gt;</code>）を用いてコードを書き換えなさい。
 
 <ol>
-<li> <b>真理値の追加:</b> <code>primary_expr</code> を拡張し、整数のパースに失敗したら <code>true</code>、それも失敗したら <code>false</code> を試すように <code>&lt;|&gt;</code> で繋ぎなさい。</li>
+<li> <b>真偽値の追加:</b> <code>primary_expr</code> を拡張し、整数のパースに失敗したら <code>true</code>、それも失敗したら <code>false</code> を試すように <code>&lt;|&gt;</code> で繋ぎなさい。</li>
 <li> <b>四則演算の完成:</b> <code>plus_expr</code> と <code>times_expr</code> に、それぞれ引き算（<code>-</code>）と割り算（<code>/</code>）の処理を追加しなさい（<code>+</code> のパースに失敗したら <code>-</code> を試すようにする）。</li>
 <li> <b>比較演算の完成:</b> <code>comp_expr</code> に、<code>&lt;</code> と <code>&gt;</code> の処理を追加しなさい。</li>
 </ol>
 
 書き換え後も、これまでに試したすべてのテスト・データ（<code>if 0 &lt; 10 then ...</code> など）が正しくパースできることを確認すること。
 
-<h3>7. 変数と let 式の追加：識別子と予約語の分離</h3>
+<h3>7. 変数と let 式の追加</h3>
 
 次は、プログラム言語において基本となる「変数」と、それを束縛する「<code>let</code> 式」をパーサに追加する。
 対象とする構文は <code>let x = e1 in e2</code> （式 <code>e1</code> の評価結果を変数 <code>x</code> に束縛し、式 <code>e2</code> を評価する）と、変数 <code>x</code> 自身である。
@@ -1755,7 +1824,7 @@ let test4 = parse "let let = 1 in let + 1" ;;
 <p>ここまでに作成したパーサを、無名関数、関数適用、名前付き関数定義、再帰関数へ拡張する。関数の構文には、括弧、優先順位、左結合、構文糖など複数の問題が含まれるため、これらを一つずつ分けて解決する。</p>
 <ul>
 <li><b>サブ目標 24: ASTの拡張</b></li>
-<li><b>サブ目標 25: 括弧で囲まれた式</b></li>
+<li><b>サブ目標 25: 括弧で囲まれた式の一般化</b></li>
 <li><b>サブ目標 26: 関数適用</b></li>
 <li><b>サブ目標 27: 無名関数</b></li>
 <li><b>サブ目標 28: 名前付き関数定義</b></li>
@@ -1773,8 +1842,8 @@ type exp =
 </pre>
 <p><code>Fun (x, body)</code> は仮引数 <code>x</code> と本体 <code>body</code> を持つ無名関数、<code>App (e1, e2)</code> は式 <code>e1</code> を式 <code>e2</code> へ適用する関数適用、<code>LetRec (f, x, e1, e2)</code> は <code>let rec f x = e1 in e2</code> を表す。</p>
 
-<h4>サブ目標 25: 括弧で囲まれた式</h4>
-<p><code>f (x + 1)</code> や <code>(fun x -&gt; x + 1) 3</code> を扱うには、括弧で囲まれた式が必要である。括弧は構文木に新しい節点を作るものではなく、内部の式をそのまま返し、結合の仕方だけを変更する。</p>
+<h4>サブ目標 25: 括弧で囲まれた式の一般化</h4>
+<p>サブ目標7では、括弧の内部を、その時点で最も一般的な式だった <code>plus_expr</code> で解析した。しかし、現在は <code>if</code> 式、<code>let</code> 式、無名関数なども扱うため、括弧の内部には任意の式が現れ得る。そこで、括弧内の呼び出し先を <code>plus_expr</code> から、すべての式を扱う入口である <code>expr</code> へ変更する。括弧は構文木に新しい節点を作るものではなく、内部の式をそのまま返し、結合の仕方だけを変更する。</p>
 <ul>
 <li><b>ミニ目標 25-1:</b> 開き括弧 <code>(</code> を読む。</li>
 <li><b>ミニ目標 25-2:</b> 括弧の内部を <code>expr</code> で読む。</li>
@@ -2087,7 +2156,7 @@ expr
 </ul>
 
 <h3>10. パターンと <code>match</code> 式</h3>
-<p>式とパターンは役割が異なるため、別の型と別のパーサを用意する。最初からOCamlの全パターンを扱わず、整数、真理値、変数、ワイルドカード、組、空リスト、コンスに限定する。</p>
+<p>式とパターンは役割が異なるため、別の型と別のパーサを用意する。最初からOCamlの全パターンを扱わず、整数、真偽値、変数、ワイルドカード、組、空リスト、コンスに限定する。</p>
 <ul>
 <li><b>サブ目標 38: パターンのAST</b></li>
 <li><b>サブ目標 39: 基本パターン</b></li>
