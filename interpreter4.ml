@@ -114,6 +114,33 @@ let string_p expected input =
     | Some (_, c :: _) when is_ident_letter c -> None
     | Some (_, rest) -> Some (keyword, rest)
 
+(* bind: (input -> ('a * input) option) ->
+         ('a -> input -> ('b * input) option) ->
+         input ->
+         ('b * input) option        
+*)
+
+let bind p f =
+  fun input ->
+    match p input with
+    | None -> None
+    | Some (v, rest) -> f v rest
+
+(* return: 'a -> input -> ('a * input) option *)
+let return v =
+  fun input -> Some (v, input)
+
+(* token: (input -> ('a * input) option)
+          input ->
+          ('a * input) option
+*)
+let token p =
+  bind p (fun v ->
+    fun input -> Some (v, skip_spaces input))
+
+
+
+
 (* 出力の型の定義 *)
 type 'a parser_result = ('a * input) option
 
