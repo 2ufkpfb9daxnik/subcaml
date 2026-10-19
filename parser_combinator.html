@@ -1512,7 +1512,11 @@ let rec if_expr input =
 (* let* : (input -&gt; ('a * input) option) -&gt;
            ('a -&gt; input -&gt; ('b * input) option) -&gt;
            input -&gt; ('b * input) option *)
-let ( let* ) = bind
+let ( let* ) p f =
+    fun input -&gt;
+    match p input with
+    | None -&gt; None
+    | Some (v, rest) -&gt; f v rest
 
 (* token : (input -&gt; ('a * input) option) -&gt;
            input -&gt; ('a * input) option *)
@@ -1558,14 +1562,16 @@ let ( &gt;&gt;= ) = bind
 
 <pre>
 (* 選択実行の関数 (alt) *)
-let alt p1 p2 =
+(* &lt;|&gt; :  ('a -> 'b option)
+             -> ('a -> 'b option)
+             -> 'a
+             -> 'b option
+*)
+let ( &lt;|&gt; ) p1 p2 =
   fun input -&gt;
     match p1 input with
     | Some _ as res -&gt; res
     | None -&gt; p2 input
-
-(* 中置演算子としての定義 *)
-let ( &lt;|&gt; ) = alt
 </pre>
 
 <p>例として、一番単純な整数（<code>primary_expr</code>）、足し算（<code>plus_expr</code>）、および等価演算子（<code>comp_expr</code>）を <code>let*</code> と <code>&lt;|&gt;</code> を使って書き直したコードを以下に示す。以前の <code>match</code> だらけのコードと見比べると、その読みやすさは歴然である。</p>

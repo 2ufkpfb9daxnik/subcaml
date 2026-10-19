@@ -152,10 +152,43 @@ let ( <|> ) p1 p2 =
     | Some _ as res -> res
     | None -> p2 input
 
+(* 文字種の判定 *)
+(* is_alpha: char -> bool *)
+(* is_alnum: char -> bool *)
+let is_alpha c =
+  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+let is_alnum c =
+  is_alpha c || (c >= '0' && c <= '9') || c = '_'
+
+(* 変数名のパースと予約語の判定 *)
+(* ident_p: input -> (string * input) option *)
+let ident_p input =
+  (* 英文字が続く限りアキュムレータaccにため込む補助関数 *)
+  let rec read_alnum chars acc =
+    match chars with
+    | c :: cs when is_alnum c -> read_alnum cs (c :: acc)
+    | _ -> (List.rev acc, chars)
+  in
+
+  match input with
+  | c :: cs when is_alpha c ->
+    (* 1文字目がアルファベットだった場合のみ、残りの英数字を読み取る *)
+    let (alunums, rest) = read_alnum cs [c] in
+    let str = String.of_seq (List.to_seq alunums) in
+
+    (* 予約語のリスト *)
+    let reserved = ["let"; "rec"; "in"; "if"; "then"; "else"; "true"; "false"; "match "; "with"; "fun"; "->"] in
+
+    if List.mem str reserved
+    then None
+    else Some (str, rest)
+  | _ -> None
+
+
 (* 出力の型の定義 *)
 type 'a parser_result = ('a * input) option
 
-(* 整数、真偽値のパース *)
+(* 整数、真偽値、名前のパース *)
 (* primary_expr: input -> (exp * input) option *)
 let rec primary_expr input =
   ((let* n = token int_p in
@@ -165,14 +198,19 @@ let rec primary_expr input =
     return (BoolLit true))
     <|>
   ( let* _ = token (keyword_p "false") in
-    return (BoolLit false)))
+    return (BoolLit false))
+    <|>
+  ( let* x = token ident_p in
+    return (Var x))
+    <|>
+    paren_expr)
   input
 
 (* 括弧のパース *)
 (* paren_expr: input -> (exp * input) option *)
 and paren_expr input =
   ( let* _ = token (symbol_p "(") in
-    let* e = if_expr in
+    let* e = expr in
     let* _ = token (symbol_p ")") in
     return e) 
   input
@@ -180,138 +218,95 @@ and paren_expr input =
 (* 掛け算割り算のパース *)
 (* times_div_expr: input -> (exp * input) option *)
 and times_div_expr input =
-  match primary_expr input with
-  | None -> None
-  | Some (e1, rest1) ->
-    let rec parse_rest current_e current_rest =
-      let r = skip_spaces current_rest in
-      match symbol_p "*" r with
-      | Some (_, rest2) ->
-        ( match primary_expr rest2 with
-          | Some (e2, rest3) ->
-            (* 左右の構文木が揃ったあとの処理 *)
-            let new_e = Times (current_e, e2) in
-            parse_rest new_e rest3
-          | None ->
-            (* 右辺が読めなければ、そこまでの結果を返す *)
-            Some (current_e, current_rest) )
-      | None ->
-        (* "*" がなければ割り算を確認する *)
-        match symbol_p "/" r with
-        | Some (_, rest4) ->
-          ( match primary_expr rest4 with
-            | Some (e3, rest5) ->
-              let new_e = Div (current_e, e3) in
-              parse_rest new_e rest5
-            | None -> Some (current_e, current_rest) )
-        | None -> Some (current_e, current_rest)
-    in
-    parse_rest e1 rest1
+  ((let* e1 = primary_expr in
+    let* _ = token (symbol_p "*") in
+    let* e2 = primary_expr in
+    return (Times (e1, e2)))
+  <|>
+  ( let* e1 = primary_expr in
+    let* _ = token (symbol_p "/") in
+    let* e2 = primary_expr in
+    return (Div (e1, e2)))
+  <|>
+  primary_expr)
+  input
 
 (* 足し算引き算のパース *)
 (* plus_minus_expr: input -> (exp * input) option *)
 and plus_minus_expr input =
-  (* 左辺の読み取り(掛け算や割り算を含む可能性があるので、times_div_exprを呼ぶ) *)
-  match times_div_expr input with
-  | None -> None
-  | Some (e1, rest1) ->
-    let rec parse_rest current_e current_rest =
-      let r = skip_spaces current_rest in
-      (* 演算子+の確認と、右辺(times_div_expr)の読み取り *)
-      match symbol_p "+" r with
-      | Some (_, rest2) ->
-        ( match times_div_expr rest2 with
-          | Some (e2, rest3) -> 
-            let new_e = Plus (current_e, e2) in
-            parse_rest new_e rest3
-          | None -> Some (current_e, current_rest))
-      | None -> 
-        (* "+"がなければ引き算を確認する *)
-        match symbol_p "-" r with
-        | Some (_, rest4) ->
-          ( match plus_minus_expr rest4 with
-            | Some (e3, rest5) ->
-              let new_e = Minus (current_e, e3) in
-              parse_rest new_e rest5
-            | None -> Some (current_e, current_rest))
-        | None -> Some (current_e, current_rest)
-    in
-    parse_rest e1 rest1
+  ((let* e1 = times_div_expr in
+    let* _ = token (symbol_p "+") in
+    let* e2 = times_div_expr in
+    return (Plus (e1, e2)))
+  <|>
+  ( let* e1 = times_div_expr in
+    let* _ = token (symbol_p "-") in
+    let* e2 = times_div_expr in
+    return (Minus (e1, e2)))
+  <|>
+  times_div_expr)
+  input
 
 (* 比較演算のパース *)
 (* comp_expr: input -> (exp * input) option *)
-let rec comp_expr input =
-  (* 最初の左辺をplus_exprで読み取る *)
-  match plus_minus_expr input with
-  | None -> None
-  | Some (e1, rest1) ->
-
-    (* current_eに、ここまでに作った構文木を保持する *)
-    (* parse_rest: exp -> input -> (exp * input) option *)
-    let rec parse_rest current_e current_rest =
-      let r = skip_spaces current_rest in
-
-      (* 比較演算子"="が続くか確認する *)
-      match symbol_p "=" r with
-      | Some (_, rest2) ->
-        (* "="の右辺を読み取る *)
-        ( match plus_minus_expr rest2 with
-        | None -> None (* "="があるのに右辺がないため、比較式として失敗する *)
-        | Some (e2, rest3) ->
-          (* 左右の式から新しいEqを作り、さらに比較演算子が続くか調べる *)
-          let new_e = Eq (current_e, e2) in
-          parse_rest new_e rest3)
-      | None ->
-        (* "="がなければ、"<"が続くか調べる *)
-        match symbol_p "<" r with
-        | Some (_, rest4) ->
-          (* "<"の右辺を読み取る *)
-          ( match plus_minus_expr rest4 with
-          | None -> None (* "<"があるのに右辺がないため、比較式として失敗する*)
-          | Some (e3, rest5) ->
-            (* 左右の式から新しいLtを作り、さらに比較演算子が続くか調べる *)
-            let new_e = Lt (current_e, e3) in
-            parse_rest new_e rest5)
-        | None ->
-
-          (* "<"がなければ、">"が続くか調べる*)
-          match symbol_p ">" r with
-          | Some (_, rest6) ->
-            (* ">"の右辺を読み取る *)
-            ( match plus_minus_expr rest6 with
-              | None -> None (* ">"があるのに右辺がないため、比較式として失敗する *)
-              | Some (e4, rest7) ->
-                (* 左右の式から新しいGreaterを作り、さらに比較演算子が続くか調べる *)
-                let new_e = Greater (current_e, e4) in
-                parse_rest new_e rest7)
-          | None -> Some (current_e, current_rest) (* 比較演算子がなければ現在の木を返す *)
-      in
-      parse_rest e1 rest1
+and comp_expr input =
+  ((let* e1 = plus_minus_expr in
+    let* _ = token (symbol_p "=") in
+    let* e2 = plus_minus_expr in
+    return (Eq (e1, e2)))
+  <|>
+  ( let* e1 = plus_minus_expr in
+    let* _ = token (symbol_p "<") in
+    let* e2 = plus_minus_expr in
+    return (Lt (e1, e2)))
+  <|>
+  ( let* e1 = plus_minus_expr in
+    let* _ = token (symbol_p ">") in
+    let* e2 = plus_minus_expr in
+    return (Greater (e1, e2)))
+  <|>
+  plus_minus_expr)
+  input
 
 (* ifのパース *)
 (* if_expr: input -> (exp * input) option *)
-let rec if_expr input =
+and if_expr input =
   ( let* _ = token (keyword_p "if") in
-    let* e1 = if_expr in
+    let* e1 = expr in
     let* _ = token (keyword_p "then") in
-    let* e2 = if_expr in
+    let* e2 = expr in
     let* _ = token (keyword_p "else") in
-    let* e3 = if_expr in
+    let* e3 = expr in
     return (If (e1, e2, e3)))
   input
+
+(* letのパース *)
+(* let_expr : *)
+and let_expr input =
+  ( let* _ = token (keyword_p "let") in
+    let* x = token ident_p in
+    let* _ = token (symbol_p "=") in
+    let* e1 = expr in
+    let* _ = token (keyword_p "in") in
+    let* e2 = expr in
+    return (Let(x, e1, e2)))
+  input
+
+and expr input =
+  (let_expr <|> if_expr <|> comp_expr) input
 
 (* エントリポイント *)
 (* parse: string -> exp *)
 let parse s =
   let chars = chars_of_string s in
-  (* 式全体のパースを開始する(一番優先度が低いif_exprから呼ぶ)*)
-  match if_expr chars with
+  (* 式全体のパースを開始する(一番優先度が低いexprから呼ぶ)*)
+  match expr chars with
   | Some (ast, rest) ->
     (* パース成功。最後に残った空白を読み飛ばす *)
     let final_rest = skip_spaces rest in
     if final_rest = []
-      then ast (* 残っていなければ、完成したastを返す *)
-      else failwith "Parse Error: 式の後ろに余分な文字があります"
+    then ast (* 残っていなければ、完成したastを返す *)
+    else failwith "Parse Error: 式の後ろに余分な文字があります"
   | None -> failwith "Parse Error: 構文解析に失敗しました"
 
 
@@ -335,7 +330,8 @@ let ext env x v = (x, v) :: env
 let rec lookup x env =
   match env with
   | [] -> failwith ("unbound variable:" ^ x)
-  | (y, v)::tl -> if x = y then v
+  | (y, v)::tl -> if x = y 
+                  then v
                   else lookup x tl
 
 (* eval3: exp -> (string * value) list -> value *)
@@ -353,7 +349,8 @@ let rec eval3 e env = (* envを引数に追加 *)
   | Plus(e1, e2) -> binop (fun n1 n2 -> IntVal (n1 + n2)) e1 e2 env
   | Times(e1, e2) -> binop (fun n1 n2 -> IntVal (n1 * n2)) e1 e2 env
   | Minus(e1, e2) -> binop (fun n1 n2 -> IntVal (n1 - n2)) e1 e2 env
-  | Div(e1, e2) -> binop (fun n1 n2 -> if n2 = 0 then failwith "zero division error"
+  | Div(e1, e2) -> binop (fun n1 n2 -> if n2 = 0 
+                                       then failwith "zero division error"
                                        else IntVal (n1 / n2)) e1 e2 env
   | Eq(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 = n2)) e1 e2 env
   | Lt (e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 < n2)) e1 e2 env
