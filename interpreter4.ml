@@ -114,32 +114,43 @@ let string_p expected input =
     | Some (_, c :: _) when is_ident_letter c -> None
     | Some (_, rest) -> Some (keyword, rest)
 
-(* bind: (input -> ('a * input) option) ->
-         ('a -> input -> ('b * input) option) ->
-         input ->
-         ('b * input) option        
+(* パースが成功したら、その結果を使って次のパースを行う *)
+(* let* : (input -> ('a * input) option) ->
+          ('a -> input -> ('b * input) option) ->
+           input ->
+          ('b * input) option        
 *)
-
-let bind p f =
+let ( let* ) p f =
   fun input ->
     match p input with
     | None -> None
     | Some (v, rest) -> f v rest
 
+(* 常に成功する *)
 (* return: 'a -> input -> ('a * input) option *)
 let return v =
   fun input -> Some (v, input)
 
+(* 成功したら空白をスキップ *)
 (* token: (input -> ('a * input) option)
           input ->
           ('a * input) option
 *)
 let token p =
-  bind p (fun v ->
-    fun input -> Some (v, skip_spaces input))
+  let* v = p in
+  fun input -> Some (v, skip_spaces input)
 
-
-
+(* 左側のパーサを試し、失敗したら右側のパーサを試す *)
+(* (<|>) :  ('a -> 'b option)
+         -> ('a -> 'b option)
+         -> 'a
+         -> 'b option
+*)
+let ( <|> ) p1 p2 =
+  fun input ->
+    match p1 input with
+    | Some _ as res -> res
+    | None -> p2 input
 
 (* 出力の型の定義 *)
 type 'a parser_result = ('a * input) option
@@ -147,40 +158,24 @@ type 'a parser_result = ('a * input) option
 (* 整数、真偽値のパース *)
 (* primary_expr: input -> (exp * input) option *)
 let rec primary_expr input =
-  let input_after_spaces = skip_spaces input in
-
-  (* まず整数かためす *)
-  match int_p input_after_spaces with
-  | Some (n, rest) ->
-    (* 整数nが読めたら、それをIntLit(n)という抽象構文木に変換して返す *)
-    Some (IntLit n, rest)
-  | None -> 
-
-    (* 整数ではないなら、true か試す *)
-    ( match keyword_p "true" input_after_spaces with
-      | Some (_, rest) -> Some (BoolLit true, rest)
-      | None ->
-        
-        (* trueでもないならfalseか試す *)
-        ( match keyword_p "false" input_after_spaces with
-          | Some (_, rest) -> Some (BoolLit false, rest)
-          | None -> 
-            (* 整数でも真偽値でもないなら、括弧を試す *)
-            paren_expr input_after_spaces))
+  ((let* n = token int_p in
+    return (IntLit n))
+    <|>
+  ( let* _ = token (keyword_p "true") in
+    return (BoolLit true))
+    <|>
+  ( let* _ = token (keyword_p "false") in
+    return (BoolLit false)))
+  input
 
 (* 括弧のパース *)
 (* paren_expr: input -> (exp * input) option *)
 and paren_expr input =
-  match symbol_p "(" input with
-  | None -> None
-  | Some (_, rest1) ->
-    ( match plus_minus_expr rest1 with
-      | None -> None
-      | Some (e, rest2) ->
-        let rest2 = skip_spaces rest2 in
-        match symbol_p ")" rest2 with
-        | Some (_, rest3) -> Some (e, rest3)
-        | None -> None)
+  ( let* _ = token (symbol_p "(") in
+    let* e = if_expr in
+    let* _ = token (symbol_p ")") in
+    return e) 
+  input
 
 (* 掛け算割り算のパース *)
 (* times_div_expr: input -> (exp * input) option *)
@@ -296,35 +291,14 @@ let rec comp_expr input =
 (* ifのパース *)
 (* if_expr: input -> (exp * input) option *)
 let rec if_expr input =
-  let r1 = skip_spaces input in
-  
-  (* "if"と条件式e1の読み取り *)
-  match keyword_p "if" r1 with
-  | Some (_, rest1) ->
-    ( match if_expr rest1 with
-      | Some (e1, rest2) ->
-        
-        (* "then"と真の場合の式e2の読み取り *)
-        let r2 = skip_spaces rest2 in
-        ( match keyword_p "then" r2 with
-          | Some (_, rest3) ->
-            ( match if_expr rest3 with
-              | Some (e2, rest4) ->
-              
-                (* "else"と偽の場合の式e3の読み取り*)
-                let r3 = skip_spaces rest4 in
-                ( match keyword_p "else" r3 with
-                  | Some (_, rest5) ->
-                    ( match if_expr rest5 with
-                      | Some (e3, rest6) ->
-                        (* すべて揃ったのでifの構文木を作って返す*)
-                        Some (If (e1, e2, e3), rest6)
-                      | None -> None)
-                  | None -> None)
-              | None -> None)
-          | None -> None)
-      | None -> None)
-  | None -> comp_expr input (* ifで始まらない場合は、comp_exprに任せる *)
+  ( let* _ = token (keyword_p "if") in
+    let* e1 = if_expr in
+    let* _ = token (keyword_p "then") in
+    let* e2 = if_expr in
+    let* _ = token (keyword_p "else") in
+    let* e3 = if_expr in
+    return (If (e1, e2, e3)))
+  input
 
 (* エントリポイント *)
 (* parse: string -> exp *)
