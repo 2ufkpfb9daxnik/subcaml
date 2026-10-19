@@ -1563,9 +1563,9 @@ let ( &gt;&gt;= ) = bind
 <pre>
 (* 選択実行の関数 (alt) *)
 (* &lt;|&gt; :  ('a -> 'b option)
-             -> ('a -> 'b option)
-             -> 'a
-             -> 'b option
+       -&gt; ('a -> 'b option)
+       -&gt; 'a
+       -&gt; 'b option
 *)
 let ( &lt;|&gt; ) p1 p2 =
   fun input -&gt;
@@ -1806,25 +1806,6 @@ let test3 = parse "let x = 1 in let y = 2 in x + y" ;;
 (* 期待されるエラー: Parse Error （"let" は予約語なので変数名には使えない） *)
 let test4 = parse "let let = 1 in let + 1" ;;
 </pre>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 <h3>8. 関数の構文解析</h3>
 <p>ここまでに作成したパーサを、無名関数、関数適用、名前付き関数定義、再帰関数へ拡張する。関数の構文には、括弧、優先順位、左結合、構文糖など複数の問題が含まれるため、これらを一つずつ分けて解決する。</p>

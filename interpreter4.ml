@@ -13,6 +13,7 @@ type exp =
 | Var of string
 | Let of string * exp * exp
 
+
 (* 値の型 *)
 type value =
 | IntVal of int
@@ -218,34 +219,46 @@ and paren_expr input =
 (* 掛け算割り算のパース *)
 (* times_div_expr: input -> (exp * input) option *)
 and times_div_expr input =
-  ((let* e1 = primary_expr in
-    let* _ = token (symbol_p "*") in
-    let* e2 = primary_expr in
-    return (Times (e1, e2)))
-  <|>
-  ( let* e1 = primary_expr in
-    let* _ = token (symbol_p "/") in
-    let* e2 = primary_expr in
-    return (Div (e1, e2)))
-  <|>
-  primary_expr)
-  input
+  (let* e1 = times_div_expr in
+
+   let rec parse_rest current_e =
+     ((let* _ = token (symbol_p "*") in
+       let* e2 = times_div_expr in
+       let new_e = Times (current_e, e2) in
+       parse_rest new_e)
+      <|>
+      (let* _ = token (symbol_p "/") in
+       let* e2 = times_div_expr in
+       let new_e = Div (current_e, e2) in
+       parse_rest new_e)
+      <|>
+      return current_e)
+   in
+
+   parse_rest e1)
+    input
 
 (* 足し算引き算のパース *)
 (* plus_minus_expr: input -> (exp * input) option *)
 and plus_minus_expr input =
-  ((let* e1 = times_div_expr in
-    let* _ = token (symbol_p "+") in
-    let* e2 = times_div_expr in
-    return (Plus (e1, e2)))
-  <|>
-  ( let* e1 = times_div_expr in
-    let* _ = token (symbol_p "-") in
-    let* e2 = times_div_expr in
-    return (Minus (e1, e2)))
-  <|>
-  times_div_expr)
-  input
+  (let* e1 = times_div_expr in
+
+   let rec parse_rest current_e =
+     ((let* _ = token (symbol_p "+") in
+       let* e2 = times_div_expr in
+       let new_e = Plus (current_e, e2) in
+       parse_rest new_e)
+      <|>
+      (let* _ = token (symbol_p "-") in
+       let* e2 = times_div_expr in
+       let new_e = Minus (current_e, e2) in
+       parse_rest new_e)
+      <|>
+      return current_e)
+   in
+
+   parse_rest e1)
+    input
 
 (* 比較演算のパース *)
 (* comp_expr: input -> (exp * input) option *)
