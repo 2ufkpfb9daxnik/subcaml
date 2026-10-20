@@ -370,6 +370,7 @@ let rec eval3 e env = (* envを引数に追加 *)
                                        then failwith "zero division error"
                                        else IntVal (n1 / n2)) e1 e2 env
   | Eq(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 = n2)) e1 e2 env
+  | Ne (e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 <> n2)) e1 e2 env
   | Lt (e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 < n2)) e1 e2 env
   | Greater(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 > n2)) e1 e2 env
   | If(e1, e2, e3) ->
