@@ -444,11 +444,11 @@ let rec lookup x env =
                   then v
                   else lookup x tl
 
-(* eval3: exp -> (string * value) list -> value *)
-let rec eval3 e env = (* envを引数に追加 *)
+(* eval4: exp -> (string * value) list -> value *)
+let rec eval4 e env = (* envを引数に追加 *)
   (* binopの形式は、interpreter2d.mlを使うことにした *)
-  let binop f e1 e2 env = (* binopの中でもeval3を呼ぶのでenvを追加 *)
-  match (eval3 e1 env, eval3 e2 env) with
+  let binop f e1 e2 env = (* binopの中でもeval4を呼ぶのでenvを追加 *)
+  match (eval4 e1 env, eval4 e2 env) with
   | (IntVal n1, IntVal n2) -> f n1 n2
   | _ -> failwith "integer value expected"
   in
@@ -463,20 +463,30 @@ let rec eval3 e env = (* envを引数に追加 *)
                                        then failwith "zero division error"
                                        else IntVal (n1 / n2)) e1 e2 env
   | Eq(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 = n2)) e1 e2 env
-  | Ne (e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 <> n2)) e1 e2 env
-  | Lt (e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 < n2)) e1 e2 env
+  | Ne(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 <> n2)) e1 e2 env
+  | Lt(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 < n2)) e1 e2 env
   | Greater(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 > n2)) e1 e2 env
   | If(e1, e2, e3) ->
     begin
-      match (eval3 e1 env) with
-      | BoolVal true -> eval3 e2 env
-      | BoolVal false -> eval3 e3 env
+      match (eval4 e1 env) with
+      | BoolVal true -> eval4 e2 env
+      | BoolVal false -> eval4 e3 env
       | _ -> failwith "wrong value"
     end
   | Let(x, e1, e2) ->
-    let env1 = ext env x (eval3 e1 env)
-    in eval3 e2 env1
+    let env1 = ext env x (eval4 e1 env)
+    in eval4 e2 env1
+  | Fun(x, e1) -> FunVal(x, e1, env)
+  | App(e1, e2) ->
+    begin
+      match (eval4 e1 env) with
+      | FunVal (x, body, env1) ->
+        let arg = (eval4 e2 env)
+        in eval4 body (ext env1 x arg)
+      | _ -> failwith "function value expected"
+    end
+    | _ -> failwith "unknown expression" 
 
 let run input =
   let parsed = parse input in
-  eval3 parsed (emptyenv ())
+  eval4 parsed (emptyenv ())
