@@ -13,9 +13,6 @@ type exp =
 | If of exp * exp * exp
 | Var of string
 | Let of string * exp * exp
-| Fun of string * exp
-| App of exp * exp
-| LetRec of string * string * exp * exp
 
 (* 値の型 *)
 type value =
@@ -224,69 +221,20 @@ and paren_expr input =
     return e) 
   input
 
-(* 関数適用のパース *)
-(* app_expr : input -> (exp * input) option *)
-and app_expr input =
-( let* first = primary_expr in
-  (* parse_rest : exp -> input -> (exp * input) option*)
-  let rec parse_rest current =
-    ( let* argument = primary_expr in
-      parse_rest (App (current, argument)))
-      <|> return current
-  in
-  parse_rest first)
-input
-
-(* 無名関数のパース *)
-(* fun_expr : input -> (exp * input) option *)
-and fun_expr input =
-  ( let* _ = token (keyword_p "fun") in
-    let* x = token ident_p in
-    let* _ = token (keyword_p "->") in
-    let* body = expr in
-    return (Fun (x, body)))
-input      
-
-(* 名前書き関数のパース *)
-(* named_fun_expr : input -> (exp * input) option *)
-and named_fun_expr input =
-  ( let* _ = token (keyword_p "let") in
-    let* f = token ident_p in
-    let* x = token ident_p in
-    let* _ = token (symbol_p "=") in
-    let* e1 = expr in
-    let* _ = token (keyword_p "in") in
-    let* e2 = expr in
-    return (Let (f, Fun (x, e1), e2)))
-  input
-
-(* 再帰関数のパース *)
-(* let_rec_expr : input -> (exp * input) option *)
-and let_rec_expr input =
-  ( let* _ = token (keyword_p "let") in
-    let* _ = token (keyword_p "rec") in
-    let* f = token ident_p in
-    let* x = token ident_p in
-    let* _ = token (symbol_p "=") in
-    let* e1 = expr in
-    let* _ = token (keyword_p "in") in
-    let* e2 = expr in
-    return (LetRec (f, x, e1, e2)))
-  input
 
 (* 掛け算割り算のパース *)
 (* times_div_expr: input -> (exp * input) option *)
 and times_div_expr input =
-  (let* e1 = app_expr in
+  (let* e1 = times_div_expr in
 
    let rec parse_rest current_e =
      ((let* _ = token (symbol_p "*") in
-       let* e2 = app_expr in
+       let* e2 = times_div_expr in
        let new_e = Times (current_e, e2) in
        parse_rest new_e)
       <|>
       (let* _ = token (symbol_p "/") in
-       let* e2 = app_expr in
+       let* e2 = times_div_expr in
        let new_e = Div (current_e, e2) in
        parse_rest new_e)
       <|>
@@ -369,11 +317,8 @@ and let_expr input =
   input
 
 and expr input =
-  (let_rec_expr
-  <|> named_fun_expr
-  <|> let_expr
+  (let_expr
   <|> if_expr
-  <|> fun_expr
   <|> comp_expr)
 input
 
