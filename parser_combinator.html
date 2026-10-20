@@ -1808,9 +1808,11 @@ let test4 = parse "let let = 1 in let + 1" ;;
 </pre>
 
 <h3>8. 関数の構文解析</h3>
-<p>ここまでに作成したパーサを、無名関数、関数適用、名前付き関数定義、再帰関数へ拡張する。関数の構文には、括弧、優先順位、左結合、構文糖など複数の問題が含まれるため、これらを一つずつ分けて解決する。</p>
+
+<p>ここまでに作成したパーサを、無名関数、関数適用、名前付き関数定義、再帰関数へ拡張する。関数の構文には、括弧、優先順位、左結合、糖衣構文など複数の問題が含まれるため、これらを一つずつ分けて解決する。</p>
+
 <ul>
-<li><b>サブ目標 24: ASTの拡張</b></li>
+<li><b>サブ目標 24: 関数を表す内部データ構造の確認</b></li>
 <li><b>サブ目標 25: 括弧で囲まれた式の一般化</b></li>
 <li><b>サブ目標 26: 関数適用</b></li>
 <li><b>サブ目標 27: 無名関数</b></li>
@@ -1819,7 +1821,11 @@ let test4 = parse "let let = 1 in let + 1" ;;
 <li><b>サブ目標 30: 式全体への統合</b></li>
 </ul>
 
-<h4>サブ目標 24: ASTの拡張</h4>
+
+<h4>サブ目標 24: 関数を表す内部データ構造の確認</h4>
+
+<p>最初に、関数に関係する式と値の違いを確認する。構文解析器が生成する抽象構文木は <code>exp</code> 型である。そのため、関数の構文を解析するには、<code>exp</code> 型に次の構成子が必要である。</p>
+
 <pre>
 type exp =
   ...
@@ -1827,90 +1833,216 @@ type exp =
   | App of exp * exp
   | LetRec of string * string * exp * exp
 </pre>
-<p><code>Fun (x, body)</code> は仮引数 <code>x</code> と本体 <code>body</code> を持つ無名関数、<code>App (e1, e2)</code> は式 <code>e1</code> を式 <code>e2</code> へ適用する関数適用、<code>LetRec (f, x, e1, e2)</code> は <code>let rec f x = e1 in e2</code> を表す。</p>
+
+<ul>
+<li><code>Fun (x, body)</code> は、仮引数 <code>x</code> と本体 <code>body</code> を持つ無名関数 <code>fun x -&gt; body</code> を表す。</li>
+<li><code>App (e1, e2)</code> は、式 <code>e1</code> を式 <code>e2</code> に適用する関数適用 <code>e1 e2</code> を表す。</li>
+<li><code>LetRec (f, x, e1, e2)</code> は、再帰関数定義 <code>let rec f x = e1 in e2</code> を表す。</li>
+</ul>
+
+<p>一方、<code>value</code> 型は式を評価して得られる値を表す。非再帰関数を評価した結果は、仮引数、本体、関数が作られた時点の環境をまとめたクロージャになる。そのため、<code>value</code> 型に <code>FunVal</code> を追加する。</p>
+
+<pre>
+type value =
+  | IntVal of int
+  | BoolVal of bool
+  | FunVal of string * exp * ((string * value) list)
+</pre>
+
+<p><code>FunVal (x, body, env)</code> は、仮引数 <code>x</code>、関数本体 <code>body</code>、関数を作った時点の環境 <code>env</code> を保存した関数クロージャである。</p>
+
+<p>例えば、次の式を構文解析した結果は <code>exp</code> 型の値である。</p>
+
+<pre>
+fun x -&gt; x + 1
+
+↓ 構文解析
+
+Fun ("x", Plus (Var "x", IntLit 1))
+</pre>
+
+<p>この <code>Fun</code> を評価すると、評価器は現在の環境を保存して、次のような <code>value</code> 型の値を返す。</p>
+
+<pre>
+FunVal ("x", Plus (Var "x", IntLit 1), env)
+</pre>
+
+<p>再帰関数については、値の型に <code>RecFunVal</code> を追加する。</p>
+
+<pre>
+type value =
+  | IntVal of int
+  | BoolVal of bool
+  | FunVal of string * exp * ((string * value) list)
+  | RecFunVal of
+      string * string * exp * ((string * value) list)
+</pre>
+
+<p><code>RecFunVal (f, x, body, env)</code> は、関数名 <code>f</code>、仮引数 <code>x</code>、関数本体 <code>body</code>、関数を定義した時点の環境 <code>env</code> を保存した再帰関数値である。</p>
+
+<p>本節で作成する構文解析器は、<code>FunVal</code> や <code>RecFunVal</code> を直接生成しない。構文解析器は <code>Fun</code>、<code>App</code>、<code>LetRec</code> を含む <code>exp</code> 型の構文木を生成する。その構文木を後で評価器に渡すと、評価器が <code>FunVal</code> または <code>RecFunVal</code> を生成する。</p>
+
 
 <h4>サブ目標 25: 括弧で囲まれた式の一般化</h4>
-<p>サブ目標7では、括弧の内部を、その時点で最も一般的な式だった <code>plus_expr</code> で解析した。しかし、現在は <code>if</code> 式、<code>let</code> 式、無名関数なども扱うため、括弧の内部には任意の式が現れ得る。そこで、括弧内の呼び出し先を <code>plus_expr</code> から、すべての式を扱う入口である <code>expr</code> へ変更する。括弧は構文木に新しい節点を作るものではなく、内部の式をそのまま返し、結合の仕方だけを変更する。</p>
+
+<p>サブ目標7では、括弧の内部を、その時点で最も一般的な式だった <code>plus_expr</code> で解析した。しかし、現在は <code>if</code> 式、<code>let</code> 式、無名関数なども扱うため、括弧の内部には任意の式が現れ得る。</p>
+
+<p>そこで、括弧内の呼び出し先を <code>plus_expr</code> から、すべての式を扱う入口である <code>expr</code> へ変更する。括弧は構文木に新しい節点を作るものではなく、内部の式をそのまま返し、式の結合の仕方だけを変更する。</p>
+
 <ul>
 <li><b>ミニ目標 25-1:</b> 開き括弧 <code>(</code> を読む。</li>
 <li><b>ミニ目標 25-2:</b> 括弧の内部を <code>expr</code> で読む。</li>
 <li><b>ミニ目標 25-3:</b> 閉じ括弧 <code>)</code> を読み、内部の式を返す。</li>
 </ul>
+
 <pre>
 (* paren_expr : input -&gt; (exp * input) option *)
-let paren_expr input =
+and paren_expr input =
   (let* _ = token (symbol_p "(") in
    let* e = expr in
    let* _ = token (symbol_p ")") in
    return e)
   input
 </pre>
-<p>2行目の <code>let* e = expr</code> が重要である。ここを <code>plus_expr</code> にすると、括弧内の <code>if</code>、<code>let</code>、<code>fun</code> を読めない。括弧の内部には任意の式が現れ得るため、最も一般的な入口である <code>expr</code> に処理を任せる。</p>
+
+<p><code>let* e = expr</code> が重要である。ここを <code>plus_expr</code> にすると、括弧内にある <code>if</code> 式、<code>let</code> 式、無名関数などを解析できない。</p>
+
 <p><code>paren_expr</code> は <code>expr</code> を呼び、<code>expr</code> は最終的に <code>primary_expr</code> を通じて <code>paren_expr</code> を呼ぶ。そのため、実際に統合するときは、これらを <code>let rec ... and ...</code> による相互再帰として定義する。</p>
 
+
 <h4>サブ目標 26: 関数適用</h4>
-<p>関数適用 <code>f x</code> には、<code>+</code> のような区切り記号がない。したがって、「基本式を一つ読んだ後、さらに基本式が続く間は引数として読む」という方針をとる。</p>
+
+<p>関数適用 <code>f x</code> には、<code>+</code> や <code>*</code> のような区切り記号がない。そこで、「基本式を一つ読んだ後、さらに基本式が続く間は引数として読む」という方針をとる。</p>
+
 <ul>
 <li><b>ミニ目標 26-1:</b> 関数の位置にある最初の <code>primary_expr</code> を読む。</li>
 <li><b>ミニ目標 26-2:</b> 次の <code>primary_expr</code> が読めたら <code>App</code> を作る。</li>
 <li><b>ミニ目標 26-3:</b> 引数が続く限り、作った <code>App</code> をアキュムレータとして繰り返す。</li>
 <li><b>ミニ目標 26-4:</b> 次の基本式がなければ、現在の構文木を返す。</li>
 </ul>
+
 <pre>
 (* app_expr : input -&gt; (exp * input) option *)
-let rec app_expr input =
+and app_expr input =
   (let* first = primary_expr in
 
    (* parse_rest : exp -&gt; input -&gt; (exp * input) option *)
    let rec parse_rest current =
      (let* argument = primary_expr in
       parse_rest (App (current, argument)))
-     &lt;|&gt; return current
+     &lt;|&gt;
+     return current
    in
 
    parse_rest first)
   input
 </pre>
+
 <p>例えば <code>f x y</code> では、アキュムレータ <code>current</code> が次のように変化する。</p>
+
 <pre>
 Var "f"
+
 App (Var "f", Var "x")
+
 App (App (Var "f", Var "x"), Var "y")
 </pre>
-<p>このため、関数適用は左結合になる。右結合にすると <code>f (x y)</code> という別の意味になってしまう。</p>
-<p>また、関数適用は乗算や加算より強く結合する。したがって、従来の <code>times_expr</code> が <code>primary_expr</code> を呼んでいた箇所を <code>app_expr</code> に変更する。</p>
+
+<p>最終的に生成される構文木は次のとおりである。</p>
+
+<pre>
+App (App (Var "f", Var "x"), Var "y")
+</pre>
+
+<p>これは <code>(f x) y</code> を表すため、関数適用は左結合になる。右結合にすると <code>f (x y)</code> という別の式になってしまう。</p>
+
+<p>関数適用は乗算や加算より強く結合する。したがって、従来の <code>times_div_expr</code> が <code>primary_expr</code> を呼んでいた箇所を、<code>app_expr</code> の呼び出しに変更する。</p>
+
 <pre>
 primary_expr
     ↓
 app_expr
     ↓
-times_expr
+times_div_expr
     ↓
-plus_expr
+plus_minus_expr
     ↓
 comp_expr
     ↓
 expr
 </pre>
-<p>これにより <code>f x * 2</code> は <code>Times (App (Var "f", Var "x"), IntLit 2)</code> となる。</p>
+
+<p><code>times_div_expr</code> は次のように変更する。</p>
+
+<pre>
+(* times_div_expr : input -&gt; (exp * input) option *)
+and times_div_expr input =
+  (let* e1 = app_expr in
+
+   let rec parse_rest current_e =
+     ((let* _ = token (symbol_p "*") in
+       let* e2 = app_expr in
+       parse_rest (Times (current_e, e2)))
+      &lt;|&gt;
+      (let* _ = token (symbol_p "/") in
+       let* e2 = app_expr in
+       parse_rest (Div (current_e, e2)))
+      &lt;|&gt;
+      return current_e)
+   in
+
+   parse_rest e1)
+  input
+</pre>
+
+<p>これにより、<code>f x * 2</code> は次の構文木になる。</p>
+
+<pre>
+Times (
+  App (Var "f", Var "x"),
+  IntLit 2
+)
+</pre>
+
 
 <h4>サブ目標 27: 無名関数</h4>
-<p>無名関数は、<code>fun</code>、仮引数、矢印、本体の4つを順番に読む。</p>
+
+<p>無名関数は、<code>fun</code>、仮引数、<code>-&gt;</code>、関数本体の4つを順番に読む。</p>
+
 <pre>
 (* fun_expr : input -&gt; (exp * input) option *)
-let fun_expr input =
+and fun_expr input =
   (let* _ = token (keyword_p "fun") in
    let* x = token ident_p in
-   let* _ = token (keyword_p "-&gt;") in
+   let* _ = token (symbol_p "-&gt;") in
    let* body = expr in
    return (Fun (x, body)))
   input
 </pre>
-<p><code>body</code> は <code>expr</code> で読む。例えば <code>fun x -&gt; x + 1</code> では、本体は <code>x</code> だけではなく <code>x + 1</code> 全体である。また、<code>fun x -&gt; if x = 0 then 1 else x</code> のように本体へ任意の式を置ける。</p>
-<p><code>-&gt;</code> は2文字からなる記号なので、<code>keyword_p "-&gt;"</code> でまとめて読む。将来 <code>-</code> と競合する場合も、長い記号を先に試す。</p>
+
+<p><code>body</code> は <code>expr</code> で読む。例えば、次の式を考える。</p>
+
+<pre>
+fun x -&gt; x + 1
+</pre>
+
+<p>関数本体は <code>x</code> だけではなく、<code>x + 1</code> 全体である。そのため、<code>primary_expr</code> ではなく <code>expr</code> を使用する。</p>
+
+<p>同様に、次のように関数本体へ <code>if</code> 式や <code>let</code> 式を置くこともできる。</p>
+
+<pre>
+fun x -&gt; if x = 0 then 1 else x
+
+fun x -&gt; let y = x + 1 in y * 2
+</pre>
+
+<p><code>-&gt;</code> は識別子ではなく記号なので、<code>keyword_p</code> ではなく <code>symbol_p</code> で読む。</p>
+
 
 <h4>サブ目標 28: 名前付き関数定義</h4>
-<p><code>let f x = e1 in e2</code> は独立した意味を持つ新構文として扱うこともできるが、既存の <code>let</code> と無名関数へ変換できる。</p>
+
+<p><code>let f x = e1 in e2</code> は、既存の <code>let</code> 式と無名関数を使った次の式へ変換できる。</p>
+
 <pre>
 let f x = e1 in e2
 
@@ -1918,9 +2050,12 @@ let f x = e1 in e2
 
 let f = fun x -&gt; e1 in e2
 </pre>
+
+<p>名前付き関数定義のために新しい <code>exp</code> 型の構成子を追加する必要はない。構文解析の時点で、既存の <code>Let</code> と <code>Fun</code> を組み合わせた構文木へ変換する。</p>
+
 <pre>
 (* named_fun_expr : input -&gt; (exp * input) option *)
-let named_fun_expr input =
+and named_fun_expr input =
   (let* _ = token (keyword_p "let") in
    let* f = token ident_p in
    let* x = token ident_p in
@@ -1931,13 +2066,67 @@ let named_fun_expr input =
    return (Let (f, Fun (x, e1), e2)))
   input
 </pre>
-<p>複数引数の <code>let add x y = x + y in e</code> は、<code>Fun ("x", Fun ("y", ...))</code> のように無名関数を入れ子にすれば表現できる。本文では1引数版を完成させ、複数引数版は課題とする。</p>
+
+<p>例えば、次の入力を考える。</p>
+
+<pre>
+let add x = x + 1 in add 3
+</pre>
+
+<p>構文解析器は、これを次の構文木へ変換する。</p>
+
+<pre>
+Let (
+  "add",
+  Fun ("x", Plus (Var "x", IntLit 1)),
+  App (Var "add", IntLit 3)
+)
+</pre>
+
+<p>複数引数の名前付き関数定義も、無名関数を入れ子にすることで表現できる。</p>
+
+<pre>
+let add x y = x + y in add 1 2
+
+     ↓ 脱糖
+
+let add =
+  fun x -&gt;
+    fun y -&gt;
+      x + y
+in
+  add 1 2
+</pre>
+
+<p>対応する構文木は次のようになる。</p>
+
+<pre>
+Let (
+  "add",
+  Fun (
+    "x",
+    Fun (
+      "y",
+      Plus (Var "x", Var "y")
+    )
+  ),
+  App (
+    App (Var "add", IntLit 1),
+    IntLit 2
+  )
+)
+</pre>
+
+<p>複数引数版は課題とする。</p>
+
 
 <h4>サブ目標 29: 再帰関数</h4>
-<p>通常の <code>let</code> では、定義される関数自身をその本体から参照できない。そこで <code>let rec</code> を専用のASTとして読む。</p>
+
+<p>通常の <code>let</code> 式では、定義される関数自身をその関数本体から参照できない。そこで、<code>let rec</code> 式は専用の <code>LetRec</code> 構文として解析する。</p>
+
 <pre>
 (* let_rec_expr : input -&gt; (exp * input) option *)
-let let_rec_expr input =
+and let_rec_expr input =
   (let* _ = token (keyword_p "let") in
    let* _ = token (keyword_p "rec") in
    let* f = token ident_p in
@@ -1949,14 +2138,78 @@ let let_rec_expr input =
    return (LetRec (f, x, e1, e2)))
   input
 </pre>
-<p><code>let rec</code> と通常の <code>let</code> は、どちらも <code>let</code> で始まる。選択肢を並べるときは、より具体的な <code>let_rec_expr</code> を先に試し、その後に通常の <code>let_expr</code> を試す。</p>
+
+<p>例えば、次の再帰関数定義を考える。</p>
+
+<pre>
+let rec factorial x =
+  if x = 0 then
+    1
+  else
+    x * factorial (x - 1)
+in
+  factorial 5
+</pre>
+
+<p>構文解析器は、この式から概略として次の構文木を作る。</p>
+
+<pre>
+LetRec (
+  "factorial",
+  "x",
+  If (
+    Eq (Var "x", IntLit 0),
+    IntLit 1,
+    Times (
+      Var "x",
+      App (
+        Var "factorial",
+        Minus (Var "x", IntLit 1)
+      )
+    )
+  ),
+  App (Var "factorial", IntLit 5)
+)
+</pre>
+
+<p>この時点で生成されるのは <code>LetRec</code> を含む <code>exp</code> 型の値であり、<code>RecFunVal</code> ではない。</p>
+
+<p>後で評価器が <code>LetRec (f, x, e1, e2)</code> を評価するとき、次の形の再帰関数値を作る。</p>
+
+<pre>
+RecFunVal (f, x, e1, env)
+</pre>
+
+<p>したがって、構文解析と評価の対応は次のとおりである。</p>
+
+<pre>
+入力文字列
+  "let rec f x = e1 in e2"
+        ↓ 構文解析
+exp型
+  LetRec (f, x, e1, e2)
+        ↓ 評価
+value型
+  RecFunVal (f, x, e1, env)
+</pre>
+
+<p><code>let rec</code>、名前付き関数定義、通常の <code>let</code> 式は、いずれも <code>let</code> から始まる。選択肢を並べるときは、より具体的な構文から順番に試す。</p>
+
+<ol>
+<li><code>let_rec_expr</code> が <code>let rec f x = ...</code> を試す。</li>
+<li><code>named_fun_expr</code> が <code>let f x = ...</code> を試す。</li>
+<li><code>let_expr</code> が <code>let x = ...</code> を試す。</li>
+</ol>
+
 
 <h4>サブ目標 30: 式全体への統合</h4>
+
+<p>関数に関する各パーサを、すべての式を扱う入口である <code>expr</code> に統合する。</p>
+
 <pre>
 (* expr : input -&gt; (exp * input) option *)
-let rec expr input =
-  (match_expr
-   &lt;|&gt; let_rec_expr
+and expr input =
+  (let_rec_expr
    &lt;|&gt; named_fun_expr
    &lt;|&gt; let_expr
    &lt;|&gt; if_expr
@@ -1964,14 +2217,67 @@ let rec expr input =
    &lt;|&gt; comp_expr)
   input
 </pre>
-<p>この順序は、共通する接頭辞を持つ構文のうち、具体的なものから先に試すという方針による。さらに、<code>primary_expr</code> には括弧を追加し、<code>times_expr</code> の構成要素を <code>app_expr</code> に変更する。</p>
-<h2>課題 4-2-7（関数の構文解析）</h2>
+
+<p>この順序は、共通する接頭辞を持つ構文について、より具体的なものを先に試す方針による。</p>
+
+<p>また、関数の構文を統合するには、次の変更も必要である。</p>
+
 <ul>
-<li><code>fun x -&gt; x + 1</code> が <code>Fun</code> を生成することを確認しなさい。</li>
-<li><code>f x y</code> が左結合の <code>App</code> を生成することを確認しなさい。</li>
-<li><code>f (x + 1)</code> と <code>(fun x -&gt; x + 1) 3</code> をパースしなさい。</li>
-<li><code>let rec f x = if x = 0 then 1 else x * f (x - 1) in f 5</code> をパースしなさい。</li>
-<li>複数引数の名前付き関数定義を、入れ子の <code>Fun</code> へ変換しなさい。</li>
+<li><code>primary_expr</code> の選択肢に <code>paren_expr</code> を追加する。</li>
+<li><code>paren_expr</code> の括弧内を <code>expr</code> で解析する。</li>
+<li><code>times_div_expr</code> が <code>primary_expr</code> を呼んでいた箇所を <code>app_expr</code> に変更する。</li>
+<li><code>fun_expr</code>、<code>named_fun_expr</code>、<code>let_rec_expr</code> の本体を <code>expr</code> で解析する。</li>
+<li>互いに呼び出し合う式パーサを、<code>let rec ... and ...</code> による相互再帰として定義する。</li>
+</ul>
+
+<p>相互再帰グループの全体像は、概略として次のようになる。</p>
+
+<pre>
+let rec primary_expr input =
+  ...
+and paren_expr input =
+  ...
+and app_expr input =
+  ...
+and times_div_expr input =
+  ...
+and plus_minus_expr input =
+  ...
+and comp_expr input =
+  ...
+and if_expr input =
+  ...
+and let_expr input =
+  ...
+and fun_expr input =
+  ...
+and named_fun_expr input =
+  ...
+and let_rec_expr input =
+  ...
+and expr input =
+  ...
+</pre>
+
+<p><code>token</code>、<code>symbol_p</code>、<code>keyword_p</code>、<code>ident_p</code>、<code>return</code>、<code>let*</code>、<code>&lt;|&gt;</code> など、式パーサより前に定義できる補助関数は、この相互再帰グループへ含める必要はない。</p>
+
+
+<h2>課題 4-2-7（関数の構文解析）</h2>
+
+<ul>
+<li><code>fun x -&gt; x + 1</code> を解析し、<code>Fun ("x", Plus (Var "x", IntLit 1))</code> が生成されることを確認しなさい。</li>
+
+<li><code>f x y</code> を解析し、左結合の <code>App (App (Var "f", Var "x"), Var "y")</code> が生成されることを確認しなさい。</li>
+
+<li><code>f (x + 1)</code> を解析し、<code>App (Var "f", Plus (Var "x", IntLit 1))</code> が生成されることを確認しなさい。</li>
+
+<li><code>(fun x -&gt; x + 1) 3</code> を解析し、無名関数が関数の位置にある <code>App</code> が生成されることを確認しなさい。</li>
+
+<li><code>let add x = x + 1 in add 3</code> を解析し、名前付き関数定義が <code>Let</code> と <code>Fun</code> の組合せへ変換されることを確認しなさい。</li>
+
+<li><code>let rec f x = if x = 0 then 1 else x * f (x - 1) in f 5</code> を解析し、<code>LetRec</code> を根とする構文木が生成されることを確認しなさい。</li>
+
+<li>複数引数の名前付き関数定義を、入れ子になった <code>Fun</code> へ変換するパーサへ拡張しなさい(ヒント: <code>=</code>が来るまで引数をためておいて、<code>List.fold_right</code>を使う)。</li>
 </ul>
 
 <h3>9. 組とリストの構文解析</h3>

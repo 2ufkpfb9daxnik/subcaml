@@ -18,7 +18,7 @@ type exp =
 type value =
 | IntVal of int
 | BoolVal of bool 
-| FunVal of string * exp
+| FunVal of string * exp * ((string * value) list)
 
 
 
