@@ -225,16 +225,16 @@ and paren_expr input =
 (* 掛け算割り算のパース *)
 (* times_div_expr: input -> (exp * input) option *)
 and times_div_expr input =
-  (let* e1 = times_div_expr in
+  (let* e1 = primary_expr in
 
    let rec parse_rest current_e =
      ((let* _ = token (symbol_p "*") in
-       let* e2 = times_div_expr in
+       let* e2 = primary_expr in
        let new_e = Times (current_e, e2) in
        parse_rest new_e)
       <|>
       (let* _ = token (symbol_p "/") in
-       let* e2 = times_div_expr in
+       let* e2 = primary_expr in
        let new_e = Div (current_e, e2) in
        parse_rest new_e)
       <|>
@@ -275,6 +275,11 @@ and comp_expr input =
     return (Eq (e1, e2)))
   <|>
   ( let* e1 = plus_minus_expr in
+    let* _ = token (symbol_p "<>") in
+    let* e2 = plus_minus_expr in
+    return (Ne (e1, e2)))
+  <|>
+  ( let* e1 = plus_minus_expr in
     let* _ = token (symbol_p "<") in
     let* e2 = plus_minus_expr in
     return (Lt (e1, e2)))
@@ -283,11 +288,6 @@ and comp_expr input =
     let* _ = token (symbol_p ">") in
     let* e2 = plus_minus_expr in
     return (Greater (e1, e2)))
-  <|>
-  ( let* e1 = plus_minus_expr in
-    let* _ = token (symbol_p "<>") in
-    let* e2 = plus_minus_expr in
-    return (Ne (e1, e2)))
   <|>
   plus_minus_expr)
   input
@@ -383,3 +383,7 @@ let rec eval3 e env = (* envを引数に追加 *)
   | Let(x, e1, e2) ->
     let env1 = ext env x (eval3 e1 env)
     in eval3 e2 env1
+
+let run input =
+  let parsed = parse input in
+  eval3 parsed (emptyenv ())
