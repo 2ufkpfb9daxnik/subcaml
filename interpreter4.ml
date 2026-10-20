@@ -7,6 +7,7 @@ type exp =
 | Div of exp * exp
 | BoolLit of bool
 | Eq of exp * exp
+| Ne of exp * exp
 | Lt of exp * exp
 | Greater of exp * exp
 | If of exp * exp * exp
@@ -334,6 +335,11 @@ and comp_expr input =
     let* _ = token (symbol_p ">") in
     let* e2 = plus_minus_expr in
     return (Greater (e1, e2)))
+  <|>
+  ( let* e1 = plus_minus_expr in
+    let* _ = token (symbol_p "<>") in
+    let* e2 = plus_minus_expr in
+    return (Ne (e1, e2)))
   <|>
   plus_minus_expr)
   input
