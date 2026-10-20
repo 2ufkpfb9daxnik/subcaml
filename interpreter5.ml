@@ -22,7 +22,7 @@ type value =
 | IntVal of int
 | BoolVal of bool 
 | FunVal of string * exp * ((string * value) list)
-
+| RecFunVal of string * string * exp * ((string * value) list)
 
 
 
@@ -197,9 +197,19 @@ let ident_p input =
 (* 出力の型の定義 *)
 type 'a parser_result = ('a * input) option
 
+(* 単項マイナスのパース *)
+(* unary_expr : input -> (exp * input) option *)
+let rec unary_expr input =
+  ((let* _ = token (symbol_p "-") in
+    let* e = unary_expr in
+    return (Minus(IntLit 0, e)))
+    <|>
+    app_expr)
+input
+
 (* 整数、真偽値、名前のパース *)
 (* primary_expr: input -> (exp * input) option *)
-let rec primary_expr input =
+and primary_expr input =
   ((let* n = token int_p in
     return (IntLit n))
     <|>
@@ -315,16 +325,16 @@ input
 (* 掛け算割り算のパース *)
 (* times_div_expr: input -> (exp * input) option *)
 and times_div_expr input =
-  (let* e1 = app_expr in
+  (let* e1 = unary_expr in
 
    let rec parse_rest current_e =
      ((let* _ = token (symbol_p "*") in
-       let* e2 = app_expr in
+       let* e2 = unary_expr in
        let new_e = Times (current_e, e2) in
        parse_rest new_e)
       <|>
       (let* _ = token (symbol_p "/") in
-       let* e2 = app_expr in
+       let* e2 = unary_expr in
        let new_e = Div (current_e, e2) in
        parse_rest new_e)
       <|>
@@ -444,11 +454,11 @@ let rec lookup x env =
                   then v
                   else lookup x tl
 
-(* eval4: exp -> (string * value) list -> value *)
-let rec eval4 e env = (* envを引数に追加 *)
+(* eval6: exp -> (string * value) list -> value *)
+let rec eval6 e env = (* envを引数に追加 *)
   (* binopの形式は、interpreter2d.mlを使うことにした *)
-  let binop f e1 e2 env = (* binopの中でもeval4を呼ぶのでenvを追加 *)
-  match (eval4 e1 env, eval4 e2 env) with
+  let binop f e1 e2 env = (* binopの中でもeval6を呼ぶのでenvを追加 *)
+  match (eval6 e1 env, eval6 e2 env) with
   | (IntVal n1, IntVal n2) -> f n1 n2
   | _ -> failwith "integer value expected"
   in
@@ -468,25 +478,32 @@ let rec eval4 e env = (* envを引数に追加 *)
   | Greater(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 > n2)) e1 e2 env
   | If(e1, e2, e3) ->
     begin
-      match (eval4 e1 env) with
-      | BoolVal true -> eval4 e2 env
-      | BoolVal false -> eval4 e3 env
+      match (eval6 e1 env) with
+      | BoolVal true -> eval6 e2 env
+      | BoolVal false -> eval6 e3 env
       | _ -> failwith "wrong value"
     end
   | Let(x, e1, e2) ->
-    let env1 = ext env x (eval4 e1 env)
-    in eval4 e2 env1
+    let env1 = ext env x (eval6 e1 env)
+    in eval6 e2 env1
   | Fun(x, e1) -> FunVal(x, e1, env)
+  | LetRec(f, x, e1, e2) ->
+    let env1 = ext env f (RecFunVal(f, x, e1, env))
+    in eval6 e2 env1
   | App(e1, e2) ->
-    begin
-      match (eval4 e1 env) with
-      | FunVal (x, body, env1) ->
-        let arg = (eval4 e2 env)
-        in eval4 body (ext env1 x arg)
-      | _ -> failwith "function value expected"
-    end
-    | _ -> failwith "unknown expression" 
+      let funpart = (eval6 e1 env) in
+      let arg = (eval6 e2 env) in
+      begin
+        match funpart with
+        | FunVal (x, body, env1) ->
+          let env2 = (ext env1 x arg) in
+          eval6 body env2
+        | RecFunVal (f, x, body, env1) ->
+          let env2 = (ext (ext env1 f funpart) x arg) in
+          eval6 body env2
+        | _ -> failwith "function value expected"
+      end
 
 let run input =
   let parsed = parse input in
-  eval4 parsed (emptyenv ())
+  eval6 parsed (emptyenv ())
