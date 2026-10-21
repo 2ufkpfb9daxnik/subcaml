@@ -9,7 +9,7 @@ type exp =
 | Eq of exp * exp
 | Ne of exp * exp
 | Lt of exp * exp
-| Greater of exp * exp
+| Gt of exp * exp
 | If of exp * exp * exp
 | Var of string
 | Let of string * exp * exp
@@ -387,7 +387,7 @@ and comp_expr input =
   ( let* e1 = plus_minus_expr in
     let* _ = token (symbol_p ">") in
     let* e2 = plus_minus_expr in
-    return (Greater (e1, e2)))
+    return (Gt (e1, e2)))
   <|>
   plus_minus_expr)
 input
@@ -475,7 +475,7 @@ let rec eval6 e env = (* envを引数に追加 *)
   | Eq(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 = n2)) e1 e2 env
   | Ne(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 <> n2)) e1 e2 env
   | Lt(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 < n2)) e1 e2 env
-  | Greater(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 > n2)) e1 e2 env
+  | Gt(e1, e2) -> binop (fun n1 n2 -> BoolVal (n1 > n2)) e1 e2 env
   | If(e1, e2, e3) ->
     begin
       match (eval6 e1 env) with
