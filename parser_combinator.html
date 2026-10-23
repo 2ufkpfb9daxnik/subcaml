@@ -2277,7 +2277,7 @@ and expr input =
 
 <li><code>let rec f x = if x = 0 then 1 else x * f (x - 1) in f 5</code> を解析し、<code>LetRec</code> を根とする構文木が生成されることを確認しなさい。</li>
 
-<li>複数引数の名前付き関数定義を、入れ子になった <code>Fun</code> へ変換するパーサへ拡張しなさい(ヒント: <code>=</code>が来るまで引数をためておいて、<code>List.fold_right</code>を使う)。</li>
+<li>複数引数の名前付き関数定義を、入れ子になった <code>Fun</code> へ変換するパーサへ拡張しなさい(ヒント: <code>=</code>が来るまで引数をためておいて、<code>List.fold_right</code>を使う)(ヒント2: 後のリストの処理を参考にしなさい。そこまで先に進んでから、後から戻ってきてやるとわかりやすい)。</li>
 </ul>
 
 <h3>9. 組とリストの構文解析</h3>
@@ -2288,7 +2288,7 @@ and expr input =
 <li><b>サブ目標 33: 空リスト</b></li>
 <li><b>サブ目標 34: リストリテラル</b></li>
 <li><b>サブ目標 35: 右結合の <code>::</code></b></li>
-<li><b>サブ目標 36: <code>List.hd</code> と <code>List.tl</code></b></li>
+<li><b>サブ目標 36: <code>head</code> と <code>tail</code></b></li>
 <li><b>サブ目標 37: 優先順位への統合</b></li>
 </ul>
 
@@ -2404,26 +2404,31 @@ Cons (IntLit 1,
     Empty))
 </pre>
 
-<h4>サブ目標 36: <code>List.hd</code> と <code>List.tl</code></h4>
-<pre>
-(* head_expr : input -&gt; (exp * input) option *)
-let head_expr input =
-  (let* _ = token (keyword_p "List.hd") in
-   let* e = primary_expr in
-   return (Head e))
-  input
+<h4>サブ目標 36: <code>head</code> と <code>tail</code></h4>
+<p>単項演算子のところにheadとtailを追加する。</p>
 
-(* tail_expr : input -&gt; (exp * input) option *)
-let tail_expr input =
-  (let* _ = token (keyword_p "List.tl") in
-   let* e = primary_expr in
-   return (Tail e))
-  input
+<pre>
+(* 単項演算子のパース *)
+(* unary_expr : input -> (exp * input) option *)
+let rec unary_expr input =
+  ((let* _ = token (symbol_p "-") in
+    let* e = unary_expr in
+    return (Minus(IntLit 0, e)))
+  <|>
+  ( let* _ = token (keyword_p "head") in
+    let* e = unary_expr in
+    return (Head e))
+  <|>
+  ( let* _ = token (keyword_p "tail") in
+    let* e = unary_expr in
+    return (Tail e))
+  <|>
+    app_expr)
+input
 </pre>
-<p><code>List.hd</code> と <code>List.tl</code> を一つのキーワードとして読むには、現在の識別子規則がピリオドを含まないことを利用できる。将来モジュール名やフィールド参照を一般化する場合は、<code>List</code>、<code>.</code>、<code>hd</code> を別々に読む設計へ変更する。</p>
 
 <h4>サブ目標 37: 優先順位への統合</h4>
-<p>空リスト、リストリテラル、組、<code>List.hd</code>、<code>List.tl</code> は基本式の選択肢へ追加する。一方、<code>::</code> は加算より弱く、比較より強い階層として置く。</p>
+<p>空リスト、リストリテラル、組、<code>head</code>、<code>tail</code> は基本式の選択肢へ追加する。一方、<code>::</code> は加算より弱く、比較より強い階層として置く。</p>
 <pre>
 primary_expr
     ↓

@@ -29,6 +29,7 @@ type value =
 | FunVal of string * exp * ((string * value) list)
 | RecFunVal of string * string * exp * ((string * value) list)
 | ListVal of value list
+| TupleVal of value list
 
 
 
@@ -187,7 +188,7 @@ let ident_p input =
     let str = String.of_seq (List.to_seq alunums) in
 
     (* 予約語のリスト *)
-    let reserved = ["let"; "rec"; "in"; "if"; "then"; "else"; "true"; "false"; "match "; "with"; "fun"; "->"] in
+    let reserved = ["let"; "rec"; "in"; "if"; "then"; "else"; "true"; "false"; "match"; "with"; "fun"; "head"; "tail"] in
 
     if List.mem str reserved
     then None
@@ -202,13 +203,21 @@ let ident_p input =
 (* 出力の型の定義 *)
 type 'a parser_result = ('a * input) option
 
-(* 単項マイナスのパース *)
+(* 単項演算子のパース *)
 (* unary_expr : input -> (exp * input) option *)
 let rec unary_expr input =
   ((let* _ = token (symbol_p "-") in
     let* e = unary_expr in
     return (Minus(IntLit 0, e)))
-    <|>
+  <|>
+  ( let* _ = token (keyword_p "head") in
+    let* e = unary_expr in
+    return (Head e))
+  <|>
+  ( let* _ = token (keyword_p "tail") in
+    let* e = unary_expr in
+    return (Tail e))
+  <|>
     app_expr)
 input
 
@@ -227,16 +236,37 @@ and primary_expr input =
   ( let* x = token ident_p in
     return (Var x))
     <|>
-    paren_expr)
+  empty_list_expr
+    <|>
+  list_expr
+    <|>
+    paren_tuple_expr)
 input
 
-(* 括弧のパース *)
-(* paren_expr: input -> (exp * input) option *)
-and paren_expr input =
+(* 括弧と組のパース *)
+(* paren_tuple_expr: input -> (exp * input) option *)
+and paren_tuple_expr input =
   ( let* _ = token (symbol_p "(") in
-    let* e = expr in
-    let* _ = token (symbol_p ")") in
-    return e) 
+    let* first = expr in
+    
+    ( let* _ = token (symbol_p ",") in
+      let* second = expr in
+      
+      (* more : exp list -> input -> (exp list * input) option *)
+      let rec more acc =
+        ( let* _ = token (symbol_p ",") in
+          let* e = expr in
+          more (e :: acc))
+        <|> return (List.rev acc)
+      in
+      
+      let* elements = more [second; first] in
+      let* _ = token (symbol_p ")") in
+      return (Tuple elements))
+      
+    <|>
+    ( let* _ = token (symbol_p ")") in
+    return first)) 
 input
 
 (* 関数適用のパース *)
@@ -371,30 +401,67 @@ and plus_minus_expr input =
    parse_rest e1)
 input
 
+(* empty_list_expr : input -> (exp * input) option *)
+and empty_list_expr input =
+  ( let* _ = token (symbol_p "[") in
+    let* _ = token (symbol_p "]") in
+    return Empty)
+input
+
+(* list_expr : input -> (exp * input) option *)
+and list_expr input =
+  ( let* _ = token (symbol_p "[") in
+    let* first = expr in
+    
+    (* elements : exp list -> input -> (exp list * input) option *)
+    let rec elements acc =
+      ( let* _ = token (symbol_p ";") in
+        let* e = expr in
+        elements (e :: acc))
+        <|> return (List.rev acc)
+    in
+    let* es = elements [first] in
+    let* _ = token (symbol_p "]") in
+    return
+      (List.fold_right
+         (fun e rest -> Cons (e, rest))
+         es
+         Empty))
+  input
+
+(* cons_expr : input -> (exp * input) option *)
+and cons_expr input =
+  ( let* e1 = plus_minus_expr in
+    ( let* _ = token (symbol_p "::") in
+      let* e2 = cons_expr in
+      return (Cons (e1, e2)))
+      <|> return e1)
+input
+
 (* 比較演算のパース *)
 (* comp_expr: input -> (exp * input) option *)
 and comp_expr input =
-  ((let* e1 = plus_minus_expr in
+  ((let* e1 = cons_expr in
     let* _ = token (symbol_p "=") in
-    let* e2 = plus_minus_expr in
+    let* e2 = cons_expr in
     return (Eq (e1, e2)))
   <|>
-  ( let* e1 = plus_minus_expr in
+  ( let* e1 = cons_expr in
     let* _ = token (symbol_p "<>") in
-    let* e2 = plus_minus_expr in
+    let* e2 = cons_expr in
     return (Ne (e1, e2)))
   <|>
-  ( let* e1 = plus_minus_expr in
+  ( let* e1 = cons_expr in
     let* _ = token (symbol_p "<") in
-    let* e2 = plus_minus_expr in
+    let* e2 = cons_expr in
     return (Lt (e1, e2)))
   <|>
-  ( let* e1 = plus_minus_expr in
+  ( let* e1 = cons_expr in
     let* _ = token (symbol_p ">") in
-    let* e2 = plus_minus_expr in
+    let* e2 = cons_expr in
     return (Gt (e1, e2)))
   <|>
-  plus_minus_expr)
+  cons_expr)
 input
 
 (* ifのパース *)
@@ -508,6 +575,32 @@ let rec eval6 e env = (* envを引数に追加 *)
           eval6 body env2
         | _ -> failwith "function value expected"
       end
+  | Tuple(es) ->
+    let vs = List.map (fun e -> eval6 e env) es in
+    TupleVal vs
+    
+  | Empty -> ListVal []
+  | Cons(e1, e2) ->
+    let v1 = eval6 e1 env in
+    begin
+      match eval6 e2 env with
+      | ListVal vs -> ListVal (v1 :: vs)
+      | _ -> failwith "cons: second argument is not a list"
+    end
+  | Head(e) ->
+    begin
+      match (eval6 e env) with
+      | ListVal(v :: _) -> v
+      | ListVal([]) -> failwith "head: empty list"
+      | _ -> failwith "head: not a list"
+    end
+  | Tail(e) ->
+    begin
+      match (eval6 e env) with
+      | ListVal(_ :: vs) -> ListVal vs
+      | ListVal([]) -> failwith "tail: empty list"
+      | _ -> failwith "tail: not a list"
+    end
 
 let run input =
   let parsed = parse input in
