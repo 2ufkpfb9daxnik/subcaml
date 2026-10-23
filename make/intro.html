@@ -16,39 +16,401 @@
 <h1>OCaml入門</h1>
 <p>OCamlとは関数型プログラミング言語です。型推論が得意です。言語仕様が簡潔です。</p>
 <p>基本的には、目次の順番で、参照くらいまで学んでいきます。</p>
-<p>まず初めに、<code>ocaml</code>でreplを起動してみましょう。replとは、read-eval-print loopの略です。対話的にコードを実行する事ができます。</p>
-
-<h2>四則演算</h2>
-<!-- 型の違いを確かめる、;;で区切るなど基礎的なことを説明 -->
-<p>単純に数値を返すことが出来ます。</p>
-<p>まずは、四則演算をしてみましょう。</p>
+<p>まず初めに、<code>ocaml</code>のreplを起動してみましょう。replとは、read-eval-print loopの略です。対話的にコードを実行する事ができます。</p>
 <pre>
-1 + 2;;
+ocaml
+OCaml version 5.3.0
+Enter "#help;;" for help.
+
+#
+</pre>
+<p><code>#</code>はプロンプトといって、ここからユーザーに入力を促す記号です。試しに1を入力してみましょう。</p>
+<pre>
+# 1;;
+- : int = 1
+</pre>
+<p><code>;;</code>が入力の区切りで、そこまでを評価します。</p>
+<h2>四則演算</h2>
+<h3>整数の四則演算</h3>
+<p>まずは、整数(int)の四則演算をしてみましょう。</p>
+<pre>
+# 1 + 2;;
 </pre>
 <p>実行すると結果が帰ってきます。</p>
+<pre>
+- : int = 3
+</pre>
+<p>引き算、掛け算、割り算もできます。</p>
+<pre>
+# 1 - 2;;
+- : int = -1
+# 2 * 3;;
+- : int = 6
+# 6 / 2;;
+- : int = 3
+</pre>
+<p>割り算は整数の商を返します。あまりは返しません。</p>
+<pre>
+# 7 / 2;;
+- : int = 3
+</pre>
+<p>なので、例えば</p>
+<pre>
+# 15 / 4 * 4;;
+- : int = 12
+# 15 * 4 / 4;;
+- : int = 15
+</pre>
+<p>のようになります。計算順を明示するときは、<code>()</code>で囲います。</p>
+<pre>
+# 15 / (4 * 4);;
+- : int = 0
+</pre>
+<p>あまりを得るには、<code>mod</code>を使います。</p>
+<pre>
+# 7 mod 2;;
+- : int = 1
+</pre>
+<h3>小数</h3>
+<p>小数(float)も扱うことができます。ただし、演算子にそれぞれ<code>.</code>を付ける必要があります。</p>
+<pre>
+# 3.14 + 2.178;;
+Line 1, characters 0-4:
+1 | 3.14 + 2.178;;
+    ^^^^
+Error: The constant "3.14" has type "float"
+       but an expression was expected of type "int"
+</pre>
+<p>このエラーは、<code>int</code>型の値が期待されたのに、<code>3.14</code>という<code>float</code>型の値が与えられたので、不整合を起こしています。</p>
+<p>正しく実行するには、</p>
+<pre>
+# 3.14 +. 2.178;;
+- : float = 5.318
+</pre>
+<p>のようにする必要があります。</p>
+<p>小数の引き算、掛け算、割り算も同様です。</p>
+<pre>
+# 3.14 -. 2.178;;
+- : float = 0.96200000000000019
+# 3.14 *. 2.178;;
+- : float = 6.83892
+# 3.14 /. 2.178;;
+- : float = 1.4416896235078054
+</pre>
+<p><code>mod.</code>は存在しません。</p>
+<pre>
+# 3.14 mod. 2.178;;
+Line 1, characters 8-9:
+1 | 3.14 mod. 2.178;;
+            ^
+Error: Syntax error
+</pre>
+<p>小数点以下がすべて0なら、その0は省略することができます。</p>
+<pre>
+# 1. +. 2.;;
+- : float = 3.
+</pre>
+
+<h3>型変換</h3>
+<p>整数と小数が混ざった計算をしたいときは、値に対して明示的に型変換を行ってから計算する必要があります。そのための関数には、例えば<code>float_of_int</code>や<code>int_of_float</code>があります。</p>
+<pre>
+# float_of_int 3;;
+- : float = 3.
+# int_of_float 3.14;;
+- : int = 3
+</pre>
+<p>このようにして、後ろに半角スペースあけて数を書くことで、変換を行うことができます。これは後から出てくる関数適用の形と同じです。</p>
+<p>これらを用いて次のように計算ができます。</p>
+<pre>
+# float_of_int 3 +. 2.;;
+- : float = 5.
+# 3 + int_of_float 2.;;
+- : int = 5
+</pre>
 
 <h2>真偽値</h2>
-
+<p>真偽値(bool)とは値の一種で、真(true)か偽(false)のどちらかの値をとります。これ以外の値は真偽値には存在しません。</p>
+<pre>
+# true;;
+- : bool = true
+# false;;
+- : bool = false
+</pre>
+<h3>真偽値の演算</h3>
+<p>真偽値の演算には<code>&&</code>(and)、<code>||</code>(or)、<code>not</code>があります。</p>
+<pre>
+# true && false;;
+- : bool = false
+# true || false;;
+- : bool = true
+# not true;;
+- : bool = false
+# not true && false;;
+- : bool = false
+</pre>
+<p>これ以外にもいろんな入力を試してみましょう。</p>
 <h2>比較演算</h2>
-<!-- =と==の違いは今は説明しなくてもいいかも -->
-
+<p>2つの数を比較する演算子があります。<code>=</code>、<code>&lt;</code>、<code>&gt;</code>、<code>&lt;=</code>、<code>&gt;=</code>、<code>&lt;&gt;</code>などです。ほかのプログラミング言語では、<code>=</code>は<code>==</code>と、<code>&lt;&gt;</code>は<code>!=</code>と書かれることもあります。特にocamlで<code>==</code>は別の意味になってしまうので注意してください。</p>
+<pre>
+# 1 = 3;;
+- : bool = false
+# 1 = 1;;
+- : bool = true
+# 1 < 3;;
+- : bool = true
+# 1 > 3;;
+- : bool = false
+# 3 <= 1;;
+- : bool = false
+# 1 <> 1;;
+- : bool = false
+# 1 <> 2;;
+- : bool = true
+</pre>
+<p>比較演算子には<code>.</code>を付ける必要はありません。</p>
+<pre>
+# 3. > 2.;;
+- : bool = true
+</pre>
 <h2>if</h2>
-<!-- then節とelse節は同じ型であることを説明 -->
-<p>bool型の値と、何か2つの同じ型の値になる式を受け取ります。else節は省略出来ますが、しないほうがいいです。</p>
+<p>if式は、条件に応じて異なる処理を実行するための構文です。条件式、条件式が真の場合の式、条件式が偽の場合の式の3つの式を与えます。</p>
+<pre>
+if 条件式 then 式1 else 式2
+</pre>
+<p>式1をthen節、式2をelse節とも呼びます。条件式は必ずbool型の値である必要があります。例えば以下のようにできます。</p>
+<pre>
+# if true then 1 else 2;;
+- : int = 1
+# if 1 < 3 then 1 else 2;;
+- : int = 1
+</pre>
+<p>条件式にはint型の値を与えることができません。</p>
+<pre>
+# if 1 then true else false;;
+Line 1, characters 3-4:
+1 | if 1 then true else false;;
+       ^
+Error: The constant "1" has type "int" but an expression was expected of type
+         "bool"
+       because it is in the condition of an if-statement
+</pre>
+<p>条件式がfalseに評価されるとき、else節が評価されます。</p>
+<pre>
+# if false then 1 else 2;;
+- : int = 2
+# if 4 <> 9 then 2 else 29;;
+- : int = 2
+</pre>
+<p>then節とelse節は異なる型ではあってはなりません。</p>
+<pre>
+# if 2 <= 3 then true else 2;;
+Line 1, characters 25-26:
+1 | if 2 <= 3 then true else 2;;
+                             ^
+Error: The constant "2" has type "int" but an expression was expected of type
+         "bool"
+</pre>
+<p>論理的に評価されることがありえなくても、型は一致している必要があります。</p>
+<pre>
+# if true then 1 else false;;
+Line 1, characters 20-25:
+1 | if true then 1 else false;;
+                        ^^^^^
+Error: The constructor "false" has type "bool"
+       but an expression was expected of type "int"
+</pre>
+<p>このif式はthen節しか実行されることはありえませんが、それでも型が一致している必要があります。</p>
 
 <h2>let</h2>
-<!-- ここで#useを説明、後から使うときなど -->
-<p>変数を宣言するための構文です。</p>
-<p>c言語などでは、変数の宣言は領域に対する名前をつけることで行われます。一方、OCamlでは、変数の宣言は値に対する名前をつけることで行われます。</p>
+<p>変数を宣言するための構文です。値に名前を束縛するというような言い方もします。</p>
+<pre>
+let 変数名 = 式
+</pre>
+<p>c言語などでは、変数の宣言は領域に対する名前をつけることで行われます。一方、ocamlでは、変数の宣言は値に対する名前をつけることで行われます。なので、例えばc言語ではint a;などと名前だけを宣言することが出来ましたが、ocamlではこのようなことは出来ません。</p>
+<p>例えば以下のようにして変数を宣言できます。</p>
+<pre>
+# let x = 1;;
+val x : int = 1
+</pre>
+<p>次にxを参照(名前の中身を確認)してみると値が保存されています。</p>
+<pre>
+# x;;
+- : int = 1
+</pre>
 <h3>静的なスコープ</h3>
-
+<p>ocamlでは変数の名前が有効である区間が静的に決定されます。</p>
+<pre>let 変数名 = 式1 in 式2</pre>
+<p>とすると、式2の中でのみ変数名を参照することができます。</p>
+<pre>
+# let y = 1 in y + 2;;
+- : int = 3
+# y;;
+Line 1, characters 0-1:
+1 | y;;
+    ^
+Error: Unbound value "y"
+</pre>
+<p>先に定義された変数を新しく再定義することもできます。</p>
+<pre>
+# let a = 1 in
+  let b = 2 in
+  let a = b + a in
+  a + 5;;
+- : int = 8
+</pre>
+<p><code>let a = b + a</code>が定義される前の時点では、<code>a</code>の値は<code>1</code>だったのですが、新しく<code>a</code>の値をその現在の値である<code>1</code>と<code>b</code>を足したもの、として定義しています。このように、前の変数の名前を新しく上書きすることをshadowingといいます。shadowingは、もう使わない値を意図的に使えないようにすることができるので、ocamlではよく使われます。</p>
+<p>ここで重要なのは、c言語などのようにまず記憶領域<code>a</code>があってそこにはじめに<code>1</code>を入れた。その後に<code>a</code>の値を変更した、というような考え方は出来ないということです。あくまで、名前の中身を上書きしているだけです。難しいかもしれませんが、そのうち理解しなければならないことになるでしょう。</p>
+<h2>外部ファイルをreplに読み込む</h2>
+<p>名前をつけることができるようになってきたので、いろいろな名前を先に付けておいてまとめたファイルを作って、毎回<code>let x = ...</code>などと書かなくてもいいようにしましょう。まず、エディタでファイルを適当に作ります。拡張子は<code>.ml</code>です。中身を以下にして保存します。</p>
+<pre>
+let pi = 3.14
+let e = 2.718
+</pre>
+<p>replを起動して、</p>
+<pre>
+# #use "ファイル名.ml";;
+</pre>
+<p>で読み込みます。</p>
+<pre>
+# #use "test.ml";;
+val pi : float = 3.14
+val e : float = 2.718
+</pre>
+<p>これでわざわざreplを起動するたびに<code>let pi = 3.14</code>などと書く必要がなくなりました。</p>
+<pre>
+let a = 1 in
+let b = 2 in
+let a = b + a in
+a + 5
+</pre>
+<p>を別のファイルで保存して、読み込むと</p>
+<pre>
+# #use "test2.ml";;
+- : int = 8
+</pre>
+<p>のように、ファイルの中身を直接評価することもできます。また、ここで定義されている<code>a</code>や<code>b</code>は、有効範囲がファイル内のみなので、</p>
+<pre>
+# #use "test2.ml";;
+- : int = 8
+# a;;
+Line 1, characters 0-1:
+1 | a;;
+    ^
+Error: Unbound value "a"
+</pre>
+<p>のようになります。</p>
+<h2>コメント</h2>
+<p>ocamlでは、コメントは<code>(* ... *)</code>の形で書きます。例えば</p>
+<pre>
+(* aもbも外部から読み込んだときは参照できない *)
+let a = 1 in (* この時点ではa = 1 *)
+let b = 2 in (* この時点ではa = 1, b = 2 *)
+let (* 新しくaをa = 1, b = 2の状況でb + aとして定義する *)a = b + a in
+a + 5
+</pre>
+<p>のように自由に書くことができます。</p>
 <h2>関数</h2>
+<p>変数を導入したことで、同じ値を何度も書く必要がなくなりました。しかしそれでは値を名付けることはできても、演算については何度も書く必要がありました。関数には名前をつけることができるのですがなんとここには演算も書くことができるので、便利です。関数は</p>
+<pre>
+fun 引数 -> 式
+</pre>
+<p>というふうに書きます。例えば</p>
+<pre>
+# fun x -> x + 1;;
+- : int -> int = <fun>
+</pre>
+<p>は受け取った引数に1を足す関数です。この引数に1を渡すには</p>
+<pre>
+# (fun x -> x + 1) 1;;
+- : int = 2
+</pre>
+<p>のように後ろに空白を挟んで引数を書きます。引数が複数ある場合は</p>
+<pre>
+fun 引数1 引数2 ... -> 式
+</pre>
+<p>のように書きます。例えば</p>
+<pre>
+# fun x y -> x + y;;
+- : int -> int -> int = <fun>
+</pre>
+<p>のように書くことができます。これに引数を渡すには</p>
+<pre>
+# (fun x y -> x + y) 1 2;;
+- : int = 3
+</pre>
+<p>のようにして、引数と同じように空白で区切って並べて書きます。</p>
 <h3>高階関数</h3>
-<p>カリー化、部分適用など</p>
-
+<p>引数が複数ある関数を1つの引数を受け取る関数で表現することをカリー化といいます。例えば</p>
+<pre>fun x y -> x + y</pre>
+<p>は</p>
+<pre>fun x -> (fun y -> x + y)</pre>
+<p>のように表現できます。これは引数として<code>x</code>を受け取って、「引数として<code>y</code>を受け取って<code>x + y</code>を返す関数」を返す関数です。このように関数が関数を返すような関数を高階関数と呼びます。</p>
+<h3>部分適用</h3>
+<p>関数の引数の全てではなく一部だけの引数を渡す事もできます。</p>
+<pre>
+# (fun x y -> x + y) 2;;
+- : int -> int = <fun>
+</pre>
+<p>とすると、先程のカリー化の解釈によれば<code>x</code>として<code>2</code>を受け取って、「引数として<code>y</code>を受け取って<code>2 + y</code>を返す関数」を返します。なのでここで返される関数は<code>fun y -> 2 + y</code>です。このように引数を一部だけ渡して新しい関数を得ることを部分適用といいます。</p>
 <h2>関数に名前をつけること</h2>
+<p>関数にも名前をつけることができます。これまでの方式と同じく</p>
+<pre>
+let 関数名 = fun 引数 -> 式
+</pre>
+<p>のように書くことができます。例えば</p>
+<pre>
+# let add1 = fun x -> x + 1;;
+val add1 : int -> int = <fun>
+</pre>
+<p>のように名前をつけることができます。これに値を適用するには</p>
+<pre>
+# add1 2;;
+- : int = 3
+</pre>
+<p>のように、関数名の後ろに空白を挟んで引数を書きます。</p>
 <h3>省略構文</h3>
+<p>関数に名前をつけることは非常によくあることなので省略構文が用意されています。</p>
+<pre>
+let 関数名 引数1 引数2 ... = 式
+</pre>
+<p>のように書くことができます。例えば</p>
+<pre>
+# let add x y = x + y;;
+val add : int -> int -> int = <fun>
+# add 1 2;;
+- : int = 3
+</pre>
+<p>のように書くことができます。</p>
+<p>部分適用は名前をつけることで新しい特化した関数を作るということに使えます。例えば</p>
+<pre>
+let log base x = ...
+</pre>
+<p>というような関数が存在したときに、</p>
+<pre>
+let ln = log e
+</pre>
+<p>のように書くことができ、自然対数を底とした対数関数を簡単に作ることができます。</p>
+<h2>関数のスコープ</h2>
+<pre>
+let a = 3 * 2 in
+  let f b = a + b in
+    let a = 5 in
+      f 1
+</pre>
+<p>の計算結果は<code>7</code>です。難しいのは<code>f</code>の<code>a</code>がどの<code>a</code>を指すかということです。ocamlは関数の本体式の中で使用される変数は、その関数が定義された段階での変数を参照します。ですからここでは<code>a</code>は<code>3 * 2</code>の値、つまり<code>6</code>を指します。実際に実行してみても</p>
+<pre>
+# let a = 3 * 2 in
+    let f b = a + b in
+      let a = 5 in
+        f 1;;
+Line 3, characters 8-9:
+3 |     let a = 5 in
+            ^
+Warning 26 [unused-var]: unused variable a.
 
+- : int = 7
+</pre>
+<p>のように、<code>a = 5</code>が使われていないという警告が表示されます。</p>
 <h2>再帰的な関数</h2>
 
 <h2>相互再帰的な関数</h2>
