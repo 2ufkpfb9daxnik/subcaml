@@ -128,6 +128,23 @@ Error: Syntax error
 - : int = 5
 </pre>
 
+<h2>文字列、文字</h2>
+<p>文字列と文字も扱うことができます。文字列は<code>""</code>で囲います。文字は<code>''</code>で囲います。</p>
+<pre>
+# "abc";;
+- : string = "abc"
+# 'a';;
+- : char = 'a'
+1 | 'ab';;
+    ^
+Error: Syntax error
+</pre>
+<p>文字列同士の連結は<code>^</code>で行います。</p>
+<pre>
+# "abc" ^ "def";;
+- : string = "abcdef"
+</pre>
+
 <h2>真偽値</h2>
 <p>真偽値(bool)とは値の一種で、真(true)か偽(false)のどちらかの値をとります。これ以外の値は真偽値には存在しません。</p>
 <pre>
@@ -260,7 +277,7 @@ Error: Unbound value "y"
 </pre>
 <p><code>let a = b + a</code>が定義される前の時点では、<code>a</code>の値は<code>1</code>だったのですが、新しく<code>a</code>の値をその現在の値である<code>1</code>と<code>b</code>を足したもの、として定義しています。このように、前の変数の名前を新しく上書きすることをshadowingといいます。shadowingは、もう使わない値を意図的に使えないようにすることができるので、ocamlではよく使われます。</p>
 <p>ここで重要なのは、c言語などのようにまず記憶領域<code>a</code>があってそこにはじめに<code>1</code>を入れた。その後に<code>a</code>の値を変更した、というような考え方は出来ないということです。あくまで、名前の中身を上書きしているだけです。難しいかもしれませんが、そのうち理解しなければならないことになるでしょう。</p>
-<h2>外部ファイルをreplに読み込む</h2>
+<h2>外部ファイル</h2>
 <p>名前をつけることができるようになってきたので、いろいろな名前を先に付けておいてまとめたファイルを作って、毎回<code>let x = ...</code>などと書かなくてもいいようにしましょう。まず、エディタでファイルを適当に作ります。拡張子は<code>.ml</code>です。中身を以下にして保存します。</p>
 <pre>
 let pi = 3.14
@@ -299,6 +316,31 @@ Line 1, characters 0-1:
 Error: Unbound value "a"
 </pre>
 <p>のようになります。</p>
+<h3>外部ファイルを直接実行する</h3>
+<p>ocamlでは外部ファイルを直接実行することもできます。</p>
+<pre>
+ocamlc -o 実行ファイル名 ファイル名.ml
+./実行ファイル名
+</pre>
+<p>で実行ファイルを作成・実行できます。ただし、先程のtest.mlを実行しても何も表示されません。内部で計算を行いはしましたが、それを表示するコードは書かれていません。</p>
+<p>ターミナルに表示するには、</p>
+<pre>
+Printf.printf "文字列" 変数1 変数2 ...;;
+</pre>
+<p>を使います。例えば</p>
+<pre>
+let pi = 3.14 in
+let e = 2.718 in
+Printf.printf "e = %f , π = %f" e pi
+</pre>
+<p>のようにしてocamlcコマンドでコンパイルして実行すると</p>
+<pre>
+./test.exe                
+e = 2.718000 , π = 3.140000
+</pre>
+<p>と表示されます。ほかにもそれぞれの型に特化した<code>print_string</code>や<code>print_endline</code>, <code>print_int</code>, <code>print_float</code>などがあります。これらは<code>%</code>などのフォーマットを必要とせず、直接引数を並べるだけで実行できます。</p>
+<p>入力は<code>read_line ()</code>で行います。</p>
+<p>このページでは基本的にはreplに指示を与えたりすることにしますが、適当なタイミングで種々の定義(特に、(関数の)テストなど)を外部ファイルにまとめておくと便利です。さらにコンパイラを作っていくときはreplではなく外部ファイルにちゃんと書いていくととても便利というかそうしないとやってられません。</p>
 <h2>コメント</h2>
 <p>ocamlでは、コメントは<code>(* ... *)</code>の形で書きます。例えば</p>
 <pre>
@@ -381,6 +423,16 @@ val add : int -> int -> int = <fun>
 - : int = 3
 </pre>
 <p>のように書くことができます。</p>
+<h4>演習</h4>
+<p>まず、はじめにそれぞれの関数の型を書いてください。それからインターネットなども活用しつつ、実際に作成してください。それぞれに適当な値を渡して確認してください。</p>
+<ul>
+    <li>ReLU関数</li>
+    <li>インド象の肩までの高さ、前足の円周を受け取って、表面積の大きさを計算する関数sreekumar</li>
+    <li>r, g, b要素を受け取って、グレースケール値を計算する関数grayscale</li>
+    <li>ファーレンハイト度を受け取って、ケルビンに変換する関数f2k</li>
+    <li>年中多雨'f'か冬乾燥'w'か夏乾燥's'と年平均気温tを文字型として受け取って、乾燥限界値を求める関数r</li>
+</ul>
+<h4>部分適用との関係</h4>
 <p>部分適用は名前をつけることで新しい特化した関数を作るということに使えます。例えば</p>
 <pre>
 let log base x = ...
@@ -397,7 +449,7 @@ let a = 3 * 2 in
     let a = 5 in
       f 1
 </pre>
-<p>の計算結果は<code>7</code>です。難しいのは<code>f</code>の<code>a</code>がどの<code>a</code>を指すかということです。ocamlは関数の本体式の中で使用される変数は、その関数が定義された段階での変数を参照します。ですからここでは<code>a</code>は<code>3 * 2</code>の値、つまり<code>6</code>を指します。実際に実行してみても</p>
+<p>の計算結果は<code>7</code>です。難しいのは<code>f</code>の<code>a</code>がどの<code>a</code>を指すかということです。ocamlは関数の本体式の中で使用される変数は、その関数が定義された段階での変数だけを参照します。letの本体式で有効な名前はそのlet以前での名前だということです。ですからここでは<code>a</code>は<code>3 * 2</code>の値、つまり<code>6</code>を指します。実際に実行してみても</p>
 <pre>
 # let a = 3 * 2 in
     let f b = a + b in
@@ -412,32 +464,443 @@ Warning 26 [unused-var]: unused variable a.
 </pre>
 <p>のように、<code>a = 5</code>が使われていないという警告が表示されます。</p>
 <h2>再帰的な関数</h2>
-
+<p>ほかのプログラミング言語ではfor文やwhile文を使って繰り返すことが多いですが、ocamlでは再帰を使って繰り返しを表現します。</p>
+<pre>
+let rec 関数名 引数1 引数2 ... = 式
+</pre>
+<p>再帰関数は、式の中で関数名を参照することができるため、名前をつける構文を拡張して、letにさらにrecというキーワードを付けることによって実現されます。例えば、階乗を求める関数は</p>
+<pre>
+# let rec fact n =
+  if n = 0        
+  then 1 
+  else n * fact (n - 1);;
+val fact : int -> int = <fun>
+</pre>
+<p>として定義できます。</p>
+<h4>演習</h4>
+<p>以下の関数を作成してください。</p>
+<ul>
+    <li>フィボナッチ数列のn番目の値を求める関数fib</li>
+    <li>与えられた数が素数かどうかを判定する関数is_prime</li>
+</ul>
 <h2>相互再帰的な関数</h2>
-
+<p>お互いを参照する関数の組です。</p>
+<pre>
+let rec 関数名1 引数1 引数2 ... = 式1
+and 関数名2 引数1 引数2 ... = 式2
+and 関数名3 引数1 引数2 ... = 式3
+...
+</pre>
+<p>のようにして定義できます。例えば、与えられた数が偶数かどうかを判定する関数は</p>
+<pre>
+# let rec even n =
+    if n = 0
+    then true
+    else odd (n - 1)
+  and odd n =
+    if n = 0
+    then false
+    else even (n - 1);;
+val even : int -> bool = <fun>
+val odd : int -> bool = <fun>
+</pre>
+<p>として定義できます。</p>
 <h2>組</h2>
 <p>複数の値をまとめたもので、順序に依存します。</p>
-<p>パターンマッチというのが出来ます。</p>
-<!-- パターンマッチは、全ての返す型が同じでないといけない、ワイルドカードは先頭に置くと全部無視 -->
+<pre>
+(値1, 値2, 値3, ...)
+</pre>
+<p>のようにして作成できます。例えばデカルト座標系など、必ず2つの値を含まないと意味がないものは、組として表現するとよいでしょう。</p>
+<p>組のそれぞれの要素は、型が異なっていても構いません。例えば、</p>
+<pre>
+# (1, true, (2, false));;
+- : int * bool * (int * bool) = (1, true, (2, false))
+</pre>
+<p>のように書くことができます。</p>
+<h4>パターンマッチ</h4>
+<p>組のそれぞれの要素を展開して、個別に扱うための構文としてパターンマッチがあります。</p>
+<pre>
+match 式 with
+| (パターン1) -> 式1
+| (パターン2) -> 式2
+| ...
+</pre>
+<p>のように使います。(パターン1)や(パターン2)で、組の各要素を展開して個別に扱うことができます。例えば、</p>
+<pre>
+# match (1, true) with
+  | (a, b) -> a;;
+- : int = 1
+</pre>
+<p>というようにして、組の1つ目の要素を取り出して扱うことができます。</p>
+<p>複数のパターンを書いて、処理を分岐することができます。</p>
+<pre>
+# let f x = 
+    match x with
+    | (true, a)  -> a + 1
+    | (false, a) -> a - 1;;
+val f : bool * int -> int = <fun>
+# f (true, 5);;
+- : int = 6
+# f (false, 8);;
+- : int = 7
+</pre>
+<p>このようにして、パターンマッチを使って条件に応じて異なる処理を行うことができます。</p>
+<p>パターンマッチは、すべてのパターンの最終的な型が一致している必要があります。</p>
+<pre>
+# match (false, 9) with
+  | (true, a)  -> a + 1
+  | (false, a) -> false;;
+Line 3, characters 16-21:
+3 | | (false, a) -> false;;
+                    ^^^^^
+Error: The constructor "false" has type "bool"
+       but an expression was expected of type "int"
+</pre>
+<p>このエラーは、1つ目のパターンがint型なのに、2つ目のパターンの返す値がbool型になっているためエラーとなっています。</p>
+<p>任意のパターンをワイルドカード(_)を使って表すことができます。</p>
+<pre>
+# let f x = 
+    match x with
+    | (1, a) -> a
+    | (2, b) -> b
+    | (_, c) -> c;;
+val f : int * 'a -> 'a = <fun>
+# f (1, true);;
+- : bool = true
+# f (2, 3);; 
+- : int = 3
+# f (284, 24);;
+- : int = 24    
+</pre>
+<p>1つ目のパターンは、1と2の値を扱い、3つ目のパターンはそれ以外の値すべてを扱います。ところで、fの型にあらわれている'aは任意の型を表す型変数です。ここにはintもboolも(それ以外の型も！)入る可能性があります。関数型は入れることができるでしょうか?試してみてください。</p>
+<p>パターンマッチは先に書いたものから順番に検査されるので、</p>
+<pre>
+# let f x =
+    match x with
+    | (_, a) -> a
+    | (a, b) -> b
+    | (c, d) -> c;;
+Line 4, characters 4-10:
+4 |   | (a, b) -> b
+        ^^^^^^
+Warning 11 [redundant-case]: this match case is unused.
 
+Line 5, characters 4-10:
+5 |   | (c, d) -> c;;
+        ^^^^^^
+Warning 11 [redundant-case]: this match case is unused.
+
+val f : 'a * 'a -> 'a = <fun>
+</pre>
+<p>のように、ワイルドカードのパターンは一番上に書くと全てにマッチしてしまいます。実際、replも使われないという警告を表示しています。</p>
 <h2>レコード</h2>
-<p>組のそれぞれの要素に、位置の代わりの識別子として名前をつけたものです。</p>
-<p>パターマッチが出来ます。</p>
-
+<p>組のそれぞれの要素に、位置の代わりの識別子として名前をつけたものです。先にレコードの識別子に対する型を定義してから、実際にレコードを作成してみます。</p>
+<pre>
+type レコード名 = {
+    識別子名1 : 型1;
+    識別子名2 : 型2;
+    ...
+}
+</pre>
+<p>のようにして、レコードの型を定義することができます。そして実際にレコードを作成するには、</p>
+<pre>
+{
+    識別子名1 = 値1;
+    識別子名2 = 値2;
+    ...
+}
+</pre>
+<p>のようにします。識別子名をフィールドといいます。区切りが組では<code>,</code>でしたがレコードでは<code>;</code>であることに注意してください。例えば、</p>
+<pre>
+# type account = {
+    id : string ;
+    name : string ;
+    created_at : (int * int * int) ;
+    rate : int ;
+  };;
+type account = {
+  id : string;
+  name : string;
+  created_at : int * int * int;
+  rate : int;
+}
+# { id = "abc"; name = "def"; created_at = (2026, 10, 24); rate = 1024 };;
+- : account =
+{id = "abc"; name = "def"; created_at = (2026, 10, 24); rate = 1024}
+</pre>
+<p>のようにしてレコードを作成することができます。レコードの作成は特に順番を問わないので、</p>
+<pre>
+# {rate = 1024; id = "abc"; created_at = (2026, 10, 24); name = "def"};;
+- : account =
+{id = "abc"; name = "def"; created_at = (2026, 10, 24); rate = 1024}
+</pre>
+<p>のようにしても問題ありません。</p>
+<p>これらのレコードのフィールドに対して<code>.</code>を使って紐づいている値を取り出すことができます。例えば</p>
+<pre>
+# let ex = { id = "abc"; name = "def"; created_at = (2026, 10, 24); rate = 1024 };;
+val ex : account =
+  {id = "abc"; name = "def"; created_at = (2026, 10, 24); rate = 1024}
+# ex.id;;
+- : string = "abc"
+# ex.created_at;;
+- : int * int * int = (2026, 10, 24)
+</pre>
+<p>これをレコードアクセスといいます。</p>
+<pre>
+# match ex with
+  | {id = a; name = b; created_at = _} -> a ^ b;;
+- : string = "abcdef"
+</pre>
+<p>のようにパターンマッチもできます。ワイルドカードも使えますし、特に参照しないならフィールドをそもそも書かなくても問題ないということがわかります。</p>
+<h4>演習</h4>
+<p>先程のaccount型を用いて、現在の年月日と登録時の年月日を比較し、「作成から〇〇年〇〇月〇〇日経過しています。」という文字列を返す関数diffを作成してください。0年や0月なら、それが省略できるとなおよいでしょう。</p>
 <h2>ヴァリアント</h2>
-<p>レコードの双対で、どれか1つの値を保持する型です。他の言語では、「代数的データ型」などとも呼ばれます。</p>
+<p>レコードはすべてのフィールドを持っている必要がありましたが、その双対で、どれか1つの値である型です。</p>
+<pre>
+type ヴァリアント名 =
+    | コンストラクタ名1
+    | コンストラクタ名2
+    | ...
+</pre>
+<p>と書きます。このようにレコードでフィールドと呼ばれていたものは、ヴァリアントではコンストラクタと呼びます。例えば、</p>
+<pre>
+# type week_t =
+  | Mo
+  | Tu
+  | We
+  | Th
+  | Fr
+  | Sa
+  | Su  
+  ;;
+type week_t = Mo | Tu | We | Th | Fr | Sa | Su
+</pre>
+<p>のようにして曜日を表すヴァリアントを定義できます。replの返答のように一番はじめの<code>|</code>は省略することができます。</p>
+<p>コンストラクタの1文字目は、必ず英大文字である必要があります。</p>
+<pre>
+# type coin =
+  | head
+  | tail ;;
+Line 2, characters 2-6:
+2 | | head
+      ^^^^
+Error: Syntax error
+</pre>
+<h4>演習</h4>
+<p>関数の演習のところで作った乾燥限界値を求める関数rの引数として、「年中多雨'f'か冬乾燥'w'か夏乾燥's'」である値をこのときは文字で渡しましたが、これをヴァリアントにして作成してみてください。</p>
+<h3>コンストラクタの引数</h3>
+<p>ヴァリアントのコンストラクタは<code>of</code>と<code>*</code>を使って引数を持つことができます。例えば、</p>
+<pre>
+# type shape =
+    | Circle of float
+    | Rectangle of float * float ;;
+type shape = Circle of float | Rectangle of float * float
+</pre>
+<p>これは、円を表すコンストラクタと、四角形を表すコンストラクタを持つヴァリアントです。円は1つの引数(半径、あるいは直径などを想定)を、四角形は2つの引数(幅と高さなどを想定)を取るようになります。</p>
+<p>ヴァリアントの具体的な値を書くのは簡単で、</p>
+<pre>
+# Circle 3. ;;
+- : shape = Circle 3.
+</pre>
+<p>のようにコンストラクタと引数を並べて書くだけです。</p>
+<pre>
+# Rectangle (3. , 4.) ;;
+- : shape = Rectangle (3., 4.)
+</pre>
+<p>複数引数とるときは、<code>()</code>で囲んで、<code>,</code>で区切って指定します(1引数の場合でも囲えます)。</p>
+<p>再帰的に定義することもできます。</p>
+<pre>
+# type bt =
+  | Leaf
+  | Node of bt * int * bt ;;
+type bt = Leaf | Node of bt * int * bt
+</pre>
 <p>パターンマッチが出来ます。</p>
-
+<pre>
+# let x =
+    Node (Node (Leaf, 3, Node (Node (Leaf, 1, Node (Leaf, 0, Leaf)), 5, Leaf)),
+     8,
+     Node (Leaf, 5,
+      Node (Node (Leaf, 2, Leaf), 4, Node (Leaf, 2, Node (Leaf, 7, Leaf))))) ;;
+val x : bt =
+  Node (Node (Leaf, 3, Node (Node (Leaf, 1, Node (Leaf, 0, Leaf)), 5, Leaf)),
+   8,
+   Node (Leaf, 5,
+    Node (Node (Leaf, 2, Leaf), 4, Node (Leaf, 2, Node (Leaf, 7, Leaf)))))
+# let rec bt_sum x =
+    match x with
+    | Leaf -> 0
+    | Node (x, y, z) ->
+        (bt_sum x) + y + (bt_sum z) ;;
+val bt_sum : bt -> int = <fun>
+# bt_sum x;;
+- : int = 37
+</pre>
+<h4>演習</h4>
+<p>以下の関数を作成してください。</p>
+<ul>
+    <li>与えられたbt型の値の中で最大の値を求める関数bt_max</li>
+    <li>与えられたbt型の値のLeafの数を数える関数bt_leaf</li>
+</ul>
 <h2>リスト</h2>
 <p>再帰的なデータ構造です。空リストはリストです。リストの先頭に要素を追加したものもリストです。</p>
+<pre>
+type 'a list_t =
+  | Nil
+  | Cons of 'a * list_t
+</pre>
+<p>と考えると簡単です。リストに実際の値をいれるには、Consのかわりに</p>
+<pre>
+# 2 :: [] ;;
+- : int list = [2]
+</pre>
+<p>のように<code>::</code>を使って書きます。また、</p>
+<pre>
+# 1 :: 2 :: [] ;;
+- : int list = [1; 2]
+</pre>
+<p>のように複数の要素を追加することもできます。さらに、replの返答のように</p>
+<pre>
+# [1; 2; 3; 4] ;;
+- : int list = [1; 2; 3; 4]
+</pre>
+<p>と書くこともできます。</p>
+<p>リストの要素にはint以外の様々な型が入ることができます。</p>
+<pre>
+# ["abc"; "def"; "ghi"; "jkl"] ;;
+- : string list = ["abc"; "def"; "ghi"; "jkl"]
+# [true; false; true; true; false; true; false; false;] ;;
+- : bool list = [true; false; true; true; false; true; false; false]
+# [(1, 2); (3, 4); (5, 6)] ;;
+- : (int * int) list = [(1, 2); (3, 4); (5, 6)]
+# [[1; 2]; [5; 2; 4; 4; 5; 2; 8]; [4; 6]; []] ;;
+- : int list list = [[1; 2]; [5; 2; 4; 4; 5; 2; 8]; [4; 6]; []]
+# [[]; []; []] ;;            
+- : 'a list list = [[]; []; []]
+</pre>
+<p>しかし、リストの要素はすべて同じ型である必要があります。</p>
+<pre>
+# ["abc"; 2] ;;
+Line 1, characters 8-9:
+1 | ["abc"; 2] ;;
+            ^
+Error: The constant "2" has type "int" but an expression was expected of type
+         "string"
+</pre>
 <p>パターンマッチが出来ます。</p>
-<!-- リストモジュールのいくつかについて説明 -->
+<pre>
+# let x = [1; 2; 3; 4] ;;
+val x : int list = [1; 2; 3; 4]
+# let rec list_sum x =
+    match x with
+    | [] -> 0
+    | x :: y -> x + (list_sum y) ;; 
+val list_sum : int list -> int = <fun>
+# list_sum x ;;
+- : int = 10
+</pre>
+<h4>演習</h4>
+<p>以下の関数を作成してください。</p>
+<ul>
+    <li>与えられたint list型の値の中で最大の値を求める関数list_max</li>
+    <li>与えられたint list型の値の中で偶数の数を数える関数list_even</li>
+</ul>
+<h3>リストモジュール</h3>
+<p>リストはよく使われるので、標準でリストに対する様々な操作をまとめたモジュールが用意されています。</p>
+<ul>
+    <li>リストの長さを求めるList.length : 'a list -> int
+        <pre># List.length [1; 2; 4; 5; 6; 7; 8; 9];;
+- : int = 8</pre>
+    </li>
+    <li>リストの要素を逆順にするList.rev : 'a list -> 'a list
+        <pre># List.rev [1; 2; 4; 5; 6; 7; 8; 9];; 
+- : int list = [9; 8; 7; 6; 5; 4; 2; 1]</pre>
+    </li>
+    <li>リストの要素全てに関数を適用するList.map : ('a -> 'b) -> 'a list -> 'b list
+        <pre># List.map (fun x -> x * 2) [1; 2; 3; 4; 5; 6; 7; 8; 9] ;;
+- : int list = [2; 4; 6; 8; 10; 12; 14; 16; 18]</pre>
+    </li>
+    <li>条件を満たす要素を抽出するList.filter : ('a -> bool) -> 'a list -> 'a list
+        <pre># List.filter (fun x -> x < 4) [1; 2; 3; 4; 5; 6; 7; 8; 9];;
+- : int list = [1; 2; 3]</pre>
+    </li>
+    <li>リストの要素を右から順に処理するList.fold_right : ('a -> 'b -> 'b) -> 'a list -> 'b -> 'b
+        <pre># List.fold_right (fun x y -> x - y) [1; 2; 3; 4; 5; 6; 7; 8; 9] 0 ;;
+- : int = 5</pre>
+    </li>
+    <li>リストの要素を左から順に処理するList.fold_left : ('b -> 'a -> 'b) -> 'b -> 'a list -> 'b
+        <pre># List.fold_left (fun x y -> x - y) 0 [1; 2; 3; 4; 5; 6; 7; 8; 9] ;;    
+- : int = -45</pre>
+    </li>
+    <li>リストにその要素が存在するか探索するList.exists : ('a -> bool) -> 'a list -> bool
+        <pre># List.exists (fun x -> x = 3) [1; 2; 3; 4; 5; 6; 7; 8; 9] ;;   
+- : bool = true
+# List.exists (fun x -> x = 10827329) [1; 2; 3; 4; 5; 6; 7; 8; 9] ;;
+- : bool = false</pre>
+    </li>
+    <li>リストのすべての要素が条件を満たすかを判定するList.for_all : ('a -> bool) -> 'a list -> bool
+        <pre># List.for_all (fun x -> x < 10) [1; 2; 3; 4; 5; 6; 7; 8; 9];;
+- : bool = true
+# List.for_all (fun x -> x < 4) [1; 2; 3; 4; 5; 6; 7; 8; 9];; 
+- : bool = false</pre>
+    </li>
+    <li>リストの先頭要素を取得するList.hd : 'a list -> 'a
+        <pre># List.hd [1; 2; 3; 4; 5; 6; 7; 8; 9] ;;
+- : int = 1</pre>
+    </li>
+    <li>リストの先頭要素を取り除くList.tl : 'a list -> 'a list
+        <pre># List.tl [1; 2; 3; 4; 5; 6; 7; 8; 9] ;;
+- : int list = [2; 3; 4; 5; 6; 7; 8; 9]</pre>
+    </li>
+    <li>リストを結合するList.append : 'a list -> 'a list -> 'a list
+        <pre># List.append [1; 2; 3; 4; 5] [6; 7; 8; 9] ;;
+- : int list = [1; 2; 3; 4; 5; 6; 7; 8; 9]</pre>
+        なお、これは<code>@</code>演算子でも同じことができます。
+        <pre># [1; 2; 3; 4; 5] @ [6; 7; 8; 9] ;;            
+- : int list = [1; 2; 3; 4; 5; 6; 7; 8; 9]</pre>
+    </li>
+    <li>複数のリストを結合するList.concat : 'a list list -> 'a list
+        <pre># List.concat [[1; 2; 3]; [4; 5]; [6; 7; 8; 9]];;
+- : int list = [1; 2; 3; 4; 5; 6; 7; 8; 9]</pre>
+    </li>
+<h4>演習</h4>
+<p>以下の関数を作成してください。</p>
+<ul>
+    <li>クイックソートを実現する関数quick_sort</li>
+    <li>リストの要素のすべての順列(リストのリスト)を生成する関数permutation</li>
+</ul>
+</ul>
+<h2>単位型、参照、代入</h2>
+<p>単位型とは値が1つだけ存在する方で、<code>()</code>で表されます。</p>
+<pre>
+# () ;;
+- : unit = ()
+</pre>
+<p>ocamlでもc言語のようにデータの値を書き換える事ができます(再宣言ではなく)。そのためには値に<code>ref</code>を付けて、明示的にこれは変更可能な変数(参照という)であるということを示します。</p>
+<pre>
+# let x = ref 1 ;;
+val x : int ref = {contents = 1}
+</pre>
+<p>この<code>x</code>は、整数型の参照です。参照の中身を取り出すには<code>!</code>を使います。</p>
+<pre>
+# !x ;;
+- : int = 1
+</pre>
+<p>代入するには<code>:=</code>を使います。</p>
+<pre>
+# x := 2 ;;
+- : unit = ()
+# !x ;;
+- : int = 2
+</pre>
+<p>このように代入操作はunit型です。unit型を持つものは副作用を持つ操作と呼ばれます。</p>
+<p>c言語で<code>x = x + 1;</code>と書かれるコードは、ocamlでは<code>x := !x + 1;</code>と書きます。</p>
 
-<h2>文字列、文字、単位型</h2>
-
-<h2>参照、代入</h2>
-<p>副作用を伴う操作です。</p>
-
-
+<footer>
+    <ul>
+        <li><a href = "index.html">トップページ</a></li>
+        <li><a href = "arith.html">次</a></li>
+    </ul>
+</footer>
 </body>
 </html>
