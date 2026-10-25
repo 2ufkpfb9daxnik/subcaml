@@ -14,6 +14,7 @@
     <a href = "index.html">トップページ</a>
 
 <h1>OCaml入門</h1>
+<p>英語が読めるなら、<a href = "https://ocaml.org/manual/5.4/coreexamples.html">ocaml公式マニュアル(バージョンをあわせてくださいね)</a>を呼んだほうがいいかもしれません。</p>
 <p>OCamlとは関数型プログラミング言語です。型推論が得意です。言語仕様が簡潔です。</p>
 <p>基本的には、目次の順番で、参照くらいまで学んでいきます。</p>
 <p>まず初めに、<code>ocaml</code>のreplを起動してみましょう。replとは、read-eval-print loopの略です。対話的にコードを実行する事ができます。</p>
@@ -97,7 +98,7 @@ Error: The constant "3.14" has type "float"
 # 3.14 /. 2.178;;
 - : float = 1.4416896235078054
 </pre>
-<p><code>mod.</code>は存在しません。</p>
+<p><code>mod.</code>は存在しません(mod_floatという名前ではありますが、ここでは解説しません。<a href="https://ocaml.org/manual/5.4/api/Stdlib.html#1_Floatingpointarithmetic">詳しくは、このようなドキュメントとかで確認してください。</a>ほかにも様々な関数があるので見てみるといいでしょう)。</p>
 <pre>
 # 3.14 mod. 2.178;;
 Line 1, characters 8-9:
@@ -322,7 +323,7 @@ Error: Unbound value "a"
 ocamlc -o 実行ファイル名 ファイル名.ml
 ./実行ファイル名
 </pre>
-<p>で実行ファイルを作成・実行できます。ただし、先程のtest.mlを実行しても何も表示されません。内部で計算を行いはしましたが、それを表示するコードは書かれていません。</p>
+<p>で実行ファイルを作成・実行できます(実は、これはネイティブコードではなく、バイトコードを吐いており、実際のネイティブコードはocamloptコマンドを使う必要があります。今回作るのはバイトコードコンパイラとそれを動かす仮想機械です)。ただし、先程のtest.mlを実行しても何も表示されません。内部で計算を行いはしましたが、それを表示するコードは書かれていません。</p>
 <p>ターミナルに表示するには、</p>
 <pre>
 Printf.printf "文字列" 変数1 変数2 ...;;
@@ -652,6 +653,7 @@ val ex : account =
 - : string = "abcdef"
 </pre>
 <p>のようにパターンマッチもできます。ワイルドカードも使えますし、特に参照しないならフィールドをそもそも書かなくても問題ないということがわかります。</p>
+<p>レコードには実行時に新しくフィールドを追加する/削除するというような操作はありません。そのようなことがやりたい場合は、MapやHashtblなどのデータ構造を使用することになります。</p>
 <h4>演習</h4>
 <p>先程のaccount型を用いて、現在の年月日と登録時の年月日を比較し、「作成から〇〇年〇〇月〇〇日経過しています。」という文字列を返す関数diffを作成してください。0年や0月なら、それが省略できるとなおよいでしょう。</p>
 <h2>ヴァリアント</h2>
@@ -747,14 +749,14 @@ val bt_sum : bt -> int = <fun>
 <pre>
 type 'a list_t =
   | Nil
-  | Cons of 'a * list_t
+  | (::) of 'a * list_t
 </pre>
-<p>と考えると簡単です。リストに実際の値をいれるには、Consのかわりに</p>
+<p>と考えると簡単です。</p>
 <pre>
 # 2 :: [] ;;
 - : int list = [2]
 </pre>
-<p>のように<code>::</code>を使って書きます。また、</p>
+<p>のように<code>::</code>は中置です。また、</p>
 <pre>
 # 1 :: 2 :: [] ;;
 - : int list = [1; 2]
@@ -896,6 +898,27 @@ val x : int ref = {contents = 1}
 <p>このように代入操作はunit型です。unit型を持つものは副作用を持つ操作と呼ばれます。</p>
 <p>c言語で<code>x = x + 1;</code>と書かれるコードは、ocamlでは<code>x := !x + 1;</code>と書きます。</p>
 
+<h2>例外</h2>
+<p>ocamlでは、例外を使ってエラー処理を行うことができます。例外は、プログラムの実行中に発生する異常な状態を表すもので、通常の制御フローとは異なる方法で処理されます。例外を定義するには、<code>exception</code>キーワードを使用します。</p>
+<pre>
+# exception MyException;;
+exception MyException
+</pre>
+<p>例外を発生させるには、<code>raise</code>関数を使用します。</p>
+<pre>
+# raise MyException;;
+Exception: MyException.
+</pre>
+<p>例外を捕捉するには、<code>try ... with</code>構文を使用します。</p>
+<pre>
+# try 
+    let x = 1 / 0 in
+    x
+  with
+  | Division_by_zero -> -1 ;;
+- : int = -1
+</pre>
+<p>この例では、ゼロで割る操作が行われた場合に、<code>Division_by_zero</code>例外が発生し、それを捕捉して-1を返しています。</p>
 <footer>
     <ul>
         <li><a href = "index.html">トップページ</a></li>
