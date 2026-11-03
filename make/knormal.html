@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K正規形</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="site-header">
+        <button class="theme-toggle" type="button"></button>
+    </div>
+    <h1>K正規形</h1>
+
+<p>
+    コア中間表現の各部分式に名前を付け、
+    プリミティブ演算や関数適用の引数を変数に限定します。
+</p>
+
+<ul>
+    <li>コア中間表現<br>↓ K正規化</li>
+    <li>K正規形</li>
+</ul>
+<h2>K正規形の構文</h2>
+
+<table>
+    <tr>
+        <th><span class="math">e</span> ::=</th>
+        <td>K正規形の式</td>
+    </tr>
+    <tr>
+        <th><span class="math">c</span></th>
+        <td>定数</td>
+    </tr>
+    <tr>
+        <th><span class="math">x</span></th>
+        <td>変数</td>
+    </tr>
+    <tr>
+        <th>
+            <span class="math">op</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </th>
+        <td>プリミティブ演算</td>
+    </tr>
+    <tr>
+        <th>
+            <code>if</code>
+            <span class="math">x</span>
+            <code>then</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>else</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>条件分岐</td>
+    </tr>
+    <tr>
+        <th>
+            <code>let</code>
+            <span class="math">x</span>
+            <code>=</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>in</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>局所定義</td>
+    </tr>
+    <tr>
+        <th>
+            <code>let rec</code>
+            <span class="math">f</span><sub>1</sub>
+            <span class="math">x</span><sub>11</sub> ...
+            <span class="math">x</span><sub>1m₁</sub>
+            <code>=</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>and</code> ...
+            <code>and</code>
+            <span class="math">f</span><sub>n</sub>
+            <span class="math">x</span><sub>n1</sub> ...
+            <span class="math">x</span><sub>nmₙ</sub>
+            <code>=</code>
+            <span class="math">e</span><sub>n</sub>
+            <code>in</code>
+            <span class="math">e</span>
+        </th>
+        <td>再帰関数定義</td>
+    </tr>
+    <tr>
+        <th>
+            <code>fun</code>
+            <span class="math">x</span><sub>1</sub> ...
+            <span class="math">x</span><sub>n</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span>
+        </th>
+        <td>関数</td>
+    </tr>
+    <tr>
+        <th>
+            <span class="math">x y</span><sub>1</sub> ...
+            <span class="math">y</span><sub>n</sub>
+        </th>
+        <td>関数適用</td>
+    </tr>
+    <tr>
+        <th>
+            <code>block</code>
+            <span class="math">k</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </th>
+        <td>ブロックの作成</td>
+    </tr>
+    <tr>
+        <th>
+            <code>field</code>
+            <span class="math">i x</span>
+        </th>
+        <td>ブロックのフィールドの読み出し</td>
+    </tr>
+    <tr>
+        <th>
+            <code>setfield</code>
+            <span class="math">i x y</span>
+        </th>
+        <td>ブロックのフィールドへの書き込み</td>
+    </tr>
+    <tr>
+        <th>
+            <code>tag</code>
+            <span class="math">x</span>
+        </th>
+        <td>ブロックのタグの読み出し</td>
+    </tr>
+    <tr>
+        <th>
+            <code>switch</code>
+            <span class="math">x</span>
+            <code>with</code>
+            <span class="math">k</span><sub>1</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>|</code> ...
+            <code>|</code>
+            <span class="math">k</span><sub>n</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>n</sub>
+        </th>
+        <td>タグによる分岐</td>
+    </tr>
+    <tr class="advanced">
+        <th>
+            <code>raise</code>
+            <span class="math">x</span>
+        </th>
+        <td>発展　例外の送出</td>
+    </tr>
+    <tr class="advanced">
+        <th>
+            <code>try</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>with</code>
+            <span class="math">x</span>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>発展　例外処理</td>
+    </tr>
+    <tr class="advanced">
+        <th>
+            <code>perform</code>
+            <span class="math">x</span>
+        </th>
+        <td>発展　エフェクトの実行</td>
+    </tr>
+</table>
+<h2>K正規化</h2>
+
+<p>
+    コア中間表現では、演算や関数適用の中に任意の式を記述できます。
+</p>
+
+<pre><code>f (x + 1) (g y)</code></pre>
+
+<p>
+    K正規化では、各部分式の結果を一時変数へ束縛します。
+</p>
+
+<pre><code>let i = 1 in
+let a = x + i in
+let b = g y in
+f a b</code></pre>
+
+<p>
+    この変換により、演算や関数適用が使用する値を、
+    すべて変数として明示できます。
+</p>
+<h2>K正規化の規則</h2>
+
+<p>
+    <span class="math">K</span>[<span class="math">e</span>]は、
+    式<span class="math">e</span>をK正規化した結果を表します。
+    次の補助記法を使用します。
+</p>
+
+<pre><code>bind e as x in e'
+    = K[e]が変数なら、その変数をxとしてe'を続ける
+    = それ以外なら、let x = K[e] in e'を生成する</code></pre>
+
+<p>
+    複数の部分式は左から右へ処理します。
+    表中の<span class="math">x</span>、<span class="math">x</span><sub>1</sub>、...は
+    新しく生成する変数を表します。
+</p>
+
+<table>
+    <tr>
+        <th>コア中間表現</th>
+        <td>K正規形</td>
+    </tr>
+
+    <tr>
+        <th><span class="math">c</span></th>
+        <td><span class="math">c</span></td>
+    </tr>
+
+    <tr>
+        <th><span class="math">x</span></th>
+        <td><span class="math">x</span></td>
+    </tr>
+
+    <tr>
+        <th>
+            <span class="math">op</span>(<span class="math">e</span><sub>1</sub>, ...,
+            <span class="math">e</span><sub>n</sub>)
+        </th>
+        <td>
+            <code>bind</code> <span class="math">e</span><sub>1</sub>
+            <code>as</code> <span class="math">x</span><sub>1</sub> <code>in</code> ...<br>
+            <code>bind</code> <span class="math">e</span><sub>n</sub>
+            <code>as</code> <span class="math">x</span><sub>n</sub> <code>in</code><br>
+            <span class="math">op</span>(<span class="math">x</span><sub>1</sub>, ...,
+            <span class="math">x</span><sub>n</sub>)
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>if</code> <span class="math">e</span><sub>1</sub>
+            <code>then</code> <span class="math">e</span><sub>2</sub>
+            <code>else</code> <span class="math">e</span><sub>3</sub>
+        </th>
+        <td>
+            <code>bind</code> <span class="math">e</span><sub>1</sub>
+            <code>as</code> <span class="math">x</span> <code>in</code><br>
+            <code>if</code> <span class="math">x</span>
+            <code>then</code> <span class="math">K</span>[<span class="math">e</span><sub>2</sub>]
+            <code>else</code> <span class="math">K</span>[<span class="math">e</span><sub>3</sub>]
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>let</code> <span class="math">x</span>
+            <code>=</code> <span class="math">e</span><sub>1</sub>
+            <code>in</code> <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>
+            <code>let</code> <span class="math">x</span>
+            <code>=</code> <span class="math">K</span>[<span class="math">e</span><sub>1</sub>]
+            <code>in</code> <span class="math">K</span>[<span class="math">e</span><sub>2</sub>]
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>let rec</code>
+            <span class="math">f</span><sub>1</sub>
+            <span class="math">x</span><sub>11</sub> ...
+            <span class="math">x</span><sub>1m₁</sub>
+            <code>=</code> <span class="math">e</span><sub>1</sub>
+            <code>and</code> ...<br>
+            <code>and</code>
+            <span class="math">f</span><sub>n</sub>
+            <span class="math">x</span><sub>n1</sub> ...
+            <span class="math">x</span><sub>nmₙ</sub>
+            <code>=</code> <span class="math">e</span><sub>n</sub>
+            <code>in</code> <span class="math">e</span>
+        </th>
+        <td>
+            <code>let rec</code>
+            <span class="math">f</span><sub>1</sub>
+            <span class="math">x</span><sub>11</sub> ...
+            <span class="math">x</span><sub>1m₁</sub>
+            <code>=</code> <span class="math">K</span>[<span class="math">e</span><sub>1</sub>]
+            <code>and</code> ...<br>
+            <code>and</code>
+            <span class="math">f</span><sub>n</sub>
+            <span class="math">x</span><sub>n1</sub> ...
+            <span class="math">x</span><sub>nmₙ</sub>
+            <code>=</code> <span class="math">K</span>[<span class="math">e</span><sub>n</sub>]
+            <code>in</code> <span class="math">K</span>[<span class="math">e</span>]
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>fun</code>
+            <span class="math">x</span><sub>1</sub> ...
+            <span class="math">x</span><sub>n</sub>
+            <code>-&gt;</code> <span class="math">e</span>
+        </th>
+        <td>
+            <code>fun</code>
+            <span class="math">x</span><sub>1</sub> ...
+            <span class="math">x</span><sub>n</sub>
+            <code>-&gt;</code> <span class="math">K</span>[<span class="math">e</span>]
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <span class="math">e e</span><sub>1</sub> ...
+            <span class="math">e</span><sub>n</sub>
+        </th>
+        <td>
+            <code>bind</code> <span class="math">e</span>
+            <code>as</code> <span class="math">f</span> <code>in</code><br>
+            <code>bind</code> <span class="math">e</span><sub>1</sub>
+            <code>as</code> <span class="math">x</span><sub>1</sub> <code>in</code> ...<br>
+            <code>bind</code> <span class="math">e</span><sub>n</sub>
+            <code>as</code> <span class="math">x</span><sub>n</sub> <code>in</code><br>
+            <span class="math">f x</span><sub>1</sub> ...
+            <span class="math">x</span><sub>n</sub>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>(</code><span class="math">e</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">e</span><sub>n</sub><code>)</code>
+        </th>
+        <td>
+            <code>bind</code> <span class="math">e</span><sub>1</sub>
+            <code>as</code> <span class="math">x</span><sub>1</sub> <code>in</code> ...<br>
+            <code>bind</code> <span class="math">e</span><sub>n</sub>
+            <code>as</code> <span class="math">x</span><sub>n</sub> <code>in</code><br>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>block</code> <span class="math">k</span>
+            <code>(</code><span class="math">e</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">e</span><sub>n</sub><code>)</code>
+        </th>
+        <td>
+            <code>bind</code> <span class="math">e</span><sub>1</sub>
+            <code>as</code> <span class="math">x</span><sub>1</sub> <code>in</code> ...<br>
+            <code>bind</code> <span class="math">e</span><sub>n</sub>
+            <code>as</code> <span class="math">x</span><sub>n</sub> <code>in</code><br>
+            <code>block</code> <span class="math">k</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>field</code> <span class="math">i e</span>
+        </th>
+        <td>
+            <code>bind</code> <span class="math">e</span>
+            <code>as</code> <span class="math">x</span> <code>in</code><br>
+            <code>field</code> <span class="math">i x</span>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>setfield</code>
+            <span class="math">i e</span><sub>1</sub>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>
+            <code>bind</code> <span class="math">e</span><sub>1</sub>
+            <code>as</code> <span class="math">x</span> <code>in</code><br>
+            <code>bind</code> <span class="math">e</span><sub>2</sub>
+            <code>as</code> <span class="math">y</span> <code>in</code><br>
+            <code>setfield</code> <span class="math">i x y</span>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>tag</code> <span class="math">e</span>
+        </th>
+        <td>
+            <code>bind</code> <span class="math">e</span>
+            <code>as</code> <span class="math">x</span> <code>in</code><br>
+            <code>tag</code> <span class="math">x</span>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>switch</code> <span class="math">e</span>
+            <code>with</code>
+            <span class="math">k</span><sub>1</sub>
+            <code>-&gt;</code> <span class="math">e</span><sub>1</sub>
+            <code>|</code> ...
+            <code>|</code>
+            <span class="math">k</span><sub>n</sub>
+            <code>-&gt;</code> <span class="math">e</span><sub>n</sub>
+        </th>
+        <td>
+            <code>bind</code> <span class="math">e</span>
+            <code>as</code> <span class="math">x</span> <code>in</code><br>
+            <code>switch</code> <span class="math">x</span>
+            <code>with</code>
+            <span class="math">k</span><sub>1</sub>
+            <code>-&gt;</code> <span class="math">K</span>[<span class="math">e</span><sub>1</sub>]
+            <code>|</code> ...<br>
+            <code>|</code>
+            <span class="math">k</span><sub>n</sub>
+            <code>-&gt;</code> <span class="math">K</span>[<span class="math">e</span><sub>n</sub>]
+        </td>
+    </tr>
+
+    <tr class="advanced">
+        <th>
+            <code>raise</code> <span class="math">e</span>
+        </th>
+        <td>
+            <code>bind</code> <span class="math">e</span>
+            <code>as</code> <span class="math">x</span> <code>in</code><br>
+            <code>raise</code> <span class="math">x</span>
+        </td>
+    </tr>
+
+    <tr class="advanced">
+        <th>
+            <code>try</code> <span class="math">e</span><sub>1</sub>
+            <code>with</code> <span class="math">x</span>
+            <code>-&gt;</code> <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>
+            <code>try</code>
+            <span class="math">K</span>[<span class="math">e</span><sub>1</sub>]
+            <code>with</code> <span class="math">x</span>
+            <code>-&gt;</code>
+            <span class="math">K</span>[<span class="math">e</span><sub>2</sub>]
+        </td>
+    </tr>
+
+    <tr class="advanced">
+        <th>
+            <code>perform</code> <span class="math">e</span>
+        </th>
+        <td>
+            <code>bind</code> <span class="math">e</span>
+            <code>as</code> <span class="math">x</span> <code>in</code><br>
+            <code>perform</code> <span class="math">x</span>
+        </td>
+    </tr>
+</table>
+<h2>変換例</h2>
+
+<h3>プリミティブ演算</h3>
+
+<pre><code>x + (y * z)</code></pre>
+
+<p>上の式を、次のように変換します。</p>
+
+<pre><code>let a = y * z in
+let b = x + a in
+b</code></pre>
+
+<h3>条件式</h3>
+
+<pre><code>if x + 1 &lt; y then f x else g y</code></pre>
+
+<p>上の式を、次のように変換します。</p>
+
+<pre><code>let i = 1 in
+let a = x + i in
+let b = a &lt; y in
+if b then
+    f x
+else
+    g y</code></pre>
+
+<p>
+    条件分岐の各分岐は、それぞれ独立してK正規化します。
+</p>
+
+<h3>関数適用</h3>
+
+<pre><code>f (g x) (h y)</code></pre>
+
+<p>左から右へ評価するため、次のように変換します。</p>
+
+<pre><code>let a = g x in
+let b = h y in
+f a b</code></pre>
+
+<h3>ブロックの作成</h3>
+
+<pre><code>block 0 (f x, y + 1)</code></pre>
+
+<p>上の式を、次のように変換します。</p>
+
+<pre><code>let a = f x in
+let i = 1 in
+let b = y + i in
+block 0 (a, b)</code></pre>
+
+
+
+<h2>K正規形の性質</h2>
+
+<ul>
+    <li>プリミティブ演算の引数は変数である</li>
+    <li>関数適用の関数部分と引数は変数である</li>
+    <li>ブロックのフィールドに格納する値は変数である</li>
+    <li>フィールド操作の対象は変数である</li>
+    <li>条件分岐とタグ分岐の判定対象は変数である</li>
+    <li>複雑な部分式の結果は<code>let</code>で束縛される</li>
+    <li>元の式の評価順序が<code>let</code>の順序として明示される</li>
+</ul>
+
+<p>
+    K正規形では、各変数の定義箇所が明確になります。
+    次のクロージャ変換では、この表現から関数ごとの自由変数を求め、
+    関数と自由変数をクロージャとして明示します。
+</p>
+</body>
+</html>

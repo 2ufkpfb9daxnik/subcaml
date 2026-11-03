@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>低水準中間表現</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="site-header">
+        <button class="theme-toggle" type="button"></button>
+    </div>
+    <h1>低水準中間表現</h1>
+
+<p>
+    クロージャ中間表現にデータ表現の具体化を行い、
+    クロージャ、組、レコード、ヴァリアントなどを、
+    ヒープ確保とメモリ操作で表します。
+</p>
+
+<ul>
+    <li>クロージャ中間表現<br>↓ データ表現の具体化</li>
+    <li>低水準中間表現</li>
+</ul>
+
+<h2>低水準化の規則</h2>
+
+<p>
+    <span class="math">L</span>[<span class="math">e</span>]は、
+    クロージャ中間表現の式<span class="math">e</span>を
+    低水準中間表現へ変換した結果を表します。
+</p>
+
+<p>
+    変換中に文字列、浮動小数点数、定数ブロックなどが現れた場合は、
+    新しいラベルを生成し、対応する静的データをプログラムへ追加します。
+</p>
+
+<h3>プログラム全体の変換</h3>
+
+<table>
+    <tr>
+        <th>クロージャ中間表現</th>
+        <td>低水準中間表現</td>
+    </tr>
+    <tr>
+        <th>
+            <span class="math">F</span><sub>1</sub> ...
+            <span class="math">F</span><sub>n</sub><code>;</code>
+            <span class="math">e</span>
+        </th>
+        <td>
+            <span class="math">D</span><sub>1</sub> ...
+            <span class="math">D</span><sub>m</sub><code>;</code>
+            <span class="math">L</span>[<span class="math">F</span><sub>1</sub>] ...
+            <span class="math">L</span>[<span class="math">F</span><sub>n</sub>]<code>;</code>
+            <span class="math">L</span>[<span class="math">e</span>]
+        </td>
+    </tr>
+</table>
+
+<p>
+    <span class="math">D</span><sub>1</sub>から
+    <span class="math">D</span><sub>m</sub>は、
+    低水準化の途中で生成された静的データです。
+</p>
+
+<h3>関数定義の変換</h3>
+
+<table>
+    <tr>
+        <th>クロージャ中間表現</th>
+        <td>低水準中間表現</td>
+    </tr>
+    <tr>
+        <th>
+            <code>function</code>
+            <span class="math">f</span>
+            <code>(closure,</code>
+            <span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code>
+            <span class="math">x</span><sub>n</sub><code>) =</code>
+            <span class="math">e</span>
+        </th>
+        <td>
+            <code>function</code>
+            <span class="math">f</span>
+            <code>(closure,</code>
+            <span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code>
+            <span class="math">x</span><sub>n</sub><code>) =</code><br>
+            <code>let</code>
+            <span class="math">z</span><sub>1</sub>
+            <code>= load closure 1 in</code><br>
+            ...<br>
+            <code>let</code>
+            <span class="math">z</span><sub>m</sub>
+            <code>= load closure</code>
+            <span class="math">m</span>
+            <code>in</code><br>
+            <span class="math">L</span>[<span class="math">e</span>]
+        </td>
+    </tr>
+    <tr>
+        <th>
+            <code>function</code>
+            <span class="math">f</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>) =</code>
+            <span class="math">e</span>
+        </th>
+        <td>
+            <code>function</code>
+            <span class="math">f</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>) =</code>
+            <span class="math">L</span>[<span class="math">e</span>]
+        </td>
+    </tr>
+</table>
+
+<p>
+    第1の形式はクロージャを通して呼び出される関数、
+    第2の形式は自由変数を持たず直接呼び出される関数です。
+</p>
+
+<h3>式の変換</h3>
+
+<table>
+    <tr>
+        <th>クロージャ中間表現</th>
+        <td>低水準中間表現</td>
+    </tr>
+
+    <tr>
+        <th><span class="math">c</span></th>
+        <td>
+            <span class="math">c</span>の種類に応じて、
+            1ワードの定数<span class="math">w</span>または
+            <code>address_of</code> <span class="math">L</span>
+        </td>
+    </tr>
+
+    <tr>
+        <th><span class="math">x</span></th>
+        <td><span class="math">x</span></td>
+    </tr>
+
+    <tr>
+        <th>
+            <span class="math">op</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </th>
+        <td>
+            対応する低水準演算、または<br>
+            <code>runtime_call</code>
+            <span class="math">f</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>if</code>
+            <span class="math">x</span>
+            <code>then</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>else</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>
+            <code>if</code>
+            <span class="math">x</span>
+            <code>then</code>
+            <span class="math">L</span>[<span class="math">e</span><sub>1</sub>]
+            <code>else</code>
+            <span class="math">L</span>[<span class="math">e</span><sub>2</sub>]
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>let</code>
+            <span class="math">x</span>
+            <code>=</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>in</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>
+            <code>let</code>
+            <span class="math">x</span>
+            <code>=</code>
+            <span class="math">L</span>[<span class="math">e</span><sub>1</sub>]
+            <code>in</code>
+            <span class="math">L</span>[<span class="math">e</span><sub>2</sub>]
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>make_closure</code>
+            <span class="math">f</span>
+            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
+            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
+        </th>
+        <td>
+            <code>let base = alloc</code>
+            <span class="math">n</span> <code>+ 2 in</code><br>
+            <code>let _ = store base 0</code>
+            <code>(make_header closure_tag (</code><span class="math">n</span>
+            <code>+ 1)) in</code><br>
+            <code>let _ = store base 1 (address_of</code>
+            <span class="math">f</span><code>) in</code><br>
+            <code>let _ = store base 2</code>
+            <span class="math">x</span><sub>1</sub> <code>in</code><br>
+            ...<br>
+            <code>let _ = store base (</code><span class="math">n</span>
+            <code>+ 1)</code>
+            <span class="math">x</span><sub>n</sub> <code>in</code><br>
+            <code>address_add base 1</code>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>apply_direct</code>
+            <span class="math">f</span>
+            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
+            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
+        </th>
+        <td>
+            <code>call</code>
+            <span class="math">f</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>apply_closure</code>
+            <span class="math">f</span>
+            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
+            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
+        </th>
+        <td>
+            <code>let code = load</code>
+            <span class="math">f</span>
+            <code>0 in</code><br>
+            <code>call_indirect code (</code>
+            <span class="math">f</span><code>,</code>
+            <span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>block</code>
+            <span class="math">k</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </th>
+        <td>
+            <code>let base = alloc</code>
+            <span class="math">n</span> <code>+ 1 in</code><br>
+            <code>let _ = store base 0</code>
+            <code>(make_header</code>
+            <span class="math">k n</span><code>) in</code><br>
+            <code>let _ = store base 1</code>
+            <span class="math">x</span><sub>1</sub> <code>in</code><br>
+            ...<br>
+            <code>let _ = store base</code>
+            <span class="math">n x</span><sub>n</sub> <code>in</code><br>
+            <code>address_add base 1</code>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>field</code>
+            <span class="math">i x</span>
+        </th>
+        <td>
+            <code>load</code>
+            <span class="math">x i</span>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>setfield</code>
+            <span class="math">i x y</span>
+        </th>
+        <td>
+            <code>store</code>
+            <span class="math">x i y</span>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>tag</code>
+            <span class="math">x</span>
+        </th>
+        <td>
+            <code>let header = load</code>
+            <span class="math">x</span>
+            <code>(-1) in</code><br>
+            <code>header_tag header</code>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>switch</code>
+            <span class="math">x</span>
+            <code>with</code>
+            <span class="math">k</span><sub>1</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>|</code> ...
+            <code>|</code>
+            <span class="math">k</span><sub>n</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>n</sub>
+        </th>
+        <td>
+            <code>switch</code>
+            <span class="math">x</span>
+            <code>with</code>
+            <span class="math">k</span><sub>1</sub>
+            <code>-&gt;</code>
+            <span class="math">L</span>[<span class="math">e</span><sub>1</sub>]
+            <code>|</code> ...<br>
+            <code>|</code>
+            <span class="math">k</span><sub>n</sub>
+            <code>-&gt;</code>
+            <span class="math">L</span>[<span class="math">e</span><sub>n</sub>]
+        </td>
+    </tr>
+
+    <tr class="advanced">
+        <th>
+            <code>raise</code>
+            <span class="math">x</span>
+        </th>
+        <td>
+            <code>runtime_call runtime_raise (</code>
+            <span class="math">x</span><code>)</code>
+        </td>
+    </tr>
+
+    <tr class="advanced">
+        <th>
+            <code>try</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>with</code>
+            <span class="math">x</span>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>
+            例外ハンドラを登録し、
+            <span class="math">L</span>[<span class="math">e</span><sub>1</sub>]を実行し、
+            通常終了時にハンドラを解除する。<br>
+            例外発生時は<span class="math">x</span>へ例外値を束縛して
+            <span class="math">L</span>[<span class="math">e</span><sub>2</sub>]を実行する
+        </td>
+    </tr>
+
+    <tr class="advanced">
+        <th>
+            <code>perform</code>
+            <span class="math">x</span>
+        </th>
+        <td>
+            <code>runtime_call runtime_perform (</code>
+            <span class="math">x</span><code>)</code>
+        </td>
+    </tr>
+</table>
+
+<h2>データ表現の具体化</h2>
+
+<p>
+    クロージャ中間表現では、ブロックやクロージャは抽象的な操作として表されていました。
+</p>
+
+<pre><code>block k (x1, ..., xn)
+make_closure f [x1; ...; xn]
+apply_closure f [x1; ...; xn]</code></pre>
+
+<p>
+    低水準化では、これらをヒープ確保、メモリの読み書き、
+    直接または間接の関数呼出しへ変換します。
+</p>
+
+<h2>値の分類</h2>
+
+<p>
+    低水準中間表現では、すべての値を64ビットの1ワードとして扱います。
+    値は、即値またはヒープ上のブロックへのポインタです。
+</p>
+
+<table>
+    <tr>
+        <th>値</th>
+        <td>低水準での表現</td>
+    </tr>
+    <tr>
+        <th><code>int</code></th>
+        <td>タグ付き整数</td>
+    </tr>
+    <tr>
+        <th><code>bool</code></th>
+        <td>タグ付き定数</td>
+    </tr>
+    <tr>
+        <th><code>unit</code></th>
+        <td>タグ付き定数</td>
+    </tr>
+    <tr>
+        <th><code>char</code></th>
+        <td>文字コードを格納したタグ付き整数</td>
+    </tr>
+    <tr>
+        <th>引数を持たないコンストラクタ</th>
+        <td>タグ付き定数</td>
+    </tr>
+    <tr>
+        <th>組、レコード、リスト、参照</th>
+        <td>ヒープブロックへのポインタ</td>
+    </tr>
+    <tr>
+        <th>引数を持つコンストラクタ</th>
+        <td>ヒープブロックへのポインタ</td>
+    </tr>
+    <tr>
+        <th>クロージャ</th>
+        <td>ヒープブロックへのポインタ</td>
+    </tr>
+    <tr>
+        <th><code>string</code></th>
+        <td>静的領域またはヒープ上の文字列へのポインタ</td>
+    </tr>
+    <tr>
+        <th><code>float</code></th>
+        <td>浮動小数点数を格納したヒープブロックへのポインタ</td>
+    </tr>
+    <tr class="advanced">
+        <th>配列</th>
+        <td>発展　ヒープ上の可変長ブロックへのポインタ</td>
+    </tr>
+</table>
+
+<h2>整数の具体化</h2>
+
+<p>
+    ソース言語の整数<span class="math">n</span>は、次のタグ付き整数へ変換します。
+</p>
+
+<pre><code>(n &lt;&lt; 1) | 1</code></pre>
+
+<p>整数定数は、低水準中間表現の即値へ変換します。</p>
+
+<pre><code>42
+    ↓
+integer 85</code></pre>
+
+<p>
+    加算と減算では、タグを考慮して結果を補正します。
+    乗算、除算、剰余では、演算前にタグを取り除き、
+    演算後に再びタグを付けます。
+</p>
+
+<h2>ヒープブロック</h2>
+
+<p>
+    ヒープ上の値は、ヘッダと0個以上のフィールドからなるブロックとして表します。
+</p>
+
+<pre><code>             値が指す位置
+                  |
+                  v
++--------+---------+---------+-----+
+| header | field 0 | field 1 | ... |
++--------+---------+---------+-----+</code></pre>
+
+<p>
+    ポインタは第1フィールドの位置を指します。
+    ヘッダは、その1ワード前に置きます。
+</p>
+
+<table>
+    <tr>
+        <th>ヘッダの情報</th>
+        <td>用途</td>
+    </tr>
+    <tr>
+        <th>サイズ</th>
+        <td>フィールド数</td>
+    </tr>
+    <tr>
+        <th>タグ</th>
+        <td>ブロックの種類またはコンストラクタ番号</td>
+    </tr>
+    <tr class="advanced">
+        <th>GC情報</th>
+        <td>発展　生存確認や走査に使用する情報</td>
+    </tr>
+</table>
+
+<h2>ブロックの作成</h2>
+
+<p>クロージャ中間表現の次の式を考えます。</p>
+
+<pre><code>block k (x1, ..., xn)</code></pre>
+
+<p>低水準中間表現では、概念的に次のように変換します。</p>
+
+<pre><code>let base = alloc (n + 1) in
+store base 0 (make_header k n);
+store base 1 x1;
+...
+store base n xn;
+address_add base 1</code></pre>
+
+<p>
+    <code>alloc</code>が返すアドレスはヘッダを指します。
+    式の結果としては、第1フィールドを指すポインタを返します。
+</p>
+
+<h2>フィールドの読み出し</h2>
+
+<p>クロージャ中間表現の次の式を考えます。</p>
+
+<pre><code>field i x</code></pre>
+
+<p>低水準中間表現では、次のメモリ読み出しへ変換します。</p>
+
+<pre><code>load x i</code></pre>
+
+<p>
+    <code>x</code>は第1フィールドを指しているため、
+    フィールド0はオフセット0、フィールド1はオフセット1にあります。
+</p>
+
+<h2>フィールドへの書き込み</h2>
+
+<p>クロージャ中間表現の次の式を考えます。</p>
+
+<pre><code>setfield i x y</code></pre>
+
+<p>低水準中間表現では、次のメモリ書き込みへ変換します。</p>
+
+<pre><code>store x i y</code></pre>
+
+<p>
+    書き込みの結果は単位値です。
+    不変なブロックに対する<code>store</code>は、コンパイラが生成しないものとします。
+</p>
+
+<h2>タグの読み出し</h2>
+
+<p>クロージャ中間表現の次の式を考えます。</p>
+
+<pre><code>tag x</code></pre>
+
+<p>
+    ヘッダはポインタの1ワード前にあるため、次のように変換します。
+</p>
+
+<pre><code>let header = load x (-1) in
+header_tag header</code></pre>
+
+<p>
+    <code>header_tag</code>は、ヘッダからタグ部分を取り出す低水準演算です。
+</p>
+
+<h2>組とレコード</h2>
+
+<p>
+    組とレコードは、タグ0のブロックとして表します。
+    フィールドの順序はコンパイル時に固定します。
+</p>
+
+<pre><code>(x, y)
+    ↓
+block 0 (x, y)</code></pre>
+
+<pre><code>{ name = x; age = y }
+    ↓
+block 0 (x, y)</code></pre>
+
+<p>
+    レコードのフィールド名は低水準中間表現には残りません。
+    フィールド名は整数オフセットへ変換されます。
+</p>
+
+<h2>ヴァリアント</h2>
+
+<p>
+    引数を持たないコンストラクタはタグ付き定数として表します。
+</p>
+
+<pre><code>None
+    ↓
+integer 1</code></pre>
+
+<p>
+    引数を持つコンストラクタは、コンストラクタ番号をタグとするブロックとして表します。
+</p>
+
+<pre><code>Some x
+    ↓
+block some_tag (x)</code></pre>
+
+<p>
+    パターンマッチは、即値の比較またはブロックヘッダのタグ検査として表されます。
+</p>
+
+<h2>リスト</h2>
+
+<p>
+    空リストは引数を持たないコンストラクタとして表します。
+    consセルは2フィールドのブロックとして表します。
+</p>
+
+<pre><code>[]
+    ↓
+empty_list_value</code></pre>
+
+<pre><code>x :: xs
+    ↓
+block cons_tag (x, xs)</code></pre>
+
+<table>
+    <tr>
+        <th>フィールド</th>
+        <td>内容</td>
+    </tr>
+    <tr>
+        <th>0</th>
+        <td>先頭要素</td>
+    </tr>
+    <tr>
+        <th>1</th>
+        <td>残りのリスト</td>
+    </tr>
+</table>
+
+<h2>参照</h2>
+
+<p>
+    参照は、1フィールドの可変ブロックとして表します。
+</p>
+
+<pre><code>ref x
+    ↓
+block reference_tag (x)</code></pre>
+
+<pre><code>!r
+    ↓
+load r 0</code></pre>
+
+<pre><code>r := x
+    ↓
+store r 0 x</code></pre>
+
+<h2>文字列</h2>
+
+<p>
+    文字列リテラルは静的データ領域へ配置し、
+    そのアドレスを低水準中間表現の値として使用します。
+</p>
+
+<pre><code>"hello"
+    ↓
+address_of string_0</code></pre>
+
+<p>
+    実行時に生成される文字列は、ランタイムがヒープ上に確保します。
+    文字列の連結、長さの取得、文字の取得はランタイム関数呼出しへ変換します。
+</p>
+
+<table>
+    <tr>
+        <th>操作</th>
+        <td>低水準化後</td>
+    </tr>
+    <tr>
+        <th><code>s1 ^ s2</code></th>
+        <td><code>runtime_call runtime_string_concat (s1, s2)</code></td>
+    </tr>
+    <tr>
+        <th><code>String.length s</code></th>
+        <td><code>runtime_call runtime_string_length (s)</code></td>
+    </tr>
+    <tr>
+        <th><code>String.get s i</code></th>
+        <td><code>runtime_call runtime_string_get (s, i)</code></td>
+    </tr>
+</table>
+
+<h2>浮動小数点数</h2>
+
+<p>
+    基本仕様では、浮動小数点数を1フィールドの専用ブロックへ格納します。
+</p>
+
+<pre><code>3.14
+    ↓
+address_of float_constant_0</code></pre>
+
+<p>
+    浮動小数点演算は、ランタイム関数呼出しへ変換します。
+</p>
+
+<pre><code>x +. y
+    ↓
+runtime_call runtime_float_add (x, y)</code></pre>
+
+<h2>クロージャ</h2>
+
+<p>
+    クロージャは、コードアドレスと自由変数を持つブロックとして表します。
+</p>
+
+<pre><code>make_closure f [x1; ...; xn]</code></pre>
+
+<p>低水準中間表現では、概念的に次のように変換します。</p>
+
+<pre><code>let base = alloc (n + 2) in
+store base 0 (make_header closure_tag (n + 1));
+store base 1 (address_of f);
+store base 2 x1;
+...
+store base (n + 1) xn;
+address_add base 1</code></pre>
+
+<p>クロージャポインタから見たフィールド配置は次のとおりです。</p>
+
+<table>
+    <tr>
+        <th>オフセット</th>
+        <td>内容</td>
+    </tr>
+    <tr>
+        <th><code>-1</code></th>
+        <td>ヘッダ</td>
+    </tr>
+    <tr>
+        <th><code>0</code></th>
+        <td>コードアドレス</td>
+    </tr>
+    <tr>
+        <th><code>1</code>以降</th>
+        <td>自由変数</td>
+    </tr>
+</table>
+
+<h2>直接呼出し</h2>
+
+<p>クロージャ中間表現の次の式を考えます。</p>
+
+<pre><code>apply_direct f [x1; ...; xn]</code></pre>
+
+<p>低水準中間表現では、次の直接呼出しへ変換します。</p>
+
+<pre><code>call f (x1, ..., xn)</code></pre>
+
+<p>
+    呼出し先がコンパイル時に確定しているため、
+    クロージャからコードアドレスを読み出す必要はありません。
+</p>
+
+<h2>クロージャ呼出し</h2>
+
+<p>クロージャ中間表現の次の式を考えます。</p>
+
+<pre><code>apply_closure f [x1; ...; xn]</code></pre>
+
+<p>低水準中間表現では、次のように変換します。</p>
+
+<pre><code>let code = load f 0 in
+call_indirect code (f, x1, ..., xn)</code></pre>
+
+<p>
+    クロージャ自身を第1引数として渡します。
+    呼出された関数は、クロージャから自由変数を読み出します。
+</p>
+
+<pre><code>let x1 = load closure 1 in
+let x2 = load closure 2 in
+...</code></pre>
+
+<h2>部分適用</h2>
+
+<p>
+    部分適用は、与えられた引数を自由変数として保存する補助クロージャへ変換します。
+</p>
+
+<pre><code>let add x y = x + y in
+add 3</code></pre>
+
+<p>概念的には次の補助関数とクロージャを生成します。</p>
+
+<pre><code>function partial_add(closure, y):
+    let x = load closure 1 in
+    call add (x, y)
+
+make_closure partial_add [3]</code></pre>
+
+<p>
+    部分適用のための補助関数は、クロージャ変換または低水準化の段階で生成します。
+</p>
+
+<h2>ランタイム関数呼出し</h2>
+
+<p>
+    低水準中間表現から利用するランタイム関数は、
+    <code>runtime_call</code>で表します。
+</p>
+
+<pre><code>runtime_call runtime_alloc (size)
+runtime_call runtime_print_int (x)
+runtime_call runtime_equal (x, y)</code></pre>
+
+<p>
+    <code>runtime_call</code>は、通常の関数呼出しとは区別して保持します。
+    これにより、呼出し規約や外部処理を命令選択時に適切に処理できます。
+</p>
+
+<h2>低水準中間表現のプログラム</h2>
+
+<table>
+    <tr>
+        <th><span class="math">P</span> ::=</th>
+        <td>低水準プログラム</td>
+    </tr>
+    <tr>
+        <th>
+            <span class="math">D</span><sub>1</sub> ...
+            <span class="math">D</span><sub>n</sub><code>;</code>
+            <span class="math">F</span><sub>1</sub> ...
+            <span class="math">F</span><sub>m</sub><code>;</code>
+            <span class="math">e</span>
+        </th>
+        <td>静的データ、関数定義、メイン式</td>
+    </tr>
+</table>
+
+<h2>静的データ</h2>
+
+<table>
+    <tr>
+        <th><span class="math">D</span> ::=</th>
+        <td>静的データ</td>
+    </tr>
+    <tr>
+        <th>
+            <code>string</code>
+            <span class="math">L s</span>
+        </th>
+        <td>文字列定数</td>
+    </tr>
+    <tr>
+        <th>
+            <code>float</code>
+            <span class="math">L r</span>
+        </th>
+        <td>浮動小数点定数</td>
+    </tr>
+    <tr>
+        <th>
+            <code>block</code>
+            <span class="math">L k</span>
+            <code>[</code><span class="math">w</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">w</span><sub>n</sub><code>]</code>
+        </th>
+        <td>静的ブロック</td>
+    </tr>
+</table>
+
+<h2>関数定義</h2>
+
+<table>
+    <tr>
+        <th><span class="math">F</span> ::=</th>
+        <td>低水準関数定義</td>
+    </tr>
+    <tr>
+        <th>
+            <code>function</code>
+            <span class="math">f</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>) =</code>
+            <span class="math">e</span>
+        </th>
+        <td>関数定義</td>
+    </tr>
+</table>
+
+<h2>低水準中間表現の式</h2>
+
+<table>
+    <tr>
+        <th><span class="math">e</span> ::=</th>
+        <td>低水準式</td>
+    </tr>
+    <tr>
+        <th><span class="math">w</span></th>
+        <td>1ワードの定数</td>
+    </tr>
+    <tr>
+        <th><span class="math">x</span></th>
+        <td>変数</td>
+    </tr>
+    <tr>
+        <th>
+            <span class="math">op</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </th>
+        <td>低水準演算</td>
+    </tr>
+    <tr>
+        <th>
+            <code>let</code>
+            <span class="math">x</span>
+            <code>=</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>in</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>局所定義</td>
+    </tr>
+    <tr>
+        <th>
+            <code>if</code>
+            <span class="math">x</span>
+            <code>then</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>else</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>条件分岐</td>
+    </tr>
+    <tr>
+        <th>
+            <code>switch</code>
+            <span class="math">x</span>
+            <code>with</code>
+            <span class="math">w</span><sub>1</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>|</code> ...
+            <code>|</code>
+            <span class="math">w</span><sub>n</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>n</sub>
+        </th>
+        <td>1ワード整数による分岐</td>
+    </tr>
+    <tr>
+        <th>
+            <code>alloc</code>
+            <span class="math">x</span>
+        </th>
+        <td>指定ワード数のヒープ確保</td>
+    </tr>
+    <tr>
+        <th>
+            <code>load</code>
+            <span class="math">x i</span>
+        </th>
+        <td>メモリの読み出し</td>
+    </tr>
+    <tr>
+        <th>
+            <code>store</code>
+            <span class="math">x i y</span>
+        </th>
+        <td>メモリへの書き込み</td>
+    </tr>
+    <tr>
+        <th>
+            <code>address_add</code>
+            <span class="math">x i</span>
+        </th>
+        <td>アドレスへのワード単位の加算</td>
+    </tr>
+    <tr>
+        <th>
+            <code>address_of</code>
+            <span class="math">L</span>
+        </th>
+        <td>関数または静的データのアドレス</td>
+    </tr>
+    <tr>
+        <th>
+            <code>call</code>
+            <span class="math">f</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </th>
+        <td>直接関数呼出し</td>
+    </tr>
+    <tr>
+        <th>
+            <code>call_indirect</code>
+            <span class="math">x</span>
+            <code>(</code><span class="math">y</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">y</span><sub>n</sub><code>)</code>
+        </th>
+        <td>間接関数呼出し</td>
+    </tr>
+    <tr>
+        <th>
+            <code>runtime_call</code>
+            <span class="math">f</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </th>
+        <td>ランタイム関数呼出し</td>
+    </tr>
+    <tr class="advanced">
+        <th>
+            <code>raise</code>
+            <span class="math">x</span>
+        </th>
+        <td>発展　例外の送出</td>
+    </tr>
+</table>
+
+<h2>低水準演算</h2>
+
+<table>
+    <tr>
+        <th>分類</th>
+        <td>主な演算</td>
+    </tr>
+    <tr>
+        <th>整数演算</th>
+        <td>加算、減算、乗算、除算、剰余</td>
+    </tr>
+    <tr>
+        <th>ビット演算</th>
+        <td>論理積、論理和、排他的論理和、ビット反転、シフト</td>
+    </tr>
+    <tr>
+        <th>比較</th>
+        <td>等価比較、大小比較</td>
+    </tr>
+    <tr>
+        <th>アドレス演算</th>
+        <td>ワード単位のアドレス加算</td>
+    </tr>
+    <tr>
+        <th>値表現</th>
+        <td>タグ付け、タグ解除、ヘッダの作成、サイズとタグの取得</td>
+    </tr>
+</table>
+
+<h2>低水準化の結果</h2>
+
+<ul>
+    <li>組、レコード、ヴァリアント、リスト、参照がヒープブロックへ変換される</li>
+    <li>クロージャがコードアドレスと自由変数を持つブロックへ変換される</li>
+    <li>フィールド操作がメモリのロードとストアへ変換される</li>
+    <li>整数などの実行時表現が具体化される</li>
+    <li>文字列、浮動小数点数、構造的比較などがランタイム関数呼出しになる</li>
+    <li>関数呼出しが直接呼出しまたは間接呼出しとして明示される</li>
+    <li>静的な文字列、浮動小数点数、定数ブロックが静的データとして分離される</li>
+</ul>
+
+<p>
+    次の仮想レジスタ中間表現への変換では、
+    低水準演算を仮想命令セットの命令へ変換し、
+    条件分岐と関数呼出しを基本ブロックとして配置します。
+</p>
+</body>
+</html>

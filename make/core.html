@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>コア中間表現</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="site-header">
+        <button class="theme-toggle" type="button"></button>
+    </div>
+    <h1>コア中間表現</h1>
+
+<p>
+    型検査が完了した抽象構文木から、後の変換で扱いやすい
+    コア中間表現を生成します。
+</p>
+
+<ul>
+    <li>型付きAST<br>↓ 脱糖</li>
+    <li>コアAST<br>↓ パターンマッチコンパイル</li>
+    <li>コア中間表現</li>
+</ul>
+
+<h2>コア中間表現までに行う処理</h2>
+
+<table>
+    <tr>
+        <th>脱糖</th>
+        <td>派生構文を少数の基本構文へ変換する</td>
+    </tr>
+    <tr>
+        <th>パターンマッチコンパイル</th>
+        <td>パターンを条件分岐、タグ検査、フィールドの読み出しへ変換する</td>
+    </tr>
+    <tr>
+        <th>モジュールの展開</th>
+        <td>モジュール内の名前を解決し、実行時に必要な値だけを残す</td>
+    </tr>
+    <tr>
+        <th>プリミティブ演算の明示</th>
+        <td>既知の演算を通常の関数適用からプリミティブ演算へ変換する</td>
+    </tr>
+</table>
+
+<h2>脱糖</h2>
+
+<p>
+    脱糖では、同じ意味を持つ複数の具体構文を、
+    より少数の基本構文へ統一します。
+</p>
+
+<table>
+    <tr>
+        <th>具体構文</th>
+        <td>脱糖後</td>
+    </tr>
+    <tr>
+        <th>
+            <code>let f x y = e1 in e2</code>
+        </th>
+        <td>
+            <code>let f = fun x -&gt; fun y -&gt; e1 in e2</code>
+        </td>
+    </tr>
+    <tr>
+        <th>
+            <code>e1 &amp;&amp; e2</code>
+        </th>
+        <td>
+            <code>if e1 then e2 else false</code>
+        </td>
+    </tr>
+    <tr>
+        <th>
+            <code>e1 || e2</code>
+        </th>
+        <td>
+            <code>if e1 then true else e2</code>
+        </td>
+    </tr>
+    <tr>
+        <th>
+            <code>e1; e2</code>
+        </th>
+        <td>
+            <code>let _ = e1 in e2</code>
+        </td>
+    </tr>
+    <tr>
+        <th>
+            <code>[e1; e2; ...; en]</code>
+        </th>
+        <td>
+            <code>e1 :: e2 :: ... :: en :: []</code>
+        </td>
+    </tr>
+    <tr>
+        <th>
+            <code>ref e</code>
+        </th>
+        <td>
+            1フィールドの可変ブロックの作成
+        </td>
+    </tr>
+    <tr>
+        <th>
+            <code>!e</code>
+        </th>
+        <td>
+            可変ブロックのフィールドの読み出し
+        </td>
+    </tr>
+    <tr>
+        <th>
+            <code>e1 := e2</code>
+        </th>
+        <td>
+            可変ブロックのフィールドへの書き込み
+        </td>
+    </tr>
+</table>
+<h2>コア中間表現</h2>
+
+<table>
+    <tr>
+        <th><span class="math">e</span> ::=</th>
+        <td>式</td>
+    </tr>
+    <tr>
+        <th><span class="math">c</span></th>
+        <td>定数</td>
+    </tr>
+    <tr>
+        <th><span class="math">x</span></th>
+        <td>変数</td>
+    </tr>
+    <tr>
+        <th>
+            <span class="math">op</span>(<span class="math">e</span><sub>1</sub>, ...,
+            <span class="math">e</span><sub>n</sub>)
+        </th>
+        <td>プリミティブ演算</td>
+    </tr>
+    <tr>
+        <th>
+            <code>if</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>then</code>
+            <span class="math">e</span><sub>2</sub>
+            <code>else</code>
+            <span class="math">e</span><sub>3</sub>
+        </th>
+        <td>条件分岐</td>
+    </tr>
+    <tr>
+        <th>
+            <code>let</code>
+            <span class="math">x</span>
+            <code>=</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>in</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>局所定義</td>
+    </tr>
+    <tr>
+        <th>
+            <code>let rec</code>
+            <span class="math">f</span><sub>1</sub>
+            <span class="math">x</span><sub>11</sub> ...
+            <span class="math">x</span><sub>1m₁</sub>
+            <code>=</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>and</code> ...
+            <code>and</code>
+            <span class="math">f</span><sub>n</sub>
+            <span class="math">x</span><sub>n1</sub> ...
+            <span class="math">x</span><sub>nmₙ</sub>
+            <code>=</code>
+            <span class="math">e</span><sub>n</sub>
+            <code>in</code>
+            <span class="math">e</span>
+        </th>
+        <td>再帰関数定義</td>
+    </tr>
+    <tr>
+        <th>
+            <code>fun</code>
+            <span class="math">x</span><sub>1</sub> ...
+            <span class="math">x</span><sub>n</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span>
+        </th>
+        <td>関数</td>
+    </tr>
+    <tr>
+        <th>
+            <span class="math">e e</span><sub>1</sub> ...
+            <span class="math">e</span><sub>n</sub>
+        </th>
+        <td>関数適用</td>
+    </tr>
+    <tr>
+        <th>
+            <code>(</code><span class="math">e</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">e</span><sub>n</sub><code>)</code>
+        </th>
+        <td>組の作成</td>
+    </tr>
+    <tr>
+        <th>
+            <code>block</code>
+            <span class="math">k</span>
+            <code>(</code><span class="math">e</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">e</span><sub>n</sub><code>)</code>
+        </th>
+        <td>タグ<span class="math">k</span>を持つブロックの作成</td>
+    </tr>
+    <tr>
+        <th>
+            <code>field</code>
+            <span class="math">i</span>
+            <span class="math">e</span>
+        </th>
+        <td>ブロックのフィールドの読み出し</td>
+    </tr>
+    <tr>
+        <th>
+            <code>setfield</code>
+            <span class="math">i</span>
+            <span class="math">e</span><sub>1</sub>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>ブロックのフィールドへの書き込み</td>
+    </tr>
+    <tr>
+        <th>
+            <code>tag</code>
+            <span class="math">e</span>
+        </th>
+        <td>ブロックのタグの読み出し</td>
+    </tr>
+    <tr>
+        <th>
+            <code>switch</code>
+            <span class="math">e</span>
+            <code>with</code>
+            <span class="math">k</span><sub>1</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>|</code> ...
+            <code>|</code>
+            <span class="math">k</span><sub>n</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>n</sub>
+        </th>
+        <td>タグによる分岐</td>
+    </tr>
+    <tr class="advanced">
+        <th>
+            <code>raise</code>
+            <span class="math">e</span>
+        </th>
+        <td>発展　例外の送出</td>
+    </tr>
+    <tr class="advanced">
+        <th>
+            <code>try</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>with</code>
+            <span class="math">x</span>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>発展　例外処理</td>
+    </tr>
+    <tr class="advanced">
+        <th>
+            <code>perform</code>
+            <span class="math">e</span>
+        </th>
+        <td>発展　エフェクトの実行</td>
+    </tr>
+</table>
+
+<p>
+    コア中間表現では、リスト、レコード、ヴァリアント、参照などを、
+    タグ付きブロックの作成とフィールド操作として統一して表します。
+    複雑なパターンは残らず、条件分岐、タグ分岐、フィールド読み出しへ変換されています。
+</p>
+</body>
+</html>

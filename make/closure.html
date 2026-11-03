@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>クロージャ中間表現</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="site-header">
+        <button class="theme-toggle" type="button"></button>
+    </div>
+    <h1>クロージャ中間表現</h1>
+
+<p>
+    K正規形に自由変数解析とクロージャ変換を行い、
+    関数と、その関数が参照する外側の変数を明示します。
+</p>
+
+<ul>
+    <li>K正規形<br>↓ 自由変数解析・クロージャ変換</li>
+    <li>クロージャ中間表現</li>
+</ul>
+
+<h2>トップレベル関数定義</h2>
+
+<p>
+    クロージャ変換後は、関数本体を式の内部に残さず、
+    トップレベル関数定義としてまとめます。
+</p>
+
+<table>
+    <tr>
+        <th>
+            <span class="math">F</span> ::=
+        </th>
+        <td>トップレベル関数定義</td>
+    </tr>
+    <tr>
+        <th>
+            <code>function</code>
+            <span class="math">f</span>
+            <code>(</code>
+            <span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code>
+            <span class="math">x</span><sub>n</sub>
+            <code>;</code>
+            <span class="math">z</span><sub>1</sub><code>,</code> ...
+            <code>,</code>
+            <span class="math">z</span><sub>m</sub>
+            <code>) =</code>
+            <span class="math">e</span>
+        </th>
+        <td>引数と自由変数を持つ関数定義</td>
+    </tr>
+</table>
+
+<p>
+    <span class="math">x</span><sub>1</sub>から
+    <span class="math">x</span><sub>n</sub>は通常の引数、
+    <span class="math">z</span><sub>1</sub>から
+    <span class="math">z</span><sub>m</sub>は自由変数です。
+</p>
+
+<h2>クロージャ中間表現のプログラム</h2>
+
+<table>
+    <tr>
+        <th><span class="math">P</span> ::=</th>
+        <td>プログラム</td>
+    </tr>
+    <tr>
+        <th>
+            <span class="math">F</span><sub>1</sub> ...
+            <span class="math">F</span><sub>n</sub><code>;</code>
+            <span class="math">e</span>
+        </th>
+        <td>トップレベル関数定義とメイン式</td>
+    </tr>
+</table>
+
+<h2>クロージャ中間表現の式</h2>
+
+<table>
+    <tr>
+        <th><span class="math">e</span> ::=</th>
+        <td>クロージャ中間表現の式</td>
+    </tr>
+    <tr>
+        <th><span class="math">c</span></th>
+        <td>定数</td>
+    </tr>
+    <tr>
+        <th><span class="math">x</span></th>
+        <td>変数</td>
+    </tr>
+    <tr>
+        <th>
+            <span class="math">op</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </th>
+        <td>プリミティブ演算</td>
+    </tr>
+    <tr>
+        <th>
+            <code>if</code>
+            <span class="math">x</span>
+            <code>then</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>else</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>条件分岐</td>
+    </tr>
+    <tr>
+        <th>
+            <code>let</code>
+            <span class="math">x</span>
+            <code>=</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>in</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>局所定義</td>
+    </tr>
+    <tr>
+        <th>
+            <code>make_closure</code>
+            <span class="math">f</span>
+            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
+            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
+        </th>
+        <td>クロージャの作成</td>
+    </tr>
+    <tr>
+        <th>
+            <code>apply_direct</code>
+            <span class="math">f</span>
+            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
+            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
+        </th>
+        <td>関数の直接呼出し</td>
+    </tr>
+    <tr>
+        <th>
+            <code>apply_closure</code>
+            <span class="math">f</span>
+            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
+            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
+        </th>
+        <td>クロージャを経由した関数呼出し</td>
+    </tr>
+    <tr>
+        <th>
+            <code>block</code>
+            <span class="math">k</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </th>
+        <td>ブロックの作成</td>
+    </tr>
+    <tr>
+        <th>
+            <code>field</code>
+            <span class="math">i x</span>
+        </th>
+        <td>ブロックのフィールドの読み出し</td>
+    </tr>
+    <tr>
+        <th>
+            <code>setfield</code>
+            <span class="math">i x y</span>
+        </th>
+        <td>ブロックのフィールドへの書き込み</td>
+    </tr>
+    <tr>
+        <th>
+            <code>tag</code>
+            <span class="math">x</span>
+        </th>
+        <td>ブロックのタグの読み出し</td>
+    </tr>
+    <tr>
+        <th>
+            <code>switch</code>
+            <span class="math">x</span>
+            <code>with</code>
+            <span class="math">k</span><sub>1</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>|</code> ...
+            <code>|</code>
+            <span class="math">k</span><sub>n</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>n</sub>
+        </th>
+        <td>タグによる分岐</td>
+    </tr>
+    <tr class="advanced">
+        <th>
+            <code>raise</code>
+            <span class="math">x</span>
+        </th>
+        <td>発展　例外の送出</td>
+    </tr>
+    <tr class="advanced">
+        <th>
+            <code>try</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>with</code>
+            <span class="math">x</span>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>発展　例外処理</td>
+    </tr>
+    <tr class="advanced">
+        <th>
+            <code>perform</code>
+            <span class="math">x</span>
+        </th>
+        <td>発展　エフェクトの実行</td>
+    </tr>
+</table>
+
+<h2>クロージャ変換の規則</h2>
+
+<p>
+    <span class="math">C</span>[<span class="math">e</span>]は、
+    K正規形の式<span class="math">e</span>をクロージャ変換した結果を表します。
+</p>
+
+<p>
+    クロージャ変換では、関数本体をトップレベル関数定義へ移動します。
+    関数が外側の変数を参照する場合は、その自由変数をクロージャへ保存します。
+</p>
+
+<table>
+    <tr>
+        <th>K正規形</th>
+        <td>クロージャ中間表現</td>
+    </tr>
+
+    <tr>
+        <th><span class="math">c</span></th>
+        <td><span class="math">c</span></td>
+    </tr>
+
+    <tr>
+        <th><span class="math">x</span></th>
+        <td><span class="math">x</span></td>
+    </tr>
+
+    <tr>
+        <th>
+            <span class="math">op</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </th>
+        <td>
+            <span class="math">op</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>if</code>
+            <span class="math">x</span>
+            <code>then</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>else</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>
+            <code>if</code>
+            <span class="math">x</span>
+            <code>then</code>
+            <span class="math">C</span>[<span class="math">e</span><sub>1</sub>]
+            <code>else</code>
+            <span class="math">C</span>[<span class="math">e</span><sub>2</sub>]
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>let</code>
+            <span class="math">x</span>
+            <code>=</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>in</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>
+            <code>let</code>
+            <span class="math">x</span>
+            <code>=</code>
+            <span class="math">C</span>[<span class="math">e</span><sub>1</sub>]
+            <code>in</code>
+            <span class="math">C</span>[<span class="math">e</span><sub>2</sub>]
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>fun</code>
+            <span class="math">x</span><sub>1</sub> ...
+            <span class="math">x</span><sub>n</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span>
+        </th>
+        <td>
+            新しい関数ラベル<span class="math">f</span>を生成し、<br>
+            <code>function</code>
+            <span class="math">f</span>
+            <code>(closure,</code>
+            <span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>) =</code>
+            <span class="math">C</span>[<span class="math">e</span>]
+            をトップレベルへ追加し、<br>
+            <code>make_closure</code>
+            <span class="math">f</span>
+            <code>[</code>
+            <span class="math">z</span><sub>1</sub><code>;</code> ...
+            <code>;</code>
+            <span class="math">z</span><sub>m</sub>
+            <code>]</code>
+            を生成する
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <span class="math">f x</span><sub>1</sub> ...
+            <span class="math">x</span><sub>n</sub>
+        </th>
+        <td>
+            <code>apply_direct</code>
+            <span class="math">f</span>
+            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
+            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
+            <br>
+            <small>
+                呼出し先がトップレベル関数<span class="math">f</span>だと
+                コンパイル時に確定している場合
+            </small>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <span class="math">f x</span><sub>1</sub> ...
+            <span class="math">x</span><sub>n</sub>
+        </th>
+        <td>
+            <code>apply_closure</code>
+            <span class="math">f</span>
+            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
+            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
+            <br>
+            <small>
+                呼出し先が実行時に決まる場合
+            </small>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </th>
+        <td>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>block</code>
+            <span class="math">k</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </th>
+        <td>
+            <code>block</code>
+            <span class="math">k</span>
+            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
+            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>field</code>
+            <span class="math">i x</span>
+        </th>
+        <td>
+            <code>field</code>
+            <span class="math">i x</span>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>setfield</code>
+            <span class="math">i x y</span>
+        </th>
+        <td>
+            <code>setfield</code>
+            <span class="math">i x y</span>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>tag</code>
+            <span class="math">x</span>
+        </th>
+        <td>
+            <code>tag</code>
+            <span class="math">x</span>
+        </td>
+    </tr>
+
+    <tr>
+        <th>
+            <code>switch</code>
+            <span class="math">x</span>
+            <code>with</code>
+            <span class="math">k</span><sub>1</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>|</code> ...
+            <code>|</code>
+            <span class="math">k</span><sub>n</sub>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>n</sub>
+        </th>
+        <td>
+            <code>switch</code>
+            <span class="math">x</span>
+            <code>with</code>
+            <span class="math">k</span><sub>1</sub>
+            <code>-&gt;</code>
+            <span class="math">C</span>[<span class="math">e</span><sub>1</sub>]
+            <code>|</code> ...<br>
+            <code>|</code>
+            <span class="math">k</span><sub>n</sub>
+            <code>-&gt;</code>
+            <span class="math">C</span>[<span class="math">e</span><sub>n</sub>]
+        </td>
+    </tr>
+
+    <tr class="advanced">
+        <th>
+            <code>raise</code>
+            <span class="math">x</span>
+        </th>
+        <td>
+            <code>raise</code>
+            <span class="math">x</span>
+        </td>
+    </tr>
+
+    <tr class="advanced">
+        <th>
+            <code>try</code>
+            <span class="math">e</span><sub>1</sub>
+            <code>with</code>
+            <span class="math">x</span>
+            <code>-&gt;</code>
+            <span class="math">e</span><sub>2</sub>
+        </th>
+        <td>
+            <code>try</code>
+            <span class="math">C</span>[<span class="math">e</span><sub>1</sub>]
+            <code>with</code>
+            <span class="math">x</span>
+            <code>-&gt;</code>
+            <span class="math">C</span>[<span class="math">e</span><sub>2</sub>]
+        </td>
+    </tr>
+
+    <tr class="advanced">
+        <th>
+            <code>perform</code>
+            <span class="math">x</span>
+        </th>
+        <td>
+            <code>perform</code>
+            <span class="math">x</span>
+        </td>
+    </tr>
+</table>
+
+<h3>無名関数の変換</h3>
+
+<p>
+    無名関数の自由変数を
+    <span class="math">z</span><sub>1</sub>、...、
+    <span class="math">z</span><sub>m</sub>とします。
+</p>
+
+<pre><code>fun x1 ... xn -&gt; e</code></pre>
+
+<p>次のトップレベル関数定義を生成します。</p>
+
+<pre><code>function f(closure, x1, ..., xn):
+    let z1 = field 1 closure in
+    ...
+    let zm = field m closure in
+    C[e]</code></pre>
+
+<p>元の位置にはクロージャ生成を置きます。</p>
+
+<pre><code>make_closure f [z1; ...; zm]</code></pre>
+
+<h3>再帰関数定義の変換</h3>
+
+<p>
+    各再帰関数の本体をトップレベル関数定義へ移動します。
+    関数本体から、その関数の名前と仮引数を除いた自由変数を求めます。
+</p>
+
+<pre><code>let rec f x1 ... xn = e1 in e2</code></pre>
+
+<p>
+    自由変数が
+    <span class="math">z</span><sub>1</sub>、...、
+    <span class="math">z</span><sub>m</sub>の場合、概念的に次へ変換します。
+</p>
+
+<pre><code>function f_code(closure, x1, ..., xn):
+    let z1 = field 1 closure in
+    ...
+    let zm = field m closure in
+    C[e1]
+
+let f = make_closure f_code [z1; ...; zm] in
+C[e2]</code></pre>
+
+<h3>既知関数としての変換</h3>
+
+<p>
+    関数本体が仮引数と再帰関数名だけを使用し、
+    外側の自由変数を持たない場合は、クロージャを作成せずに直接呼び出せます。
+</p>
+
+<pre><code>let rec add x y = x + y in
+add a b</code></pre>
+
+<p>概念的に次へ変換します。</p>
+
+<pre><code>function add(x, y):
+    x + y
+
+apply_direct add [a; b]</code></pre>
+
+<h3>関数値として使用される既知関数</h3>
+
+<p>
+    自由変数を持たない関数でも、その関数自体を値として使用する場合は、
+    コードアドレスだけを持つクロージャを作成します。
+</p>
+
+<pre><code>let rec add x y = x + y in
+add</code></pre>
+
+<p>概念的に次へ変換します。</p>
+
+<pre><code>make_closure add []</code></pre>
+
+<h3>相互再帰関数の変換</h3>
+
+<p>
+    相互再帰する関数群は、一つの集合として自由変数を解析します。
+</p>
+
+<pre><code>let rec even n =
+    if n = 0 then true else odd (n - 1)
+and odd n =
+    if n = 0 then false else even (n - 1)
+in
+even x</code></pre>
+
+<p>
+    <code>even</code>と<code>odd</code>が外側の自由変数を持たない場合は、
+    両方をトップレベル関数として直接呼び出せます。
+</p>
+
+<pre><code>function even(n):
+    ...
+    apply_direct odd [n1]
+
+function odd(n):
+    ...
+    apply_direct even [n1]
+
+apply_direct even [x]</code></pre>
+
+<p>
+    外側の自由変数を持つ場合は、その自由変数を保持するクロージャを作成します。
+    相互再帰する各関数が互いを値として必要とする場合は、
+    関数群を同時に初期化できるクロージャ集合として扱います。
+</p>
+
+<h3>直接呼出しの判定</h3>
+
+<p>
+    次の条件を満たす呼出しは、<code>apply_direct</code>へ変換できます。
+</p>
+
+<ul>
+    <li>呼出し先の関数定義がコンパイル時に判明している</li>
+    <li>呼出し先に必要な環境をコンパイラが渡せる</li>
+    <li>呼出し先の関数値が別の値へ置き換えられる可能性がない</li>
+</ul>
+
+<p>
+    それ以外の呼出しは、<code>apply_closure</code>へ変換します。
+</p>
+<h2>自由変数</h2>
+
+<p>
+    関数の本体で使用される変数のうち、
+    その関数の引数でも、その関数内で定義された変数でもないものを自由変数と呼びます。
+</p>
+
+<pre><code>let make_adder x =
+    fun y -&gt; x + y</code></pre>
+
+<p>
+    内側の関数では、<code>y</code>は引数ですが、
+    <code>x</code>は外側の関数で定義された自由変数です。
+</p>
+
+<h2>クロージャ変換</h2>
+
+<p>
+    自由変数を持つ関数を、トップレベルの関数定義とクロージャの作成に分離します。
+</p>
+
+<pre><code>let make_adder x =
+    fun y -&gt; x + y</code></pre>
+
+<p>上の関数を、次のように変換します。</p>
+
+<pre><code>function add_code(closure, y):
+    x = get_free_variable closure 0
+    x + y
+
+function make_adder(x):
+    make_closure add_code [x]</code></pre>
+
+<p>
+    クロージャには、関数本体のコード位置と自由変数を格納します。
+</p>
+
+<pre><code>closure:
+    code = add_code
+    free_variables = [x]</code></pre>
+
+<h2>直接呼出しとクロージャ呼出し</h2>
+
+<p>
+    呼出し先の関数がコンパイル時に分かる場合は、関数を直接呼び出します。
+</p>
+
+<pre><code>let add x y = x + y in
+add 1 2</code></pre>
+
+<p>上の関数適用は、次のようになります。</p>
+
+<pre><code>apply_direct add [1; 2]</code></pre>
+
+<p>
+    呼出し先が実行時に決まる場合は、クロージャを経由して呼び出します。
+</p>
+
+<pre><code>let apply f x = f x</code></pre>
+
+<p>上の関数適用は、次のようになります。</p>
+
+<pre><code>apply_closure f [x]</code></pre>
+
+
+
+<h2>クロージャ変換の結果</h2>
+
+<p>
+    クロージャ変換が終わると、局所的な関数定義と無名関数は残りません。
+    すべての関数本体はトップレベル関数定義へ移動します。
+</p>
+
+<ul>
+    <li>自由変数を持たない既知の関数は直接呼び出す</li>
+    <li>自由変数を持つ関数はクロージャとして作成する</li>
+    <li>呼出し先が既知なら<code>apply_direct</code>を使用する</li>
+    <li>呼出し先が実行時に決まるなら<code>apply_closure</code>を使用する</li>
+    <li>クロージャへ格納する自由変数は明示的なリストになる</li>
+</ul>
+
+<p>
+    次のデータ表現の具体化では、
+    <code>make_closure</code>をヒープ確保とフィールド書き込みへ変換し、
+    <code>apply_closure</code>をコードアドレスの読み出しと間接呼出しへ変換します。
+</p>
+</body>
+</html>
