@@ -9,7 +9,7 @@
 
 <h1>4-2. 字句解析器および構文解析器の自作</h1>
 
-<p>文字列から抽象構文木（AST）を生成する関数 <code>parse</code> があれば、わざわざ <code>If (Eq(IntLit 2, IntLit 1), ...)</code> のように複雑な <code>exp</code> 型のデータを手で書く必要がなくなり、大変便利である。これまでは <code>ocamllex</code> や <code>ocamlyacc</code> などの専用ツールを利用してこれを実現することを前提としてきたが、プログラミング言語の処理系の全容を真に理解するためには、これらを自作することが有効である。
+<p>文字列から抽象構文木（AST）を生成する関数 <code>parse</code> があれば、わざわざ <code>If (Eq(IntLit 2, IntLit 1), ...)</code> のように複雑な <code>exp</code> 型のデータを手で書く必要がなくなり、大変便利である。これまでは <code>ocamllex</code> や <code>ocamlyacc</code> などの専用ツールを利用してこれを実現することを前提としてきたが、プログラミング言語の処理系の全容を真に理解するためには、これらを自作することが有効である。特に、今回は<a href = "https://people.cs.nott.ac.uk/pszgmh/monparsing.pdf">Monadic Parsing in Functional Languages</a>という論文を参考にすることにする。
 </p>
 <p>
 構文解析器をゼロから自作すると聞くと、複雑で難解なプログラムになると思うかもしれない。しかし、OCamlのような関数型言語の仕組みをうまく活用すれば、美しく、簡潔で、わかりやすいプログラムとして実装することができる。</p>
