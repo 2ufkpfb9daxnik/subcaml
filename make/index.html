@@ -12,38 +12,16 @@
         <button class="theme-toggle" type="button"></button>
     </div>
     <h1>OCamlと言語処理系入門</h1>
-    <p>インクリメンタルな形で、OCamlのサブセット言語の処理系を作ることで、OCamlに入門しましょう。<a href = "https://www.logic.cs.tsukuba.ac.jp/jikken/">筑波大学 情報科学類 3年次実験（ソフトウェアサイエンス実験）のホームページ</a>を非常に参考にしていますが、OCamlの入門の部分をもう少し丁寧に（ページで解説）したり、ちゃんとはじめからパーサ自作の話をしたり、低レイヤもはじめから触れるようにしていくつもりです。最終的にセルフホストを目的とします。また、<a href = "https://www.sigbus.info/compilerbook">低レイヤを知りたい人のためのCコンパイラ作成入門</a>も参考にしています。</p>
-    <p>それぞれの言語で、（あるなら）次の要素を更新することでインクリメンタルに作ります。</p>
+    <p>インクリメンタルな形で、OCamlのサブセット言語subcamlの処理系を作ることで、OCamlに入門しましょう。セルフホストを目的とします。</p>
+    <p><a href = "spec.html">subcaml言語仕様</a></p>
+    <p>参考資料</p>
     <ul>
-        <li>言語機能</li>
-        <li>具体構文</li>
-        <li>字句解析</li>
-        <li>構文解析</li>
-        <li>抽象構文木</li>
-        <li>型推論</li>
+        <li><a href = "https://esumii.github.io/min-caml/">MinCaml</a></li>
+        <li><a href = "https://kuis-isle3sw.github.io/IoPLMaterials/">京都大学工学部専門科目「プログラミング言語処理系」講義資料</a></li>
+        <li><a href = "https://www.logic.cs.tsukuba.ac.jp/jikken/">筑波大学 情報科学類 3年次実験（ソフトウェアサイエンス実験）</a></li>
+        <li><a href = "https://www.sigbus.info/compilerbook">低レイヤを知りたい人のためのCコンパイラ作成入門</a></li>
+    </ul>
 
-        <li>脱糖後AST</li>
-        <li>K正規形</li>
-        <li>クロージャ変換後IR</li>
-        <li>仮想レジスタIR</li>
-
-        <li>制御フロー解析</li>
-        <li>生存変数解析</li>
-        <li>レジスタ割当て</li>
-        <li>スタックフレーム配置</li>
-
-        <li>仮想命令セット</li>
-        <li>アセンブラ</li>
-        <li>バイトコード形式</li>
-        <li>仮想CPU</li>
-
-        <li>値表現</li>
-        <li>呼出し規約</li>
-        <li>ランタイム</li>
-        <li>メモリ管理</li>
-        <li>分割コンパイルとリンク</li>
-        <li>テスト</li>
-        </ul>
     <a href = "faq.html">質問解答</a>
     <a href = "ocaml_on_windows.html">OCamlをWindowsで使う</a>
     <h2>目次</h2>
@@ -75,5 +53,35 @@
         <li><a href = "signature.html">シグネチャ、抽象型とモジュール型</a></li>
         <li><a href = "functor.html">ファンクタ</a></li>
     </ol>
+
+    <h2>更新内容</h2>
+        <p>それぞれの言語で、（あるなら）次の要素を更新することでインクリメンタルに作ります。</p>
+    <ul>
+        <li>ソースコード<br>↓ 字句解析</li>
+        <li>トークン列<br>↓ 構文解析</li>
+        <li>抽象構文木<br>↓ 名前解決</li>
+        <li>名前解決済みAST<br>↓ 型推論</li>
+        <li>型付きAST<br>↓ 脱糖</li>
+        <li>コアAST<br>↓ パターンマッチコンパイル</li>
+        <li>単純化済みコア中間表現<br>↓ K正規化</li>
+        <li>K正規形中間表現<br>↓ クロージャ変換</li>
+        <li>クロージャ中間表現<br>↓ データ表現の具体化</li>
+        <li>低水準中間表現<br>↓ 命令選択・基本ブロック化</li>
+        <li>仮想レジスタ中間表現<br>↓ 生存変数解析・レジスタ割当て・spill</li>
+        <li>物理レジスタ中間表現<br>↓ スタックフレーム配置・線形化</li>
+        <li>アセンブリ<br>↓ アセンブル</li>
+        <li>実行可能命令列<br>↓ 仮想CPUによる実行</li>
+        <li>実行結果</li>
+    </ul>
+
+    <ul>
+        <li>仮想命令セット</li>
+        <li>値表現</li>
+        <li>呼出し規約</li>
+        <li>ランタイム</li>
+        <li>メモリ管理</li>
+        <li>分割コンパイルとリンク</li>
+        <li>テスト</li>
+    </ul>
 </body>
 </html>

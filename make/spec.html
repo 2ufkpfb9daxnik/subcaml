@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>subcaml言語仕様</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="site-header">
+        <button class="theme-toggle" type="button"></button>
+    </div>
+    <h1>subcaml言語仕様</h1>
+    <h2>定数</h2>
+    <table>
+        <tr>
+            <th><span class="math">c</span> ::=</th>
+            <td>定数</td>
+        </tr>
+        <tr>
+            <th><span class="math">n</span></th>
+            <td>整数</td>
+        </tr>
+        <tr>
+            <th><span class="math">r</span></th>
+            <td>浮動小数点数</td>
+        </tr>
+        <tr>
+            <th><code>true</code> | <code>false</code></th>
+            <td>真偽値</td>
+        </tr>
+        <tr>
+            <th><span class="math">ch</span></th>
+            <td>文字</td>
+        </tr>
+        <tr>
+            <th><span class="math">s</span></th>
+            <td>文字列</td>
+        </tr>
+        <tr>
+            <th><code>()</code></th>
+            <td>単位値</td>
+        </tr>
+    </table>
+    <h2>式</h2>
+    <table>
+        <tr>
+            <th><span class="math">e</span> ::=</th>
+            <td>式</td>
+        </tr>
+        <tr>
+            <th><span class="math">c</span></th>
+            <td>定数</td>
+        </tr>
+        <tr>
+            <th><span class="math">x</span></th>
+            <td>変数</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">op</span>(<span class="math">e</span><sub>1</sub>, ...,
+                <span class="math">e</span><sub>n</sub>)
+            </th>
+            <td>プリミティブ演算</td>
+        </tr>
+        <tr>
+            <th>
+                <code>if</code> <span class="math">e</span><sub>1</sub>
+                <code>then</code> <span class="math">e</span><sub>2</sub>
+                <code>else</code> <span class="math">e</span><sub>3</sub>
+            </th>
+            <td>条件式</td>
+        </tr>
+        <tr>
+            <th>
+                <code>let</code> <span class="math">p</span>
+                <code>=</code> <span class="math">e</span><sub>1</sub>
+                <code>in</code> <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>局所定義</td>
+        </tr>
+        <tr>
+            <th>
+                <code>let</code>
+                <span class="math">f p</span><sub>1</sub> ...
+                <span class="math">p</span><sub>n</sub>
+                <code>=</code> <span class="math">e</span><sub>1</sub>
+                <code>in</code> <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>関数の局所定義</td>
+        </tr>
+        <tr>
+            <th>
+                <code>let rec</code> <span class="math">f p</span><sub>1</sub> ...
+                <span class="math">p</span><sub>n</sub>
+                <code>=</code> <span class="math">e</span><sub>1</sub>
+                <code>in</code> <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>再帰関数定義</td>
+        </tr>
+        <tr>
+            <th>
+                <code>let rec</code>
+                <span class="math">f</span><sub>1</sub>
+                <span class="math">p</span><sub>11</sub> ...
+                <span class="math">p</span><sub>1m₁</sub>
+                <code>=</code> <span class="math">e</span><sub>1</sub>
+                <code>and</code> ...
+                <code>and</code>
+                <span class="math">f</span><sub>n</sub>
+                <span class="math">p</span><sub>n1</sub> ...
+                <span class="math">p</span><sub>nmₙ</sub>
+                <code>=</code> <span class="math">e</span><sub>n</sub>
+                <code>in</code> <span class="math">e</span>
+            </th>
+            <td>相互再帰関数定義</td>
+        </tr>
+        <tr>
+            <th>
+                <code>fun</code> <span class="math">p</span><sub>1</sub> ...
+                <span class="math">p</span><sub>n</sub>
+                <code>-&gt;</code> <span class="math">e</span>
+            </th>
+            <td>無名関数</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e e</span><sub>1</sub> ...
+                <span class="math">e</span><sub>n</sub>
+            </th>
+            <td>関数適用</td>
+        </tr>
+        <tr>
+            <th>
+                <code>(</code><span class="math">e</span><sub>1</sub><code>,</code> ...
+                <code>,</code> <span class="math">e</span><sub>n</sub><code>)</code>
+            </th>
+            <td>組の作成</td>
+        </tr>
+        <tr>
+            <th>
+                <code>{</code>
+                <span class="math">l</span><sub>1</sub> <code>=</code>
+                <span class="math">e</span><sub>1</sub><code>;</code> ...
+                <code>;</code> <span class="math">l</span><sub>n</sub>
+                <code>=</code> <span class="math">e</span><sub>n</sub>
+                <code>}</code>
+            </th>
+            <td>レコードの作成</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><code>.</code><span class="math">l</span>
+            </th>
+            <td>レコードフィールドの読み出し</td>
+        </tr>
+        <tr>
+            <th>
+                <code>{</code>
+                <span class="math">e</span>
+                <code>with</code>
+                <span class="math">l</span><sub>1</sub>
+                <code>=</code> <span class="math">e</span><sub>1</sub><code>;</code> ...
+                <code>}</code>
+            </th>
+            <td>レコードの更新による作成</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><sub>1</sub><code>.</code>
+                <span class="math">l</span>
+                <code>&lt;-</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>可変レコードフィールドへの代入</td>
+        </tr>
+        <tr>
+            <th><span class="math">C</span></th>
+            <td>引数を持たないコンストラクタ</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">C e</span>
+            </th>
+            <td>引数を持つコンストラクタ</td>
+        </tr>
+        <tr>
+            <th>
+                <code>[</code><span class="math">e</span><sub>1</sub><code>;</code> ...
+                <code>;</code> <span class="math">e</span><sub>n</sub><code>]</code>
+            </th>
+            <td>リストの作成</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><sub>1</sub>
+                <code>::</code> <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>リストへの要素の追加</td>
+        </tr>
+        <tr>
+            <th>
+                <code>match</code> <span class="math">e</span>
+                <code>with</code>
+                <span class="math">p</span><sub>1</sub> <code>-&gt;</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>|</code> ...
+                <code>|</code> <span class="math">p</span><sub>n</sub>
+                <code>-&gt;</code> <span class="math">e</span><sub>n</sub>
+            </th>
+            <td>パターンマッチ</td>
+        </tr>
+        <tr>
+            <th>
+                <code>match</code> <span class="math">e</span>
+                <code>with</code>
+                <span class="math">p</span><sub>1</sub>
+                <code>when</code> <span class="math">e</span><sub>1</sub>
+                <code>-&gt;</code> <span class="math">e</span><sub>2</sub>
+                <code>|</code> ...
+            </th>
+            <td>ガード付きパターンマッチ</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><sub>1</sub><code>;</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>逐次実行</td>
+        </tr>
+        <tr>
+            <th>
+                <code>ref</code> <span class="math">e</span>
+            </th>
+            <td>参照の作成</td>
+        </tr>
+        <tr>
+            <th>
+                <code>!</code><span class="math">e</span>
+            </th>
+            <td>参照の読み出し</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><sub>1</sub>
+                <code>:=</code> <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>参照への代入</td>
+        </tr>
+        <tr>
+            <th>
+                <code>while</code> <span class="math">e</span><sub>1</sub>
+                <code>do</code> <span class="math">e</span><sub>2</sub>
+                <code>done</code>
+            </th>
+            <td>whileループ</td>
+        </tr>
+        <tr>
+            <th>
+                <code>for</code> <span class="math">x</span>
+                <code>=</code> <span class="math">e</span><sub>1</sub>
+                <code>to</code> <span class="math">e</span><sub>2</sub>
+                <code>do</code> <span class="math">e</span><sub>3</sub>
+                <code>done</code>
+            </th>
+            <td>昇順forループ</td>
+        </tr>
+        <tr>
+            <th>
+                <code>for</code> <span class="math">x</span>
+                <code>=</code> <span class="math">e</span><sub>1</sub>
+                <code>downto</code> <span class="math">e</span><sub>2</sub>
+                <code>do</code> <span class="math">e</span><sub>3</sub>
+                <code>done</code>
+            </th>
+            <td>降順forループ</td>
+        </tr>
+        <tr>
+            <th>
+                <code>(</code><span class="math">e</span>
+                <code>:</code> <span class="math">T</span><code>)</code>
+            </th>
+            <td>型注釈</td>
+        </tr>
+
+        <!-- 発展：配列 -->
+
+        <tr class="advanced">
+            <th>
+                <code>[|</code><span class="math">e</span><sub>1</sub><code>;</code> ...
+                <code>;</code> <span class="math">e</span><sub>n</sub><code>|]</code>
+            </th>
+            <td>セルフホスト後　配列の作成</td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>Array.make</code>
+                <span class="math">e</span><sub>1</sub>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>セルフホスト後　同じ初期値による配列の作成</td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <span class="math">e</span><sub>1</sub>
+                <code>.(</code><span class="math">e</span><sub>2</sub><code>)</code>
+            </th>
+            <td>セルフホスト後　配列要素の読み出し</td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <span class="math">e</span><sub>1</sub>
+                <code>.(</code><span class="math">e</span><sub>2</sub><code>) &lt;-</code>
+                <span class="math">e</span><sub>3</sub>
+            </th>
+            <td>セルフホスト後　配列要素への書き込み</td>
+        </tr>
+
+        <!-- 発展：例外 -->
+
+        <tr class="advanced">
+            <th>
+                <code>raise</code> <span class="math">e</span>
+            </th>
+            <td>セルフホスト後　例外の送出</td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>try</code> <span class="math">e</span>
+                <code>with</code>
+                <span class="math">p</span><sub>1</sub> <code>-&gt;</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>|</code> ...
+                <code>|</code>
+                <span class="math">p</span><sub>n</sub> <code>-&gt;</code>
+                <span class="math">e</span><sub>n</sub>
+            </th>
+            <td>セルフホスト後　例外処理</td>
+        </tr>
+
+        <!-- 発展：継続 -->
+
+        <tr class="advanced">
+            <th>
+                <code>continue</code>
+                <span class="math">e</span><sub>1</sub>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>セルフホスト後　継続の再開</td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>discontinue</code>
+                <span class="math">e</span><sub>1</sub>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>セルフホスト後　継続からの例外送出</td>
+        </tr>
+
+        <!-- 発展：エフェクトハンドラ -->
+
+        <tr class="advanced">
+            <th>
+                <code>perform</code> <span class="math">e</span>
+            </th>
+            <td>セルフホスト後　エフェクトの実行</td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>try</code> <span class="math">e</span>
+                <code>with</code>
+                <code>effect</code>
+                <span class="math">p</span><sub>1</sub><code>,</code>
+                <span class="math">k</span><sub>1</sub>
+                <code>-&gt;</code> <span class="math">e</span><sub>1</sub>
+                <code>|</code> ...
+                <code>| effect</code>
+                <span class="math">p</span><sub>n</sub><code>,</code>
+                <span class="math">k</span><sub>n</sub>
+                <code>-&gt;</code> <span class="math">e</span><sub>n</sub>
+            </th>
+            <td>セルフホスト後　エフェクトの処理</td>
+        </tr>
+
+        <!-- 発展：モジュール関連の式 -->
+        <tr class="advanced">
+            <th>
+                <code>let module</code>
+                <span class="math">M</span>
+                <code>=</code>
+                <span class="math">m</span><sub>1</sub>
+                <code>in</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>セルフホスト後　局所モジュール定義</td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>let open</code>
+                <span class="math">M</span>
+                <code>in</code>
+                <span class="math">e</span>
+            </th>
+            <td>セルフホスト後　局所的なモジュールのオープン</td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <span class="math">M</span><code>.(</code><span class="math">e</span><code>)</code>
+            </th>
+            <td>セルフホスト後　局所的なモジュールのオープン</td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>(module</code>
+                <span class="math">M</span>
+                <code>:</code>
+                <span class="math">S</span><code>)</code>
+            </th>
+            <td>セルフホスト後　第一級モジュールの作成</td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>let module</code>
+                <span class="math">M</span>
+                <code>= (val</code>
+                <span class="math">e</span>
+                <code>:</code>
+                <span class="math">S</span><code>) in</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>セルフホスト後　第一級モジュールの展開</td>
+        </tr>
+    </table>
+    <h2>パターン</h2>
+        <table>
+            <tr>
+                <th><span class="math">p</span> ::=</th>
+                <td>パターン</td>
+            </tr>
+            <tr>
+                <th><code>_</code></th>
+                <td>ワイルドカードパターン</td>
+            </tr>
+            <tr>
+                <th><span class="math">x</span></th>
+                <td>変数パターン</td>
+            </tr>
+            <tr>
+                <th><span class="math">c</span></th>
+                <td>定数パターン</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>(</code><span class="math">p</span><sub>1</sub><code>,</code> ...
+                    <code>,</code> <span class="math">p</span><sub>n</sub><code>)</code>
+                </th>
+                <td>組パターン</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>{</code>
+                    <span class="math">l</span><sub>1</sub> <code>=</code>
+                    <span class="math">p</span><sub>1</sub><code>;</code> ...
+                    <code>;</code> <span class="math">l</span><sub>n</sub>
+                    <code>=</code> <span class="math">p</span><sub>n</sub>
+                    <code>}</code>
+                </th>
+                <td>レコードパターン</td>
+            </tr>
+            <tr>
+                <th><span class="math">C</span></th>
+                <td>引数を持たないコンストラクタパターン</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">C p</span>
+                </th>
+                <td>引数を持つコンストラクタパターン</td>
+            </tr>
+            <tr>
+                <th><code>[]</code></th>
+                <td>空リストパターン</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">p</span><sub>1</sub>
+                    <code>::</code>
+                    <span class="math">p</span><sub>2</sub>
+                </th>
+                <td>リストの分解</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>[</code><span class="math">p</span><sub>1</sub><code>;</code> ...
+                    <code>;</code> <span class="math">p</span><sub>n</sub><code>]</code>
+                </th>
+                <td>リストパターン</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">p</span><sub>1</sub>
+                    <code>|</code>
+                    <span class="math">p</span><sub>2</sub>
+                </th>
+                <td>ORパターン</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">p</span>
+                    <code>as</code>
+                    <span class="math">x</span>
+                </th>
+                <td>別名パターン</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>(</code><span class="math">p</span>
+                    <code>:</code> <span class="math">T</span><code>)</code>
+                </th>
+                <td>型注釈付きパターン</td>
+            </tr>
+            <!-- 発展：例外 -->
+
+            <tr class="advanced">
+                <th>
+                    <code>exception</code>
+                    <span class="math">p</span>
+                </th>
+                <td>セルフホスト後　例外パターン</td>
+            </tr>
+
+            <!-- 発展：エフェクトハンドラ -->
+
+            <tr class="advanced">
+                <th>
+                    <code>effect</code>
+                    <span class="math">p</span><sub>1</sub><code>,</code>
+                    <span class="math">p</span><sub>2</sub>
+                </th>
+                <td>セルフホスト後　エフェクトと継続のパターン</td>
+            </tr>
+
+            <!-- 発展：第一級モジュール -->
+
+            <tr class="advanced">
+                <th>
+                    <code>(module</code>
+                    <span class="math">M</span><code>)</code>
+                </th>
+                <td>セルフホスト後　第一級モジュールの展開パターン</td>
+            </tr>
+
+            <tr class="advanced">
+                <th>
+                    <code>(module</code>
+                    <span class="math">M</span>
+                    <code>:</code>
+                    <span class="math">S</span><code>)</code>
+                </th>
+                <td>セルフホスト後　モジュール型注釈付き展開パターン</td>
+            </tr>
+        </table>
+    <h2>宣言</h2>
+        <table>
+            <tr>
+                <th><span class="math">d</span> ::=</th>
+                <td>宣言</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">p</span>
+                    <code>=</code>
+                    <span class="math">e</span>
+                </th>
+                <td>値定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">f p</span><sub>1</sub> ...
+                    <span class="math">p</span><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">e</span>
+                </th>
+                <td>非再帰関数定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let rec</code>
+                    <span class="math">f p</span><sub>1</sub> ...
+                    <span class="math">p</span><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">e</span>
+                </th>
+                <td>再帰関数定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">p</span><sub>1</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>and</code> ...
+                    <code>and</code>
+                    <span class="math">p</span><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>n</sub>
+                </th>
+                <td>複数の非再帰定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let rec</code>
+                    <span class="math">f</span><sub>1</sub>
+                    <span class="math">p</span><sub>11</sub> ...
+                    <span class="math">p</span><sub>1m₁</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>and</code> ...
+                    <code>and</code>
+                    <span class="math">f</span><sub>n</sub>
+                    <span class="math">p</span><sub>n1</sub> ...
+                    <span class="math">p</span><sub>nmₙ</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>n</sub>
+                </th>
+                <td>相互再帰関数定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">t</span>
+                    <code>=</code>
+                    <span class="math">T</span>
+                </th>
+                <td>型別名の定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">α t</span>
+                    <code>=</code>
+                    <span class="math">T</span>
+                </th>
+                <td>型引数を持つ型別名の定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">t</span>
+                    <code>= {</code>
+                    <span class="math">l</span><sub>1</sub>
+                    <code>:</code>
+                    <span class="math">T</span><sub>1</sub><code>;</code> ...
+                    <code>;</code>
+                    <span class="math">l</span><sub>n</sub>
+                    <code>:</code>
+                    <span class="math">T</span><sub>n</sub>
+                    <code>}</code>
+                </th>
+                <td>レコード型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">α t</span>
+                    <code>= {</code>
+                    <span class="math">l</span><sub>1</sub>
+                    <code>:</code>
+                    <span class="math">T</span><sub>1</sub><code>;</code> ...
+                    <code>;</code>
+                    <span class="math">l</span><sub>n</sub>
+                    <code>:</code>
+                    <span class="math">T</span><sub>n</sub>
+                    <code>}</code>
+                </th>
+                <td>型引数を持つレコード型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code> <span class="math">t</span>
+                    <code>= { mutable</code>
+                    <span class="math">l</span>
+                    <code>:</code> <span class="math">T</span>
+                    <code>; ... }</code>
+                </th>
+                <td>可変フィールドを持つレコード型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">t</span>
+                    <code>=</code>
+                    <span class="math">C</span><sub>1</sub>
+                    <code>of</code>
+                    <span class="math">T</span><sub>1</sub>
+                    <code>|</code> ...
+                    <code>|</code>
+                    <span class="math">C</span><sub>n</sub>
+                    <code>of</code>
+                    <span class="math">T</span><sub>n</sub>
+                </th>
+                <td>ヴァリアント型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">α t</span>
+                    <code>=</code>
+                    <span class="math">C</span><sub>1</sub>
+                    <code>of</code>
+                    <span class="math">T</span><sub>1</sub>
+                    <code>|</code> ...
+                    <code>|</code>
+                    <span class="math">C</span><sub>n</sub>
+                    <code>of</code>
+                    <span class="math">T</span><sub>n</sub>
+                </th>
+                <td>型引数を持つヴァリアント型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">t</span><sub>1</sub>
+                    <code>=</code>
+                    <span class="math">T</span><sub>1</sub>
+                    <code>and</code> ...
+                    <code>and</code>
+                    <span class="math">t</span><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">T</span><sub>n</sub>
+                </th>
+                <td>相互再帰型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>module</code>
+                    <span class="math">M</span>
+                    <code>= struct</code>
+                    <span class="math">d</span><sub>1</sub> ...
+                    <span class="math">d</span><sub>n</sub>
+                    <code>end</code>
+                </th>
+                <td>モジュール定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>open</code>
+                    <span class="math">M</span>
+                </th>
+                <td>モジュールを開く宣言</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>external</code>
+                    <span class="math">x</span>
+                    <code>:</code>
+                    <span class="math">T</span>
+                    <code>=</code>
+                    <span class="math">s</span>
+                </th>
+                <td>外部関数宣言</td>
+            </tr>
+            <!-- 発展：例外 -->
+
+            <tr class="advanced">
+                <th>
+                    <code>exception</code>
+                    <span class="math">C</span>
+                </th>
+                <td>セルフホスト後　引数を持たない例外の定義</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>exception</code>
+                    <span class="math">C</span>
+                    <code>of</code>
+                    <span class="math">T</span>
+                </th>
+                <td>セルフホスト後　引数を持つ例外の定義</td>
+            </tr>
+
+            <!-- 発展：エフェクトハンドラ -->
+
+            <tr class="advanced">
+                <th>
+                    <code>type _ Effect.t +=</code>
+                    <span class="math">C</span>
+                    <code>:</code>
+                    <span class="math">T</span><sub>1</sub>
+                    <code>-&gt;</code>
+                    <span class="math">T</span><sub>2</sub>
+                    <code>Effect.t</code>
+                </th>
+                <td>セルフホスト後　エフェクトの定義</td>
+            </tr>
+
+            <tr>
+                <th>
+                    <code>module</code>
+                    <span class="math">M</span>
+                    <code>=</code>
+                    <span class="math">m</span>
+                </th>
+                <td>モジュール定義</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>module type</code>
+                    <span class="math">S</span>
+                    <code>=</code>
+                    <span class="math">S</span><sub>1</sub>
+                </th>
+                <td>セルフホスト後　モジュール型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>open</code>
+                    <span class="math">M</span>
+                </th>
+                <td>モジュールを開く宣言</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>include</code>
+                    <span class="math">m</span>
+                </th>
+                <td>モジュールの内容の取り込み</td>
+            </tr>
+        </table>
+    <h2>型</h2>
+        <table>
+            <tr>
+                <th><span class="math">T</span> ::=</th>
+                <td>型</td>
+            </tr>
+            <tr>
+                <th><span class="math">π</span></th>
+                <td>プリミティブ型</td>
+            </tr>
+            <tr>
+                <th><span class="math">α</span></th>
+                <td>型変数</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">T</span><sub>1</sub>
+                    <code>-&gt;</code>
+                    <span class="math">T</span><sub>2</sub>
+                </th>
+                <td>関数型</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">T</span><sub>1</sub>
+                    <code>*</code> ...
+                    <code>*</code>
+                    <span class="math">T</span><sub>n</sub>
+                </th>
+                <td>組型</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">T</span>
+                    <code>list</code>
+                </th>
+                <td>リスト型</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">T</span>
+                    <code>ref</code>
+                </th>
+                <td>参照型</td>
+            </tr>
+            <tr>
+                <th><span class="math">t</span></th>
+                <td>ユーザー定義型</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">T t</span>
+                </th>
+                <td>型引数を持つユーザー定義型</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>(</code><span class="math">T</span><sub>1</sub><code>,</code> ...
+                    <code>,</code> <span class="math">T</span><sub>n</sub><code>)</code>
+                    <span class="math">t</span>
+                </th>
+                <td>複数の型引数を持つユーザー定義型</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">M</span><code>.</code><span class="math">t</span>
+                </th>
+                <td>モジュール内の型</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>(</code><span class="math">T</span><code>)</code>
+                </th>
+                <td>括弧で囲まれた型</td>
+            </tr>
+                        <!-- 発展：配列 -->
+
+            <tr class="advanced">
+                <th>
+                    <span class="math">T</span>
+                    <code>array</code>
+                </th>
+                <td>セルフホスト後　配列型</td>
+            </tr>
+
+            <!-- 発展：例外 -->
+
+            <tr class="advanced">
+                <th>
+                    <code>exn</code>
+                </th>
+                <td>セルフホスト後　例外型</td>
+            </tr>
+
+            <!-- 発展：継続 -->
+
+            <tr class="advanced">
+                <th>
+                    <code>(</code><span class="math">T</span><sub>1</sub><code>,</code>
+                    <span class="math">T</span><sub>2</sub><code>) Effect.Deep.continuation</code>
+                </th>
+                <td>セルフホスト後　深い継続の型</td>
+            </tr>
+
+            <tr class="advanced">
+                <th>
+                    <code>(</code><span class="math">T</span><sub>1</sub><code>,</code>
+                    <span class="math">T</span><sub>2</sub><code>) Effect.Shallow.continuation</code>
+                </th>
+                <td>セルフホスト後　浅い継続の型</td>
+            </tr>
+
+            <!-- 発展：エフェクト -->
+
+            <tr class="advanced">
+                <th>
+                    <span class="math">T</span>
+                    <code>Effect.t</code>
+                </th>
+                <td>セルフホスト後　エフェクト型</td>
+            </tr>
+
+            <!-- 発展：第一級モジュール -->
+
+            <tr class="advanced">
+                <th>
+                    <code>(module</code>
+                    <span class="math">S</span><code>)</code>
+                </th>
+                <td>セルフホスト後　第一級モジュール型</td>
+            </tr>
+        </table>
+
+        <p>プリミティブ型は次のとおりです。</p>
+
+        <table>
+            <tr>
+                <th><span class="math">π</span> ::=</th>
+                <td>プリミティブ型</td>
+            </tr>
+            <tr>
+                <th><code>int</code></th>
+                <td>整数型</td>
+            </tr>
+            <tr>
+                <th><code>bool</code></th>
+                <td>真偽値型</td>
+            </tr>
+            <tr>
+                <th><code>float</code></th>
+                <td>浮動小数点数型</td>
+            </tr>
+            <tr>
+                <th><code>char</code></th>
+                <td>文字型</td>
+            </tr>
+            <tr>
+                <th><code>string</code></th>
+                <td>文字列型</td>
+            </tr>
+            <tr>
+                <th><code>unit</code></th>
+                <td>単位型</td>
+            </tr>
+        </table>
+        
+        <h2>プリミティブ演算</h2>
+            <table>
+                <tr>
+                    <th><span class="math">op</span> ::=</th>
+                    <td>型</td>
+                </tr>
+                <tr>
+                    <th><code>~-</code></th>
+                    <td><code>int -&gt; int</code></td>
+                </tr>
+                <tr>
+                    <th><code>+</code>　<code>-</code>　<code>*</code>　<code>/</code>　<code>mod</code></th>
+                    <td><code>int -&gt; int -&gt; int</code></td>
+                </tr>
+                <tr>
+                    <th><code>~-.</code></th>
+                    <td><code>float -&gt; float</code></td>
+                </tr>
+                <tr>
+                    <th><code>+.</code>　<code>-.</code>　<code>*.</code>　<code>/.</code></th>
+                    <td><code>float -&gt; float -&gt; float</code></td>
+                </tr>
+                <tr>
+                    <th><code>=</code>　<code>&lt;&gt;</code></th>
+                    <td><code>'a -&gt; 'a -&gt; bool</code></td>
+                </tr>
+                <tr>
+                    <th><code>&lt;</code>　<code>&lt;=</code>　<code>&gt;</code>　<code>&gt;=</code></th>
+                    <td><code>'a -&gt; 'a -&gt; bool</code></td>
+                </tr>
+                <tr>
+                    <th><code>not</code></th>
+                    <td><code>bool -&gt; bool</code></td>
+                </tr>
+                <tr>
+                    <th><code>&amp;&amp;</code>　<code>||</code></th>
+                    <td><code>bool -&gt; bool -&gt; bool</code></td>
+                </tr>
+                <tr>
+                    <th><code>^</code></th>
+                    <td><code>string -&gt; string -&gt; string</code></td>
+                </tr>
+                <tr>
+                    <th><code>String.length</code></th>
+                    <td><code>string -&gt; int</code></td>
+                </tr>
+                <tr>
+                    <th><code>String.get</code></th>
+                    <td><code>string -&gt; int -&gt; char</code></td>
+                </tr>
+                <tr>
+                    <th><code>ref</code></th>
+                    <td><code>'a -&gt; 'a ref</code></td>
+                </tr>
+                <tr>
+                    <th><code>!</code></th>
+                    <td><code>'a ref -&gt; 'a</code></td>
+                </tr>
+                <tr>
+                    <th><code>:=</code></th>
+                    <td><code>'a ref -&gt; 'a -&gt; unit</code></td>
+                </tr>
+            </table>
+            <h2>演算子の優先順位</h2>
+    
+                <p>下にある演算子ほど強く結合します。</p>
+    
+                <table>
+                    <tr>
+                        <th>演算子</th>
+                        <td>結合方向</td>
+                    </tr>
+                    <tr>
+                        <th><code>;</code></th>
+                        <td>右結合</td>
+                    </tr>
+                    <tr>
+                        <th><code>:=</code></th>
+                        <td>右結合</td>
+                    </tr>
+                    <tr>
+                        <th><code>||</code></th>
+                        <td>右結合</td>
+                    </tr>
+                    <tr>
+                        <th><code>&amp;&amp;</code></th>
+                        <td>右結合</td>
+                    </tr>
+                    <tr>
+                        <th>
+                            <code>=</code> <code>&lt;&gt;</code>
+                            <code>&lt;</code> <code>&lt;=</code>
+                            <code>&gt;</code> <code>&gt;=</code>
+                        </th>
+                        <td>左結合</td>
+                    </tr>
+                    <tr>
+                        <th><code>::</code></th>
+                        <td>右結合</td>
+                    </tr>
+                    <tr>
+                        <th><code>+</code> <code>-</code> <code>+.</code> <code>-.</code></th>
+                        <td>左結合</td>
+                    </tr>
+                    <tr>
+                        <th>
+                            <code>*</code> <code>/</code> <code>mod</code>
+                            <code>*.</code> <code>/.</code>
+                        </th>
+                        <td>左結合</td>
+                    </tr>
+                    <tr>
+                        <th>関数適用</th>
+                        <td>左結合</td>
+                    </tr>
+                    <tr>
+                        <th>
+                            <code>!</code>、単項マイナス、フィールド参照
+                        </th>
+                        <td>強く結合</td>
+                    </tr>
+                </table>
+    <h2>モジュール</h2>
+        <table>
+            <tr>
+                <th><span class="math">m</span> ::=</th>
+                <td>モジュール式</td>
+            </tr>
+            <tr>
+                <th><span class="math">M</span></th>
+                <td>モジュール</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>struct</code>
+                    <span class="math">d</span><sub>1</sub> ...
+                    <span class="math">d</span><sub>n</sub>
+                    <code>end</code>
+                </th>
+                <td>ストラクチャ</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>(</code><span class="math">m</span>
+                    <code>:</code> <span class="math">S</span><code>)</code>
+                </th>
+                <td>モジュール型による制約</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>functor (</code><span class="math">X</span>
+                    <code>:</code> <span class="math">S</span><code>) -&gt;</code>
+                    <span class="math">m</span>
+                </th>
+                <td>セルフホスト後　ファンクタ</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <span class="math">m</span><sub>1</sub>
+                    <code>(</code><span class="math">m</span><sub>2</sub><code>)</code>
+                </th>
+                <td>セルフホスト後　ファンクタ適用</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>(val</code> <span class="math">e</span>
+                    <code>:</code> <span class="math">S</span><code>)</code>
+                </th>
+                <td>セルフホスト後　第一級モジュールの展開</td>
+            </tr>
+        </table>
+    <h2>モジュール型</h2>
+        <table>
+            <tr>
+                <th><span class="math">S</span> ::=</th>
+                <td>モジュール型</td>
+            </tr>
+            <tr>
+                <th><span class="math">S</span></th>
+                <td>名前付きモジュール型</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>sig</code>
+                    <span class="math">s</span><sub>1</sub> ...
+                    <span class="math">s</span><sub>n</sub>
+                    <code>end</code>
+                </th>
+                <td>シグネチャ</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>functor (</code><span class="math">X</span>
+                    <code>:</code> <span class="math">S</span><sub>1</sub><code>) -&gt;</code>
+                    <span class="math">S</span><sub>2</sub>
+                </th>
+                <td>セルフホスト後　ファンクタ型</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <span class="math">S</span>
+                    <code>with type</code>
+                    <span class="math">t</span>
+                    <code>=</code>
+                    <span class="math">T</span>
+                </th>
+                <td>セルフホスト後　型制約付きモジュール型</td>
+            </tr>
+        </table>
+    <h2>シグネチャ項目</h2>
+        <table>
+            <tr>
+                <th><span class="math">s</span> ::=</th>
+                <td>シグネチャ項目</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>val</code>
+                    <span class="math">x</span>
+                    <code>:</code>
+                    <span class="math">T</span>
+                </th>
+                <td>値の仕様</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">t</span>
+                </th>
+                <td>抽象型の仕様</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">t</span>
+                    <code>=</code>
+                    <span class="math">T</span>
+                </th>
+                <td>型の仕様</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>module</code>
+                    <span class="math">M</span>
+                    <code>:</code>
+                    <span class="math">S</span>
+                </th>
+                <td>モジュールの仕様</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>module type</code>
+                    <span class="math">S</span>
+                </th>
+                <td>セルフホスト後　抽象モジュール型の仕様</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>module type</code>
+                    <span class="math">S</span>
+                    <code>=</code>
+                    <span class="math">S</span><sub>1</sub>
+                </th>
+                <td>セルフホスト後　モジュール型の仕様</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>exception</code>
+                    <span class="math">C</span>
+                    <code>of</code>
+                    <span class="math">T</span>
+                </th>
+                <td>例外の仕様</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>include</code>
+                    <span class="math">S</span>
+                </th>
+                <td>モジュール型の内容の取り込み</td>
+            </tr>
+        </table>
+
+
+        <h2>主な仕様と制限</h2>
+
+        <h3>カリー化と部分適用</h3>
+
+        <p>
+            関数はカリー化されます。複数の引数を受け取る関数は、
+            一つの引数を受け取って関数を返す関数として扱われます。
+        </p>
+
+        <pre><code>let add x y = x + y
+        let add3 = add 3
+        let result = add3 5</code></pre>
+
+        <p>
+            関数に一部の引数だけを与える部分適用も使用できます。
+            上の例では、<code>add3</code>の型は
+            <code>int -&gt; int</code>です。
+        </p>
+
+        <h3>評価順序</h3>
+
+        <p>
+            式、演算子の引数、関数の引数、組やレコードの要素は、
+            左から右へ評価されます。
+            <code>&amp;&amp;</code>と<code>||</code>は短絡評価されます。
+        </p>
+
+        <h3>文字列と文字</h3>
+
+        <p>
+            <code>string</code>は不変の文字列型です。
+            文字列を書き換えることはできません。
+            文字列の連結には<code>^</code>を使用します。
+        </p>
+
+        <p>
+            <code>char</code>は一文字を表す型です。
+            文字列中の文字は<code>String.get</code>で読み出します。
+        </p>
+
+        <h3>let多相</h3>
+
+        <p>
+            <code>let</code>で定義された値の型は、可能な場合に一般化されます。
+        </p>
+
+        <pre><code>let id = fun x -&gt; x
+
+        let n = id 1
+        let b = id true</code></pre>
+
+        <p>
+            この例の<code>id</code>は
+            <code>'a -&gt; 'a</code>型として使用できます。
+        </p>
+
+        <h3>値制限</h3>
+
+        <p>
+            参照などの副作用と型安全性を両立させるため、
+            型変数の一般化には値制限を適用します。
+            関数、定数、コンストラクタなどの値は一般化できますが、
+            一般の関数適用や参照の生成は原則として一般化しません。
+        </p>
+
+        <h3>等価性と順序比較</h3>
+
+        <p>
+            <code>=</code>と<code>&lt;&gt;</code>は、同じ型の値を比較します。
+            整数、真偽値、浮動小数点数、文字、文字列、組、
+            レコード、ヴァリアント、リスト、参照を比較できます。
+            関数値の比較は実行時エラーとします。
+        </p>
+
+        <p>
+            <code>&lt;</code>、<code>&lt;=</code>、<code>&gt;</code>、
+            <code>&gt;=</code>も同じ型の値を比較します。
+            ただし、関数値には使用できません。
+        </p>
+
+    <footer>
+        <a href = "index.html">トップページ</a>
+    </footer>
+</body>
+</html>

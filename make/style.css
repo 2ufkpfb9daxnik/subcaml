@@ -53,3 +53,22 @@ a:visited {
     line-height: 1;
     cursor: pointer;
 }
+
+.advanced {
+    color: blue;
+}
+
+.advanced-label {
+    margin-right: 0.4em;
+    padding: 0.05em 0.35em;
+    border: 1px solid currentColor;
+    border-radius: 0.25em;
+    font-size: 0.75em;
+    font-weight: normal;
+}
+
+@media (prefers-color-scheme: dark) {
+    .advanced {
+        color: blue;
+    }
+}
