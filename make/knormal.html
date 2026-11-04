@@ -15,1170 +15,224 @@
     <h1>K正規形</h1>
 
     <p>
-        コア中間表現に含まれる各部分式の結果へ名前を付け、
-        プリミティブ演算、関数適用、ブロック操作などのオペランドを変数へ限定します。
-        この変換をK正規化と呼び、変換後の中間表現をK正規形と呼びます。
-    </p>
-
-    <ul>
-        <li>コア中間表現</li>
-        <li>↓ K正規化</li>
-        <li>K正規形</li>
-    </ul>
-
-    <p>
-        K正規化では、元の式の評価順序を
-        <code>let</code>による局所定義の順序として明示します。
-        ソース言語の評価順序と同様に、関数部分、実引数、プリミティブ演算の引数、
-        ブロックのフィールドなどは左から右へ評価します。
-    </p>
-
-    <h2>プログラムと大域宣言の構文</h2>
-
-    <p>
-        K正規形のプログラムは、大域宣言の列とプログラム本体から構成されます。
-        プログラムを
-        <span class="math">P</span>、
-        大域宣言を
-        <span class="math">d</span>、
-        式を
-        <span class="math">e</span>
-        で表します。
+        K正規化は、コア中間表現に含まれる計算結果へ名前を付け、
+        プリミティブ演算、関数適用、ブロック操作、分岐条件などのオペランドを変数へ限定する変換です。
+        変換後の中間表現をK正規形と呼びます。
     </p>
 
     <table>
-        <thead>
-            <tr>
-                <th>構文</th>
-                <th>名称</th>
-                <th>説明</th>
-            </tr>
-        </thead>
+        <thead><tr><th>入力</th><th>変換</th><th>出力</th></tr></thead>
+        <tbody><tr><td>型付きコア中間表現</td><td>K正規化</td><td>型付きK正規形</td></tr></tbody>
+    </table>
+
+    <p>
+        元の式の評価順序は、<code>let</code>の入れ子として明示します。
+        関数部分、実引数、演算の引数、ブロックのフィールドは、コア中間表現と同じく左から右へ評価します。
+    </p>
+
+    <h2>プログラムと大域宣言</h2>
+
+    <table>
+        <thead><tr><th>構文</th><th>名称</th><th>説明</th></tr></thead>
         <tbody>
-            <tr>
-                <th>
-                    <span class="math">P</span> ::=
-                    <span class="math">d</span><sub>1</sub> ...
-                    <span class="math">d</span><sub>n</sub>
-                    <code>in</code>
-                    <span class="math">e</span>
-                </th>
-                <td>プログラム</td>
-                <td>
-                    大域宣言
-                    <span class="math">d</span><sub>1</sub>から
-                    <span class="math">d</span><sub>n</sub>を宣言順に初期化し、
-                    本体式
-                    <span class="math">e</span>を評価する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">d</span> ::=
-                    <code>let</code>
-                    <span class="math">x</span>
-                    <code>=</code>
-                    <span class="math">e</span>
-                </th>
-                <td>大域値定義</td>
-                <td>
-                    式
-                    <span class="math">e</span>を評価し、その結果を大域変数
-                    <span class="math">x</span>へ束縛する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">d</span> ::=
-                    <code>let rec</code>
-                    <span class="math">f</span><sub>1</sub>
-                    <span class="math">x</span><sub>11</sub> ...
-                    <span class="math">x</span><sub>1m₁</sub>
-                    <code>=</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>and</code> ...
-                    <code>and</code>
-                    <span class="math">f</span><sub>n</sub>
-                    <span class="math">x</span><sub>n1</sub> ...
-                    <span class="math">x</span><sub>nmₙ</sub>
-                    <code>=</code>
-                    <span class="math">e</span><sub>n</sub>
-                </th>
-                <td>大域再帰関数定義</td>
-                <td>
-                    一つ以上の大域的な相互再帰関数を定義する。
-                    各関数の仮引数は変数だけで構成される
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">d</span> ::=
-                    <code>external</code>
-                    <span class="math">f</span>
-                    <code>=</code>
-                    <span class="math">name</span>
-                </th>
-                <td>外部関数宣言</td>
-                <td>
-                    大域識別子
-                    <span class="math">f</span>を、ランタイムまたは外部環境の関数
-                    <span class="math">name</span>へ対応付ける
-                </td>
-            </tr>
+            <tr><th><span class="math">P</span> ::= <span class="math">d</span><sub>1</sub> ... <span class="math">d</span><sub>n</sub> <code>in</code> <span class="math">e</span></th><td>プログラム</td><td>大域宣言を順番に初期化して本体を評価する</td></tr>
+            <tr><th><span class="math">d</span> ::= <code>let</code> <span class="math">x</span> <code>=</code> <span class="math">e</span></th><td>大域値定義</td><td>式の結果を大域変数へ束縛する</td></tr>
+            <tr><th><span class="math">d</span> ::= <code>let rec</code> <span class="math">f</span><sub>1</sub> <span class="math">x</span><sub>11</sub> ... <code>=</code> <span class="math">e</span><sub>1</sub> <code>and</code> ...</th><td>大域再帰関数定義</td><td>一つ以上の相互再帰関数を定義する</td></tr>
+            <tr><th><span class="math">d</span> ::= <code>external</code> <span class="math">f</span> <code>=</code> <span class="math">name</span></th><td>外部関数宣言</td><td>内部識別子と外部名を対応付ける</td></tr>
         </tbody>
     </table>
 
-    <h2>式の構文</h2>
-
-    <p>
-        定数を
-        <span class="math">c</span>、
-        変数を
-        <span class="math">x</span>、
-        プリミティブ演算を
-        <span class="math">op</span>、
-        ブロックタグまたは
-        <code>switch</code>の比較値を
-        <span class="math">k</span>
-        で表します。
-    </p>
+    <h2>式</h2>
 
     <table>
-        <thead>
-            <tr>
-                <th>構文</th>
-                <th>名称</th>
-                <th>説明</th>
-            </tr>
-        </thead>
+        <thead><tr><th>構文</th><th>名称</th><th>オペランド制約</th></tr></thead>
         <tbody>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <span class="math">c</span>
-                </th>
-                <td>定数</td>
-                <td>
-                    整数、浮動小数点数、真偽値、文字、文字列、
-                    <code>unit</code>などの定数
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <span class="math">x</span>
-                </th>
-                <td>変数</td>
-                <td>名前解決済みの局所変数または大域変数</td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <span class="math">op</span><code>(</code>
-                    <span class="math">x</span><sub>1</sub><code>,</code> ...
-                    <code>,</code>
-                    <span class="math">x</span><sub>n</sub><code>)</code>
-                </th>
-                <td>プリミティブ演算</td>
-                <td>
-                    変数
-                    <span class="math">x</span><sub>1</sub>から
-                    <span class="math">x</span><sub>n</sub>をオペランドとして、
-                    算術、比較、配列操作などのプリミティブ演算を実行する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <code>if</code>
-                    <span class="math">x</span>
-                    <code>then</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>else</code>
-                    <span class="math">e</span><sub>2</sub>
-                </th>
-                <td>条件分岐</td>
-                <td>
-                    変数
-                    <span class="math">x</span>が真なら
-                    <span class="math">e</span><sub>1</sub>を、偽なら
-                    <span class="math">e</span><sub>2</sub>を評価する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <code>let</code>
-                    <span class="math">x</span>
-                    <code>=</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>in</code>
-                    <span class="math">e</span><sub>2</sub>
-                </th>
-                <td>局所定義</td>
-                <td>
-                    <span class="math">e</span><sub>1</sub>の結果を
-                    <span class="math">x</span>へ束縛し、
-                    <span class="math">e</span><sub>2</sub>を評価する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <code>let rec</code>
-                    <span class="math">f</span><sub>1</sub>
-                    <span class="math">x</span><sub>11</sub> ...
-                    <span class="math">x</span><sub>1m₁</sub>
-                    <code>=</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>and</code> ...
-                    <code>and</code>
-                    <span class="math">f</span><sub>n</sub>
-                    <span class="math">x</span><sub>n1</sub> ...
-                    <span class="math">x</span><sub>nmₙ</sub>
-                    <code>=</code>
-                    <span class="math">e</span><sub>n</sub>
-                    <code>in</code>
-                    <span class="math">e</span>
-                </th>
-                <td>局所再帰関数定義</td>
-                <td>
-                    一つ以上の局所的な相互再帰関数を定義してから
-                    <span class="math">e</span>を評価する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <code>fun</code>
-                    <span class="math">x</span><sub>1</sub> ...
-                    <span class="math">x</span><sub>n</sub>
-                    <code>-&gt;</code>
-                    <span class="math">e</span>
-                </th>
-                <td>関数</td>
-                <td>
-                    仮引数
-                    <span class="math">x</span><sub>1</sub>から
-                    <span class="math">x</span><sub>n</sub>を受け取り、
-                    本体
-                    <span class="math">e</span>を評価する関数を作成する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <span class="math">f x</span><sub>1</sub> ...
-                    <span class="math">x</span><sub>n</sub>
-                </th>
-                <td>関数適用</td>
-                <td>
-                    変数
-                    <span class="math">f</span>が表す関数へ、変数
-                    <span class="math">x</span><sub>1</sub>から
-                    <span class="math">x</span><sub>n</sub>を渡す
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <code>block</code>
-                    <span class="math">k</span>
-                    <code>(</code>
-                    <span class="math">x</span><sub>1</sub><code>,</code> ...
-                    <code>,</code>
-                    <span class="math">x</span><sub>n</sub><code>)</code>
-                </th>
-                <td>ブロックの作成</td>
-                <td>
-                    タグ
-                    <span class="math">k</span>と、変数
-                    <span class="math">x</span><sub>1</sub>から
-                    <span class="math">x</span><sub>n</sub>の値をフィールドとして持つ
-                    ブロックを作成する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <code>field</code>
-                    <span class="math">i x</span>
-                </th>
-                <td>フィールドの読み出し</td>
-                <td>
-                    変数
-                    <span class="math">x</span>が表すブロックの
-                    <span class="math">i</span>番目のフィールドを読み出す
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <code>setfield</code>
-                    <span class="math">i x y</span>
-                </th>
-                <td>フィールドへの書き込み</td>
-                <td>
-                    変数
-                    <span class="math">x</span>が表す可変ブロックの
-                    <span class="math">i</span>番目のフィールドへ
-                    <span class="math">y</span>の値を書き込み、
-                    <code>unit</code>を返す
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <code>tag</code>
-                    <span class="math">x</span>
-                </th>
-                <td>タグの読み出し</td>
-                <td>
-                    変数
-                    <span class="math">x</span>が表すブロックのタグを読み出す
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e</span> ::=
-                    <code>switch</code>
-                    <span class="math">x</span>
-                    <code>with</code>
-                    <span class="math">k</span><sub>1</sub>
-                    <code>-&gt;</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>|</code> ...
-                    <code>|</code>
-                    <span class="math">k</span><sub>n</sub>
-                    <code>-&gt;</code>
-                    <span class="math">e</span><sub>n</sub>
-                    <code>| default -&gt;</code>
-                    <span class="math">e</span><sub>d</sub>
-                </th>
-                <td>整数またはタグによる分岐</td>
-                <td>
-                    変数
-                    <span class="math">x</span>の値と一致する分岐を評価する。
-                    どの値にも一致しない場合は、省略可能な
-                    <code>default</code>分岐を評価する
-                </td>
-            </tr>
-            <tr class="advanced">
-                <th>
-                    <span class="math">e</span> ::=
-                    <code>raise</code>
-                    <span class="math">x</span>
-                </th>
-                <td>例外の送出</td>
-                <td>
-                    セルフホスト後変数
-                    <span class="math">x</span>が表す例外値を送出する
-                </td>
-            </tr>
-            <tr class="advanced">
-                <th>
-                    <span class="math">e</span> ::=
-                    <code>try</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>with</code>
-                    <span class="math">x</span>
-                    <code>-&gt;</code>
-                    <span class="math">e</span><sub>2</sub>
-                </th>
-                <td>例外処理</td>
-                <td>
-                    セルフホスト後
-                    <span class="math">e</span><sub>1</sub>から送出された例外を
-                    <span class="math">x</span>へ束縛し、
-                    <span class="math">e</span><sub>2</sub>で処理する
-                </td>
-            </tr>
-            <tr class="advanced">
-                <th>
-                    <span class="math">e</span> ::=
-                    <code>perform</code>
-                    <span class="math">x</span>
-                </th>
-                <td>エフェクトの実行</td>
-                <td>
-                    セルフホスト後変数
-                    <span class="math">x</span>が表すエフェクトを実行する
-                </td>
-            </tr>
+            <tr><th><span class="math">e</span> ::= <span class="math">c</span></th><td>定数</td><td>なし</td></tr>
+            <tr><th><span class="math">e</span> ::= <span class="math">x</span></th><td>変数</td><td>なし</td></tr>
+            <tr><th><span class="math">e</span> ::= <span class="math">op</span><code>(</code><span class="math">x</span><sub>1</sub><code>, ... ,</code><span class="math">x</span><sub>n</sub><code>)</code></th><td>プリミティブ演算</td><td>すべて変数</td></tr>
+            <tr><th><span class="math">e</span> ::= <code>if</code> <span class="math">x</span> <code>then</code> <span class="math">e</span><sub>1</sub> <code>else</code> <span class="math">e</span><sub>2</sub></th><td>条件分岐</td><td>条件は変数</td></tr>
+            <tr><th><span class="math">e</span> ::= <code>let</code> <span class="math">x</span> <code>=</code> <span class="math">e</span><sub>1</sub> <code>in</code> <span class="math">e</span><sub>2</sub></th><td>局所定義</td><td>右辺はK正規形</td></tr>
+            <tr><th><span class="math">e</span> ::= <code>let rec</code> ... <code>in</code> <span class="math">e</span></th><td>局所再帰関数定義</td><td>仮引数は変数、各本体はK正規形</td></tr>
+            <tr><th><span class="math">e</span> ::= <code>fun</code> <span class="math">x</span><sub>1</sub> ... <span class="math">x</span><sub>n</sub> <code>-&gt;</code> <span class="math">e</span></th><td>関数</td><td>仮引数は変数、本体はK正規形</td></tr>
+            <tr><th><span class="math">e</span> ::= <span class="math">f x</span><sub>1</sub> ... <span class="math">x</span><sub>n</sub></th><td>関数適用</td><td>関数部分と実引数はすべて変数</td></tr>
+            <tr><th><span class="math">e</span> ::= <code>block</code> <span class="math">k</span> <code>(</code><span class="math">x</span><sub>1</sub><code>, ... ,</code><span class="math">x</span><sub>n</sub><code>)</code></th><td>ブロック作成</td><td>フィールド値はすべて変数</td></tr>
+            <tr><th><span class="math">e</span> ::= <code>field</code> <span class="math">i x</span></th><td>フィールド読出し</td><td>対象は変数</td></tr>
+            <tr><th><span class="math">e</span> ::= <code>setfield</code> <span class="math">i x y</span></th><td>フィールド書込み</td><td>対象と値は変数</td></tr>
+            <tr><th><span class="math">e</span> ::= <code>tag</code> <span class="math">x</span></th><td>タグ読出し</td><td>対象は変数</td></tr>
+            <tr><th><span class="math">e</span> ::= <code>switch</code> <span class="math">x</span> <code>with</code> ...</th><td>整数またはタグによる分岐</td><td>判定対象は変数</td></tr>
+            <tr class="advanced"><th><span class="math">e</span> ::= <code>raise</code> <span class="math">x</span></th><td>例外送出</td><td>例外値は変数</td></tr>
+            <tr class="advanced"><th><span class="math">e</span> ::= <code>try</code> <span class="math">e</span><sub>1</sub> <code>with</code> <span class="math">x</span> <code>-&gt;</code> <span class="math">e</span><sub>2</sub></th><td>例外処理</td><td>両式はK正規形</td></tr>
+            <tr class="advanced"><th><span class="math">e</span> ::= <code>perform</code> <span class="math">x</span></th><td>エフェクト実行</td><td>エフェクト値は変数</td></tr>
         </tbody>
     </table>
 
     <h2>型情報</h2>
 
-    <p>
-        上の構文では表記を簡潔にするため型を省略していますが、
-        実装上は大域変数、局所変数、関数の仮引数、関数の戻り値、
-        およびK正規化によって生成した一時変数の型を保持します。
-        新しい一時変数には、その変数へ束縛する部分式の型を付与します。
-    </p>
-
-    <p>
-        型情報は、整数演算と浮動小数点演算の区別、
-        値の実行時表現の決定、外部関数の呼出し、
-        後続の低水準化などで利用します。
-    </p>
-
-    <h2>K正規化</h2>
-
-    <p>
-        コア中間表現では、プリミティブ演算や関数適用のオペランドとして、
-        任意の式を記述できます。
-    </p>
-
-    <pre><code>f (int_add(x, 1)) (g y)</code></pre>
-
-    <p>
-        K正規化では、各部分式の結果を新しい一時変数へ束縛します。
-    </p>
-
-    <pre><code>let one = 1 in
-let a = int_add(x, one) in
-let b = g y in
-f a b</code></pre>
-
-    <p>
-        この変換により、プリミティブ演算、関数適用、ブロック操作などが使用する値を、
-        すべて変数として明示できます。
-    </p>
-
-    <h2>K正規化の補助操作</h2>
-
-    <p>
-        式
-        <span class="math">e</span>をK正規化した結果を、
-        <span class="math">K</span><code>⟦</code><span class="math">e</span><code>⟧</code>
-        と表します。
-        K正規化した部分式の結果を変数として後続の変換へ渡すため、
-        補助操作
-        <code>bind</code>を使用します。
-    </p>
-
-    <pre><code>bind e as x in E</code></pre>
-
-    <p>
-        <span class="math">K</span><code>⟦</code><span class="math">e</span><code>⟧</code>
-        が既存の変数
-        <span class="math">y</span>である場合は、新しい
-        <code>let</code>を生成せず、後続の式
-        <span class="math">E</span>で
-        <span class="math">x</span>の代わりに
-        <span class="math">y</span>を使用します。
-    </p>
-
-    <pre><code>K⟦e⟧ = y の場合:
-
-bind e as x in E
-    = E[y/x]</code></pre>
-
-    <p>
-        <span class="math">K</span><code>⟦</code><span class="math">e</span><code>⟧</code>
-        が変数でない場合は、その結果を新しい変数
-        <span class="math">x</span>へ束縛します。
-    </p>
-
-    <pre><code>K⟦e⟧ = e' かつ e' が変数でない場合:
-
-bind e as x in E
-    = let x = e' in E</code></pre>
-
-    <p>
-        <code>E[y/x]</code>は、後続の式
-        <span class="math">E</span>に現れる補助変数
-        <span class="math">x</span>を、既存の変数
-        <span class="math">y</span>へ置換することを表します。
-        K正規化によって新しく生成する変数は、
-        既存のどの変数とも重複しないものとします。
-    </p>
-
-    <p>
-        定数もプリミティブ演算などのオペランドへ直接置かず、
-        新しい変数へ束縛します。
-        したがって、このK正規形ではプリミティブ演算、
-        関数適用、ブロック操作のオペランドは例外なく変数になります。
-    </p>
-
-    <h2>プログラムと大域宣言のK正規化</h2>
-
-    <p>
-        プログラム全体のK正規化を
-        <span class="math">KP</span><code>⟦</code><span class="math">P</span><code>⟧</code>、
-        大域宣言のK正規化を
-        <span class="math">KD</span><code>⟦</code><span class="math">d</span><code>⟧</code>
-        と表します。
-    </p>
-
     <table>
-        <thead>
-            <tr>
-                <th>コア中間表現</th>
-                <th>K正規形</th>
-                <th>説明</th>
-            </tr>
-        </thead>
+        <thead><tr><th>対象</th><th>保持する型</th><th>用途</th></tr></thead>
         <tbody>
-            <tr>
-                <th>
-                    <span class="math">d</span><sub>1</sub> ...
-                    <span class="math">d</span><sub>n</sub>
-                    <code>in</code>
-                    <span class="math">e</span>
-                </th>
-                <td>
-                    <span class="math">KD</span><code>⟦</code><span class="math">d</span><sub>1</sub><code>⟧</code>
-                    ...
-                    <span class="math">KD</span><code>⟦</code><span class="math">d</span><sub>n</sub><code>⟧</code>
-                    <code>in</code>
-                    <span class="math">K</span><code>⟦</code><span class="math">e</span><code>⟧</code>
-                </td>
-                <td>
-                    各大域宣言を宣言順にK正規化し、
-                    最後にプログラム本体をK正規化する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <code>let</code>
-                    <span class="math">x</span>
-                    <code>=</code>
-                    <span class="math">e</span>
-                </th>
-                <td>
-                    <code>let</code>
-                    <span class="math">x</span>
-                    <code>=</code>
-                    <span class="math">K</span><code>⟦</code><span class="math">e</span><code>⟧</code>
-                </td>
-                <td>大域値の初期化式をK正規化する</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>let rec</code>
-                    <span class="math">f</span><sub>1</sub>
-                    <span class="math">x</span><sub>11</sub> ...
-                    <span class="math">x</span><sub>1m₁</sub>
-                    <code>=</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>and</code> ...
-                    <code>and</code>
-                    <span class="math">f</span><sub>n</sub>
-                    <span class="math">x</span><sub>n1</sub> ...
-                    <span class="math">x</span><sub>nmₙ</sub>
-                    <code>=</code>
-                    <span class="math">e</span><sub>n</sub>
-                </th>
-                <td>
-                    <code>let rec</code>
-                    <span class="math">f</span><sub>1</sub>
-                    <span class="math">x</span><sub>11</sub> ...
-                    <span class="math">x</span><sub>1m₁</sub>
-                    <code>=</code>
-                    <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
-                    <code>and</code> ...
-                    <code>and</code>
-                    <span class="math">f</span><sub>n</sub>
-                    <span class="math">x</span><sub>n1</sub> ...
-                    <span class="math">x</span><sub>nmₙ</sub>
-                    <code>=</code>
-                    <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>n</sub><code>⟧</code>
-                </td>
-                <td>各関数の本体を独立にK正規化する</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>external</code>
-                    <span class="math">f</span>
-                    <code>=</code>
-                    <span class="math">name</span>
-                </th>
-                <td>
-                    <code>external</code>
-                    <span class="math">f</span>
-                    <code>=</code>
-                    <span class="math">name</span>
-                </td>
-                <td>
-                    外部関数宣言は評価対象となる式を含まないため、そのまま残す
-                </td>
-            </tr>
+            <tr><th>大域変数</th><td>型推論で確定した型</td><td>大域データ配置と外部公開</td></tr>
+            <tr><th>局所変数</th><td>束縛式の型</td><td>後続変換と命令選択</td></tr>
+            <tr><th>仮引数</th><td>関数型から得た引数型</td><td>呼出し規約とクロージャ変換</td></tr>
+            <tr><th>関数</th><td>引数型列と戻り値型</td><td>直接呼出し、外部呼出し</td></tr>
+            <tr><th>一時変数</th><td>名前を付ける部分式の型</td><td>整数、浮動小数点、ポインタなどの区別</td></tr>
         </tbody>
     </table>
 
-    <h2>式のK正規化</h2>
-
-    <p>
-        複数の部分式を持つ構文では、部分式を左から右へK正規化します。
-        表中の
-        <span class="math">x</span>、
-        <span class="math">x</span><sub>1</sub>から
-        <span class="math">x</span><sub>n</sub>、
-        および
-        <span class="math">f</span>は、必要に応じて新しく生成する変数を表します。
-    </p>
+    <h2>K正規化の記法</h2>
 
     <table>
-        <thead>
-            <tr>
-                <th>コア中間表現</th>
-                <th>K正規形</th>
-                <th>説明</th>
-            </tr>
-        </thead>
+        <thead><tr><th>記法</th><th>意味</th></tr></thead>
         <tbody>
-            <tr>
-                <th>
-                    <span class="math">c</span>
-                </th>
-                <td>
-                    <span class="math">c</span>
-                </td>
-                <td>定数をそのまま残す</td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">x</span>
-                </th>
-                <td>
-                    <span class="math">x</span>
-                </td>
-                <td>変数をそのまま残す</td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">op</span><code>(</code>
-                    <span class="math">e</span><sub>1</sub><code>,</code> ...
-                    <code>,</code>
-                    <span class="math">e</span><sub>n</sub><code>)</code>
-                </th>
-                <td>
-                    <code>bind</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>as</code>
-                    <span class="math">x</span><sub>1</sub>
-                    <code>in</code>
-                    <div>...</div>
-                    <code>bind</code>
-                    <span class="math">e</span><sub>n</sub>
-                    <code>as</code>
-                    <span class="math">x</span><sub>n</sub>
-                    <code>in</code>
-                    <div>
-                        <span class="math">op</span><code>(</code>
-                        <span class="math">x</span><sub>1</sub><code>,</code> ...
-                        <code>,</code>
-                        <span class="math">x</span><sub>n</sub><code>)</code>
-                    </div>
-                </td>
-                <td>
-                    各オペランドを左から右へK正規化し、
-                    変数だけをプリミティブ演算へ渡す
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <code>if</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>then</code>
-                    <span class="math">e</span><sub>2</sub>
-                    <code>else</code>
-                    <span class="math">e</span><sub>3</sub>
-                </th>
-                <td>
-                    <code>bind</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>as</code>
-                    <span class="math">x</span>
-                    <code>in</code>
-                    <div>
-                        <code>if</code>
-                        <span class="math">x</span>
-                        <code>then</code>
-                        <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
-                        <code>else</code>
-                        <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>3</sub><code>⟧</code>
-                    </div>
-                </td>
-                <td>
-                    条件式を変数へ束縛し、
-                    真分岐と偽分岐を独立にK正規化する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <code>let</code>
-                    <span class="math">x</span>
-                    <code>=</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>in</code>
-                    <span class="math">e</span><sub>2</sub>
-                </th>
-                <td>
-                    <code>let</code>
-                    <span class="math">x</span>
-                    <code>=</code>
-                    <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
-                    <code>in</code>
-                    <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
-                </td>
-                <td>
-                    束縛される式と
-                    <code>let</code>本体をそれぞれK正規化する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <code>let rec</code>
-                    <span class="math">f</span><sub>1</sub>
-                    <span class="math">x</span><sub>11</sub> ...
-                    <span class="math">x</span><sub>1m₁</sub>
-                    <code>=</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>and</code> ...
-                    <code>and</code>
-                    <span class="math">f</span><sub>n</sub>
-                    <span class="math">x</span><sub>n1</sub> ...
-                    <span class="math">x</span><sub>nmₙ</sub>
-                    <code>=</code>
-                    <span class="math">e</span><sub>n</sub>
-                    <code>in</code>
-                    <span class="math">e</span>
-                </th>
-                <td>
-                    <code>let rec</code>
-                    <span class="math">f</span><sub>1</sub>
-                    <span class="math">x</span><sub>11</sub> ...
-                    <span class="math">x</span><sub>1m₁</sub>
-                    <code>=</code>
-                    <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
-                    <code>and</code> ...
-                    <code>and</code>
-                    <span class="math">f</span><sub>n</sub>
-                    <span class="math">x</span><sub>n1</sub> ...
-                    <span class="math">x</span><sub>nmₙ</sub>
-                    <code>=</code>
-                    <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>n</sub><code>⟧</code>
-                    <code>in</code>
-                    <span class="math">K</span><code>⟦</code><span class="math">e</span><code>⟧</code>
-                </td>
-                <td>
-                    各関数本体と
-                    <code>let rec</code>の後続式を独立にK正規化する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <code>fun</code>
-                    <span class="math">x</span><sub>1</sub> ...
-                    <span class="math">x</span><sub>n</sub>
-                    <code>-&gt;</code>
-                    <span class="math">e</span>
-                </th>
-                <td>
-                    <code>fun</code>
-                    <span class="math">x</span><sub>1</sub> ...
-                    <span class="math">x</span><sub>n</sub>
-                    <code>-&gt;</code>
-                    <span class="math">K</span><code>⟦</code><span class="math">e</span><code>⟧</code>
-                </td>
-                <td>関数本体をK正規化する</td>
-            </tr>
-            <tr>
-                <th>
-                    <span class="math">e e</span><sub>1</sub> ...
-                    <span class="math">e</span><sub>n</sub>
-                </th>
-                <td>
-                    <code>bind</code>
-                    <span class="math">e</span>
-                    <code>as</code>
-                    <span class="math">f</span>
-                    <code>in</code>
-                    <div>
-                        <code>bind</code>
-                        <span class="math">e</span><sub>1</sub>
-                        <code>as</code>
-                        <span class="math">x</span><sub>1</sub>
-                        <code>in</code>
-                    </div>
-                    <div>...</div>
-                    <div>
-                        <code>bind</code>
-                        <span class="math">e</span><sub>n</sub>
-                        <code>as</code>
-                        <span class="math">x</span><sub>n</sub>
-                        <code>in</code>
-                    </div>
-                    <div>
-                        <span class="math">f x</span><sub>1</sub> ...
-                        <span class="math">x</span><sub>n</sub>
-                    </div>
-                </td>
-                <td>
-                    関数部分を最初に評価し、
-                    その後で各実引数を左から右へ評価する。
-                    関数部分とすべての実引数を変数に限定する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <code>block</code>
-                    <span class="math">k</span>
-                    <code>(</code>
-                    <span class="math">e</span><sub>1</sub><code>,</code> ...
-                    <code>,</code>
-                    <span class="math">e</span><sub>n</sub><code>)</code>
-                </th>
-                <td>
-                    <code>bind</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>as</code>
-                    <span class="math">x</span><sub>1</sub>
-                    <code>in</code>
-                    <div>...</div>
-                    <div>
-                        <code>bind</code>
-                        <span class="math">e</span><sub>n</sub>
-                        <code>as</code>
-                        <span class="math">x</span><sub>n</sub>
-                        <code>in</code>
-                    </div>
-                    <div>
-                        <code>block</code>
-                        <span class="math">k</span>
-                        <code>(</code>
-                        <span class="math">x</span><sub>1</sub><code>,</code> ...
-                        <code>,</code>
-                        <span class="math">x</span><sub>n</sub><code>)</code>
-                    </div>
-                </td>
-                <td>
-                    各フィールドを左から右へ評価し、
-                    変数だけをブロックへ格納する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <code>field</code>
-                    <span class="math">i e</span>
-                </th>
-                <td>
-                    <code>bind</code>
-                    <span class="math">e</span>
-                    <code>as</code>
-                    <span class="math">x</span>
-                    <code>in</code>
-                    <div>
-                        <code>field</code>
-                        <span class="math">i x</span>
-                    </div>
-                </td>
-                <td>
-                    ブロックを表す式を変数へ束縛してから、
-                    指定されたフィールドを読み出す
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <code>setfield</code>
-                    <span class="math">i e</span><sub>1</sub>
-                    <span class="math">e</span><sub>2</sub>
-                </th>
-                <td>
-                    <code>bind</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>as</code>
-                    <span class="math">x</span>
-                    <code>in</code>
-                    <div>
-                        <code>bind</code>
-                        <span class="math">e</span><sub>2</sub>
-                        <code>as</code>
-                        <span class="math">y</span>
-                        <code>in</code>
-                    </div>
-                    <div>
-                        <code>setfield</code>
-                        <span class="math">i x y</span>
-                    </div>
-                </td>
-                <td>
-                    ブロックを表す式と書き込む値を左から右へ評価し、
-                    両方を変数へ限定する
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <code>tag</code>
-                    <span class="math">e</span>
-                </th>
-                <td>
-                    <code>bind</code>
-                    <span class="math">e</span>
-                    <code>as</code>
-                    <span class="math">x</span>
-                    <code>in</code>
-                    <div>
-                        <code>tag</code>
-                        <span class="math">x</span>
-                    </div>
-                </td>
-                <td>
-                    ブロックを表す式を変数へ束縛してからタグを読み出す
-                </td>
-            </tr>
-            <tr>
-                <th>
-                    <code>switch</code>
-                    <span class="math">e</span>
-                    <code>with</code>
-                    <span class="math">k</span><sub>1</sub>
-                    <code>-&gt;</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>|</code> ...
-                    <code>|</code>
-                    <span class="math">k</span><sub>n</sub>
-                    <code>-&gt;</code>
-                    <span class="math">e</span><sub>n</sub>
-                    <code>| default -&gt;</code>
-                    <span class="math">e</span><sub>d</sub>
-                </th>
-                <td>
-                    <code>bind</code>
-                    <span class="math">e</span>
-                    <code>as</code>
-                    <span class="math">x</span>
-                    <code>in</code>
-                    <div>
-                        <code>switch</code>
-                        <span class="math">x</span>
-                        <code>with</code>
-                    </div>
-                    <div>
-                        <span class="math">k</span><sub>1</sub>
-                        <code>-&gt;</code>
-                        <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
-                    </div>
-                    <div>...</div>
-                    <div>
-                        <span class="math">k</span><sub>n</sub>
-                        <code>-&gt;</code>
-                        <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>n</sub><code>⟧</code>
-                    </div>
-                    <div>
-                        <code>| default -&gt;</code>
-                        <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>d</sub><code>⟧</code>
-                    </div>
-                </td>
-                <td>
-                    判定対象を変数へ束縛し、
-                    各分岐と省略可能な
-                    <code>default</code>分岐を独立にK正規化する
-                </td>
-            </tr>
-            <tr class="advanced">
-                <th>
-                    <code>raise</code>
-                    <span class="math">e</span>
-                </th>
-                <td>
-                    <code>bind</code>
-                    <span class="math">e</span>
-                    <code>as</code>
-                    <span class="math">x</span>
-                    <code>in</code>
-                    <div>
-                        <code>raise</code>
-                        <span class="math">x</span>
-                    </div>
-                </td>
-                <td>セルフホスト後例外値を変数へ束縛してから送出する</td>
-            </tr>
-            <tr class="advanced">
-                <th>
-                    <code>try</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>with</code>
-                    <span class="math">x</span>
-                    <code>-&gt;</code>
-                    <span class="math">e</span><sub>2</sub>
-                </th>
-                <td>
-                    <code>try</code>
-                    <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
-                    <code>with</code>
-                    <span class="math">x</span>
-                    <code>-&gt;</code>
-                    <span class="math">K</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
-                </td>
-                <td>
-                    セルフホスト後保護される式と例外処理式を独立にK正規化する
-                </td>
-            </tr>
-            <tr class="advanced">
-                <th>
-                    <code>perform</code>
-                    <span class="math">e</span>
-                </th>
-                <td>
-                    <code>bind</code>
-                    <span class="math">e</span>
-                    <code>as</code>
-                    <span class="math">x</span>
-                    <code>in</code>
-                    <div>
-                        <code>perform</code>
-                        <span class="math">x</span>
-                    </div>
-                </td>
-                <td>セルフホスト後エフェクト値を変数へ束縛してから実行する</td>
-            </tr>
+            <tr><th><span class="math">K</span><code>⟦e⟧</code></th><td>式<span class="math">e</span>をK正規化した式</td></tr>
+            <tr><th><span class="math">KD</span><code>⟦d⟧</code></th><td>大域宣言<span class="math">d</span>をK正規化した宣言</td></tr>
+            <tr><th><span class="math">KP</span><code>⟦P⟧</code></th><td>プログラム全体をK正規化したプログラム</td></tr>
+            <tr><th><code>bind e as x in E</code></th><td><span class="math">e</span>をK正規化し、その結果を変数<span class="math">x</span>として後続式<span class="math">E</span>へ渡す補助操作</td></tr>
+            <tr><th><code>fresh(T)</code></th><td>型<span class="math">T</span>を持つ新しい一意な一時変数を生成する</td></tr>
         </tbody>
     </table>
 
-    <h2>変換例</h2>
+    <h2><code>bind</code>の定義</h2>
 
-    <h3>プリミティブ演算</h3>
-
-    <pre><code>int_add(x, int_mul(y, z))</code></pre>
-
-    <p>
-        内側の乗算結果を変数へ束縛してから、外側の加算を実行します。
-    </p>
-
-    <pre><code>let a = int_mul(y, z) in
-int_add(x, a)</code></pre>
+    <table>
+        <thead><tr><th>K正規化結果</th><th><code>bind e as x in E</code>の結果</th><th>説明</th></tr></thead>
+        <tbody>
+            <tr><th><span class="math">K</span><code>⟦e⟧ = y</code></th><td><span class="math">E</span><code>[y/x]</code></td><td>結果が既存変数なら不要な<code>let</code>を作らない</td></tr>
+            <tr><th><span class="math">K</span><code>⟦e⟧ = e'</code>かつ<span class="math">e'</span>が変数でない</th><td><code>let x:T = e' in E</code></td><td>式の型<span class="math">T</span>を付けた一時変数へ束縛する</td></tr>
+        </tbody>
+    </table>
 
     <p>
-        式全体の結果も明示的な変数へ束縛する必要がある後続の文脈では、
-        さらに次のようになります。
+        <code>E[y/x]</code>は、補助変数<span class="math">x</span>の自由な出現を<span class="math">y</span>へ置換することを表します。
+        実装では構文木を後から置換するより、継続を受け取る関数として<code>bind</code>を実装すると単純です。
     </p>
 
-    <pre><code>let a = int_mul(y, z) in
-let b = int_add(x, a) in
-b</code></pre>
+    <pre><code>insert_let : typed_expression -&gt; (typed_id -&gt; knormal_expression) -&gt; knormal_expression</code></pre>
 
-    <h3>定数を含むプリミティブ演算</h3>
+    <h2>プログラムと大域宣言の変換</h2>
 
-    <pre><code>int_add(x, 1)</code></pre>
+    <table>
+        <thead><tr><th>コア中間表現</th><th>K正規形</th><th>変換規則</th></tr></thead>
+        <tbody>
+            <tr><th><span class="math">d</span><sub>1</sub> ... <span class="math">d</span><sub>n</sub> <code>in</code> <span class="math">e</span></th><td><span class="math">KD</span><code>⟦d1⟧</code> ... <span class="math">KD</span><code>⟦dn⟧</code> <code>in</code> <span class="math">K</span><code>⟦e⟧</code></td><td>宣言順を保ち、最後に本体を変換する</td></tr>
+            <tr><th><code>let x = e</code></th><td><code>let x = K⟦e⟧</code></td><td>大域初期化式を変換する</td></tr>
+            <tr><th><code>let rec f1 xs1 = e1 and ... and fn xsn = en</code></th><td><code>let rec f1 xs1 = K⟦e1⟧ and ... and fn xsn = K⟦en⟧</code></td><td>各関数本体を同じ再帰グループのまま変換する</td></tr>
+            <tr><th><code>external f = name</code></th><td><code>external f = name</code></td><td>評価式を含まないため変更しない</td></tr>
+        </tbody>
+    </table>
+
+    <h2>基本式の変換</h2>
+
+    <table>
+        <thead><tr><th>コア中間表現</th><th>K正規形</th><th>補足</th></tr></thead>
+        <tbody>
+            <tr><th><span class="math">c</span></th><td><span class="math">c</span></td><td>定数自体はK正規形。変数を要求する文脈では<code>bind</code>が一時変数を作る</td></tr>
+            <tr><th><span class="math">x</span></th><td><span class="math">x</span></td><td>既存変数をそのまま使用する</td></tr>
+            <tr><th><code>let x = e1 in e2</code></th><td><code>let x = K⟦e1⟧ in K⟦e2⟧</code></td><td>元の束縛識別子とスコープを保つ</td></tr>
+            <tr><th><code>fun x1 ... xn -&gt; e</code></th><td><code>fun x1 ... xn -&gt; K⟦e⟧</code></td><td>仮引数はすでに変数である</td></tr>
+        </tbody>
+    </table>
+
+    <h2>オペランド列の変換</h2>
 
     <p>
-        このK正規形ではプリミティブ演算のオペランドを変数に限定するため、
-        定数も一度変数へ束縛します。
+        部分式列を左から右へ変数化する処理を<span class="math">B</span><code>⟦e1, ..., en⟧(F)</code>と表します。
     </p>
 
-    <pre><code>let one = 1 in
-int_add(x, one)</code></pre>
+    <table>
+        <thead><tr><th>入力</th><th>結果</th><th>説明</th></tr></thead>
+        <tbody>
+            <tr><th><span class="math">B</span><code>⟦ ⟧(F)</code></th><td><span class="math">F</span><code>([])</code></td><td>空のオペランド列</td></tr>
+            <tr><th><span class="math">B</span><code>⟦e1, ..., en⟧(F)</code></th><td><code>bind e1 as x1 in ... bind en as xn in F([x1; ...; xn])</code></td><td>各式を左から右へ評価して変数列を継続<span class="math">F</span>へ渡す</td></tr>
+        </tbody>
+    </table>
 
-    <h3>条件分岐</h3>
+    <h2>プリミティブ演算の変換</h2>
 
-    <pre><code>if lt(int_add(x, 1), y) then
-    f x
-else
-    g y</code></pre>
+    <table>
+        <thead><tr><th>コア中間表現</th><th>K正規形</th><th>評価順序</th></tr></thead>
+        <tbody>
+            <tr><th><span class="math">op</span><code>(e1, ..., en)</code></th><td><code>B⟦e1, ..., en⟧(fun [x1; ...; xn] -&gt; op(x1, ..., xn))</code></td><td><span class="math">e</span><sub>1</sub>から<span class="math">e</span><sub>n</sub>まで左から右</td></tr>
+        </tbody>
+    </table>
+
+    <h2>条件分岐の変換</h2>
+
+    <table>
+        <thead><tr><th>コア中間表現</th><th>K正規形</th><th>評価規則</th></tr></thead>
+        <tbody>
+            <tr><th><code>if e1 then e2 else e3</code></th><td><code>bind e1 as x in if x then K⟦e2⟧ else K⟦e3⟧</code></td><td>条件だけを先に評価し、選ばれた分岐だけを実行時に評価する</td></tr>
+        </tbody>
+    </table>
 
     <p>
-        条件式を構成する各部分式を左から右へ評価し、
-        条件分岐の判定対象を変数へ限定します。
+        分岐式を条件より前へ移動してはなりません。
+        K正規化は制御構造を保ったまま、各分岐の内部だけを再帰的に変換します。
     </p>
 
-    <pre><code>let one = 1 in
-let a = int_add(x, one) in
-let condition = lt(a, y) in
-if condition then
-    f x
-else
-    g y</code></pre>
+    <h2>再帰関数定義の変換</h2>
 
-    <h3>関数適用</h3>
+    <table>
+        <thead><tr><th>コア中間表現</th><th>K正規形</th><th>保持する性質</th></tr></thead>
+        <tbody>
+            <tr><th><code>let rec f1 xs1 = e1 and ... and fn xsn = en in e</code></th><td><code>let rec f1 xs1 = K⟦e1⟧ and ... and fn xsn = K⟦en⟧ in K⟦e⟧</code></td><td>関数識別子、仮引数、相互再帰グループ、スコープを変更しない</td></tr>
+        </tbody>
+    </table>
 
-    <pre><code>f (g x) (h y)</code></pre>
+    <h2>関数適用の変換</h2>
 
-    <p>
-        関数部分を最初に評価し、その後で実引数を左から右へ評価します。
-        この例では関数部分
-        <code>f</code>はすでに変数なので、新しい束縛は生成しません。
-    </p>
+    <table>
+        <thead><tr><th>コア中間表現</th><th>K正規形</th><th>評価順序</th></tr></thead>
+        <tbody>
+            <tr><th><span class="math">e e</span><sub>1</sub> ... <span class="math">e</span><sub>n</sub></th><td><code>bind e as f in B⟦e1, ..., en⟧(fun [x1; ...; xn] -&gt; f x1 ... xn)</code></td><td>関数部分を最初に評価し、続いて実引数を左から右へ評価する</td></tr>
+        </tbody>
+    </table>
 
-    <pre><code>let a = g x in
-let b = h y in
-f a b</code></pre>
+    <h2>ブロック操作の変換</h2>
 
-    <p>
-        関数部分自体が式である場合も、その結果を変数へ束縛します。
-    </p>
+    <table>
+        <thead><tr><th>コア中間表現</th><th>K正規形</th><th>評価順序</th></tr></thead>
+        <tbody>
+            <tr><th><code>block k (e1, ..., en)</code></th><td><code>B⟦e1, ..., en⟧(fun [x1; ...; xn] -&gt; block k (x1, ..., xn))</code></td><td>フィールド式を左から右へ評価する</td></tr>
+            <tr><th><code>field i e</code></th><td><code>bind e as x in field i x</code></td><td>対象式を一度だけ評価する</td></tr>
+            <tr><th><code>setfield i e1 e2</code></th><td><code>bind e1 as x in bind e2 as y in setfield i x y</code></td><td>書込み対象を先に、値を後に評価する</td></tr>
+            <tr><th><code>tag e</code></th><td><code>bind e as x in tag x</code></td><td>対象式を一度だけ評価する</td></tr>
+        </tbody>
+    </table>
 
-    <pre><code>(if condition then f else g) x</code></pre>
+    <h2><code>switch</code>の変換</h2>
 
-    <pre><code>let function_value =
-    if condition then
-        f
-    else
-        g
-in
-function_value x</code></pre>
+    <table>
+        <thead><tr><th>コア中間表現</th><th>K正規形</th><th>評価規則</th></tr></thead>
+        <tbody>
+            <tr><th><code>switch e with k1 -&gt; e1 | ... | kn -&gt; en</code></th><td><code>bind e as x in switch x with k1 -&gt; K⟦e1⟧ | ... | kn -&gt; K⟦en⟧</code></td><td>判定対象を一度だけ評価し、選ばれた分岐だけを実行する</td></tr>
+            <tr><th><code>switch e with ... | default -&gt; ed</code></th><td><code>bind e as x in switch x with ... | default -&gt; K⟦ed⟧</code></td><td><code>default</code>の有無を保つ</td></tr>
+        </tbody>
+    </table>
 
-    <h3>ブロックの作成</h3>
+    <h2>例外とエフェクトの変換</h2>
 
-    <pre><code>block 0 (f x, int_add(y, 1))</code></pre>
+    <table>
+        <thead><tr><th>コア中間表現</th><th>K正規形</th><th>補足</th></tr></thead>
+        <tbody>
+            <tr class="advanced"><th><code>raise e</code></th><td><code>bind e as x in raise x</code></td><td>例外値を変数化する</td></tr>
+            <tr class="advanced"><th><code>try e1 with x -&gt; e2</code></th><td><code>try K⟦e1⟧ with x -&gt; K⟦e2⟧</code></td><td>例外境界を越えて<code>let</code>を移動しない</td></tr>
+            <tr class="advanced"><th><code>perform e</code></th><td><code>bind e as x in perform x</code></td><td>エフェクト値を変数化する</td></tr>
+        </tbody>
+    </table>
 
-    <p>
-        ブロックの各フィールドを左から右へ評価し、
-        各結果を変数へ束縛してからブロックを作成します。
-    </p>
+    <h2>一時変数の生成</h2>
 
-    <pre><code>let a = f x in
-let one = 1 in
-let b = int_add(y, one) in
-block 0 (a, b)</code></pre>
-
-    <h3>フィールドへの書き込み</h3>
-
-    <pre><code>setfield 0 (make_ref x) (f y)</code></pre>
-
-    <p>
-        書込み対象を先に評価し、その後で書き込む値を評価します。
-    </p>
-
-    <pre><code>let reference = make_ref x in
-let value = f y in
-setfield 0 reference value</code></pre>
-
-    <h3>タグによる分岐</h3>
-
-    <pre><code>switch tag (f x) with
-| leaf_tag -&gt; 0
-| node_tag -&gt; 1
-| default -&gt; match_failure()</code></pre>
-
-    <p>
-        関数適用の結果とタグの読み出し結果を、それぞれ変数へ束縛します。
-        各分岐も独立にK正規化します。
-    </p>
-
-    <pre><code>let value = f x in
-let value_tag = tag value in
-switch value_tag with
-| leaf_tag -&gt;
-    0
-| node_tag -&gt;
-    1
-| default -&gt;
-    match_failure()</code></pre>
-
-    <h2>K正規化で生成する一時変数</h2>
-
-    <p>
-        K正規化で生成する各一時変数には、一意な内部識別子と型を割り当てます。
-        表示上の名前が同じであっても、内部識別子が異なれば別の変数として扱います。
-    </p>
-
-    <p>
-        実装では、たとえば次のような情報を保持できます。
-    </p>
+    <table>
+        <thead><tr><th>情報</th><th>規則</th></tr></thead>
+        <tbody>
+            <tr><th>内部識別子</th><td>既存のすべての識別子と異なる一意な番号を割り当てる</td></tr>
+            <tr><th>表示名</th><td><code>tmp1</code>、<code>tmp2</code>など任意。意味上は内部識別子を使用する</td></tr>
+            <tr><th>型</th><td>束縛するコア式の型をそのまま付与する</td></tr>
+            <tr><th>ソース位置</th><td>原則として名前を付けた部分式の位置を引き継ぐ</td></tr>
+            <tr><th>スコープ</th><td>生成された<code>let</code>の本体だけ</td></tr>
+        </tbody>
+    </table>
 
     <pre><code>type id = {
     name : string;
@@ -1188,61 +242,109 @@ switch value_tag with
 type binding = {
     id : id;
     typ : typ;
+    location : source_location;
 }</code></pre>
 
-    <p>
-        新しい変数名は、人間が読む表示では
-        <code>tmp1</code>、
-        <code>tmp2</code>などとしても構いません。
-        コンパイラ内部では連番などによって必ず一意性を保証します。
-    </p>
+    <h2>変換例</h2>
+
+    <table>
+        <thead><tr><th>コア中間表現</th><th>K正規形</th><th>導入した束縛</th></tr></thead>
+        <tbody>
+            <tr><th><pre><code>int_add(x, int_mul(y, z))</code></pre></th><td><pre><code>let a = int_mul(y, z) in
+int_add(x, a)</code></pre></td><td><code>a</code>は内側の乗算結果</td></tr>
+            <tr><th><pre><code>int_add(x, 1)</code></pre></th><td><pre><code>let one = 1 in
+int_add(x, one)</code></pre></td><td>定数もオペランド位置では変数化する</td></tr>
+            <tr><th><pre><code>if lt(int_add(x, 1), y) then f x else g y</code></pre></th><td><pre><code>let one = 1 in
+let a = int_add(x, one) in
+let condition = lt(a, y) in
+if condition then f x else g y</code></pre></td><td>条件計算だけを分岐の前へ置く</td></tr>
+            <tr><th><pre><code>f (g x) (h y)</code></pre></th><td><pre><code>let a = g x in
+let b = h y in
+f a b</code></pre></td><td>実引数を左から右へ評価する</td></tr>
+            <tr><th><pre><code>(if condition then f else g) x</code></pre></th><td><pre><code>let function_value =
+    if condition then f else g
+in
+function_value x</code></pre></td><td>関数部分自体も変数化する</td></tr>
+            <tr><th><pre><code>block 0 (f x, int_add(y, 1))</code></pre></th><td><pre><code>let a = f x in
+let one = 1 in
+let b = int_add(y, one) in
+block 0 (a, b)</code></pre></td><td>フィールド式を左から右へ変数化する</td></tr>
+            <tr><th><pre><code>setfield 0 (make_ref x) (f y)</code></pre></th><td><pre><code>let reference = make_ref x in
+let value = f y in
+setfield 0 reference value</code></pre></td><td>対象を先に評価する</td></tr>
+            <tr><th><pre><code>switch tag (f x) with
+| 0 -&gt; 0
+| 1 -&gt; 1
+| default -&gt; match_failure()</code></pre></th><td><pre><code>let value = f x in
+let value_tag = tag value in
+switch value_tag with
+| 0 -&gt; 0
+| 1 -&gt; 1
+| default -&gt; match_failure()</code></pre></td><td>判定対象を一度だけ計算する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>変換時に禁止する移動</h2>
+
+    <table>
+        <thead><tr><th>境界</th><th>禁止する変換</th><th>理由</th></tr></thead>
+        <tbody>
+            <tr><th><code>if</code></th><td>分岐内の計算を条件分岐の前へ出す</td><td>実行されない分岐の副作用が発生するため</td></tr>
+            <tr><th><code>switch</code></th><td>case内の計算を判定前へ出す</td><td>選択されないcaseを評価してしまうため</td></tr>
+            <tr class="advanced"><th><code>try</code></th><td>保護式内の計算を<code>try</code>の外へ出す</td><td>例外が捕捉されなくなるため</td></tr>
+            <tr class="advanced"><th><code>perform</code></th><td>エフェクトを他の副作用より前後へ移動する</td><td>ハンドラが観測する順序が変わるため</td></tr>
+            <tr><th>関数適用</th><td>実引数の評価順序を入れ替える</td><td>左から右の評価順序を保持するため</td></tr>
+        </tbody>
+    </table>
 
     <h2>K正規化で変化しないもの</h2>
 
-    <ul>
-        <li>大域宣言の順序は変更しない</li>
-        <li>局所定義のスコープは変更しない</li>
-        <li>関数の仮引数と戻り値の型は変更しない</li>
-        <li>相互再帰関数の相互参照関係は変更しない</li>
-        <li>条件分岐と<code>switch</code>の分岐構造は変更しない</li>
-        <li>ブロックのタグ、フィールド数、フィールド順序は変更しない</li>
-        <li>副作用を伴う式の評価順序は変更しない</li>
-        <li>外部関数と外部名の対応は変更しない</li>
-    </ul>
+    <table>
+        <thead><tr><th>対象</th><th>保持する性質</th></tr></thead>
+        <tbody>
+            <tr><th>大域宣言</th><td>宣言順序</td></tr>
+            <tr><th>局所定義</th><td>スコープとシャドーイング</td></tr>
+            <tr><th>再帰関数</th><td>再帰グループと相互参照関係</td></tr>
+            <tr><th>制御構造</th><td>条件分岐、switch、例外境界</td></tr>
+            <tr><th>ブロック</th><td>タグ、フィールド数、フィールド順序</td></tr>
+            <tr><th>型</th><td>各式、変数、関数の型</td></tr>
+            <tr><th>副作用</th><td>発生回数と左から右の順序</td></tr>
+            <tr><th>外部関数</th><td>内部識別子と外部名の対応</td></tr>
+        </tbody>
+    </table>
 
     <h2>K正規化後に成立する条件</h2>
 
-    <ul>
-        <li>プログラム本体とすべての大域値の初期化式がK正規形になっている</li>
-        <li>局所関数と大域関数を含むすべての関数本体がK正規形になっている</li>
-        <li>プリミティブ演算のすべてのオペランドが変数である</li>
-        <li>関数適用の関数部分とすべての実引数が変数である</li>
-        <li>ブロックへ格納するすべてのフィールド値が変数である</li>
-        <li>フィールドの読み出し対象が変数である</li>
-        <li>フィールドへの書込み対象と書き込む値が変数である</li>
-        <li>タグの読み出し対象が変数である</li>
-        <li>条件分岐の判定対象が変数である</li>
-        <li><code>switch</code>の判定対象が変数である</li>
-        <li><code>raise</code>および<code>perform</code>の引数が変数である</li>
-        <li>複雑な部分式の結果が<code>let</code>で束縛されている</li>
-        <li>元の式の左から右の評価順序が<code>let</code>の順序として明示されている</li>
-        <li>K正規化によって生成された一時変数が一意な識別子を持っている</li>
-        <li>K正規化によって生成された一時変数に対応する部分式の型が付与されている</li>
-        <li>パターン、<code>match</code>式、型宣言、モジュール宣言など、Coreへの変換で除去された構文は再び導入されていない</li>
-    </ul>
+    <table>
+        <thead><tr><th>分類</th><th>条件</th></tr></thead>
+        <tbody>
+            <tr><th>適用</th><td>関数部分とすべての実引数が変数である</td></tr>
+            <tr><th>プリミティブ</th><td>すべてのオペランドが変数である</td></tr>
+            <tr><th>条件分岐</th><td>条件が変数である</td></tr>
+            <tr><th>switch</th><td>判定対象が変数である</td></tr>
+            <tr><th>ブロック作成</th><td>すべてのフィールド値が変数である</td></tr>
+            <tr><th>フィールド読出し</th><td>対象が変数である</td></tr>
+            <tr><th>フィールド書込み</th><td>対象と値が変数である</td></tr>
+            <tr><th>タグ読出し</th><td>対象が変数である</td></tr>
+            <tr class="advanced"><th>例外とエフェクト</th><td><code>raise</code>と<code>perform</code>の引数が変数である</td></tr>
+            <tr><th>一時変数</th><td>すべて一意な識別子と正しい型を持つ</td></tr>
+            <tr><th>評価順序</th><td>元の左から右の順序が<code>let</code>の順序として表現されている</td></tr>
+            <tr><th>構文</th><td>すべての大域初期化式と関数本体が同じ条件を再帰的に満たす</td></tr>
+            <tr><th>Core整合性</th><td>Core変換で除去したパターン、match、型宣言、モジュール構文を再導入していない</td></tr>
+        </tbody>
+    </table>
 
     <h2>次の変換との関係</h2>
 
-    <p>
-        K正規形では、計算の各段階と値の受け渡しが変数によって明示されます。
-        次のクロージャ変換では、それぞれの関数について自由変数を計算し、
-        関数のコードと自由変数を保持する環境を明示します。
-    </p>
-
-    <p>
-        関数適用の関数部分と実引数がすでに変数へ限定されているため、
-        クロージャ変換では、通常の関数適用を直接呼出しまたはクロージャ呼出しへ
-        比較的単純に分類できます。
-    </p>
+    <table>
+        <thead><tr><th>K正規形の性質</th><th>クロージャ変換での用途</th></tr></thead>
+        <tbody>
+            <tr><th>各計算結果に名前がある</th><td>自由変数集合を識別子単位で計算できる</td></tr>
+            <tr><th>関数部分が変数である</th><td>直接呼出し候補とクロージャ呼出し候補を分類できる</td></tr>
+            <tr><th>実引数が変数である</th><td>呼出しノードへ識別子列をそのまま渡せる</td></tr>
+            <tr><th>ブロックの要素が変数である</th><td>クロージャ環境のフィールド列を明示できる</td></tr>
+            <tr><th>型付き一時変数</th><td>値表現と後続の低水準化を選択できる</td></tr>
+        </tbody>
+    </table>
 </body>
 </html>
