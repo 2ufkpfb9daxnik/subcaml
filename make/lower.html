@@ -159,7 +159,7 @@
                     <code>float</code>
                     <span class="math">l r</span>
                 </th>
-                <td>発展　浮動小数点定数</td>
+                <td>セルフホスト後浮動小数点定数</td>
                 <td>
                     ラベル
                     <span class="math">l</span>の位置へ浮動小数点数
@@ -502,7 +502,7 @@
                     <code>raise</code>
                     <span class="math">x</span>
                 </th>
-                <td>発展　例外の送出</td>
+                <td>セルフホスト後例外の送出</td>
                 <td>変数<span class="math">x</span>が表す例外値を送出する</td>
             </tr>
             <tr class="advanced">
@@ -515,7 +515,7 @@
                     <code>-&gt;</code>
                     <span class="math">e</span><sub>2</sub>
                 </th>
-                <td>発展　例外処理</td>
+                <td>セルフホスト後例外処理</td>
                 <td>
                     例外ハンドラを設定して
                     <span class="math">e</span><sub>1</sub>を評価し、
@@ -530,7 +530,7 @@
                     <code>perform</code>
                     <span class="math">x</span>
                 </th>
-                <td>発展　エフェクトの実行</td>
+                <td>セルフホスト後エフェクトの実行</td>
                 <td>変数<span class="math">x</span>が表すエフェクトを実行する</td>
             </tr>
         </tbody>
@@ -651,11 +651,11 @@
             </tr>
             <tr class="advanced">
                 <th><code>float</code></th>
-                <td>発展　IEEE 754の値を格納した専用ブロックへのポインタ</td>
+                <td>セルフホスト後IEEE 754の値を格納した専用ブロックへのポインタ</td>
             </tr>
             <tr class="advanced">
                 <th>配列</th>
-                <td>発展　ヒープ上の可変長ブロックへのポインタ</td>
+                <td>セルフホスト後ヒープ上の可変長ブロックへのポインタ</td>
             </tr>
         </tbody>
     </table>
@@ -758,7 +758,7 @@ untag_int(w) = w &gt;&gt; 1</code></pre>
             </tr>
             <tr class="advanced">
                 <th>GC用ビット</th>
-                <td>発展　GCの世代、色、マーク状態などを保持する</td>
+                <td>セルフホスト後GCの世代、色、マーク状態などを保持する</td>
             </tr>
         </tbody>
     </table>
@@ -983,7 +983,7 @@ untag_int(w) = w &gt;&gt; 1</code></pre>
                 <td>文字列リテラルをUTF-8の静的データへ配置する</td>
             </tr>
             <tr class="advanced">
-                <th>発展　浮動小数点数<span class="math">r</span></th>
+                <th>セルフホスト後浮動小数点数<span class="math">r</span></th>
                 <td>
                     新しいラベル
                     <span class="math">l</span>について
@@ -1362,27 +1362,27 @@ call_indirect code (f, x1, ..., xn)</code></pre>
                 <td>
                     <code>runtime_call runtime_float_add(x, y)</code>など
                 </td>
-                <td>発展　ボックス化された浮動小数点演算をランタイムへ委ねる</td>
+                <td>セルフホスト後ボックス化された浮動小数点演算をランタイムへ委ねる</td>
             </tr>
             <tr class="advanced">
                 <th><code>array_make(length, initial)</code></th>
                 <td><code>runtime_call runtime_array_make(length, initial)</code></td>
-                <td>発展　配列を確保して初期値で埋める</td>
+                <td>セルフホスト後配列を確保して初期値で埋める</td>
             </tr>
             <tr class="advanced">
                 <th><code>array_length(array)</code></th>
                 <td><code>runtime_call runtime_array_length(array)</code></td>
-                <td>発展　配列の要素数を取得する</td>
+                <td>セルフホスト後配列の要素数を取得する</td>
             </tr>
             <tr class="advanced">
                 <th><code>array_get(array, index)</code></th>
                 <td><code>runtime_call runtime_array_get(array, index)</code></td>
-                <td>発展　範囲検査後に配列要素を読み出す</td>
+                <td>セルフホスト後範囲検査後に配列要素を読み出す</td>
             </tr>
             <tr class="advanced">
                 <th><code>array_set(array, index, value)</code></th>
                 <td><code>runtime_call runtime_array_set(array, index, value)</code></td>
-                <td>発展　範囲検査後に配列要素へ書き込む</td>
+                <td>セルフホスト後範囲検査後に配列要素へ書き込む</td>
             </tr>
         </tbody>
     </table>
@@ -1407,7 +1407,7 @@ call_indirect code (f, x1, ..., xn)</code></pre>
                     <code>runtime_call runtime_raise(</code>
                     <span class="math">x</span><code>)</code>
                 </td>
-                <td>発展　例外値をランタイムへ渡す</td>
+                <td>セルフホスト後例外値をランタイムへ渡す</td>
             </tr>
             <tr class="advanced">
                 <th>
@@ -1427,7 +1427,7 @@ call_indirect code (f, x1, ..., xn)</code></pre>
                     <span class="math">L</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
                 </td>
                 <td>
-                    発展　具体的なハンドラスタック操作は
+                    セルフホスト後具体的なハンドラスタック操作は
                     仮想命令またはランタイムAPIへ変換する
                 </td>
             </tr>
@@ -1440,7 +1440,7 @@ call_indirect code (f, x1, ..., xn)</code></pre>
                     <code>runtime_call runtime_perform(</code>
                     <span class="math">x</span><code>)</code>
                 </td>
-                <td>発展　エフェクト処理をランタイムへ委ねる</td>
+                <td>セルフホスト後エフェクト処理をランタイムへ委ねる</td>
             </tr>
         </tbody>
     </table>
@@ -1562,31 +1562,31 @@ L⟦make_closure partial_add [add; x]⟧</code></pre>
             </tr>
             <tr class="advanced">
                 <th><code>runtime_array_make</code></th>
-                <td>発展　配列を確保して初期値で埋める</td>
+                <td>セルフホスト後配列を確保して初期値で埋める</td>
             </tr>
             <tr class="advanced">
                 <th><code>runtime_array_length</code></th>
-                <td>発展　配列の要素数を取得する</td>
+                <td>セルフホスト後配列の要素数を取得する</td>
             </tr>
             <tr class="advanced">
                 <th><code>runtime_array_get</code></th>
-                <td>発展　範囲検査後に配列要素を読み出す</td>
+                <td>セルフホスト後範囲検査後に配列要素を読み出す</td>
             </tr>
             <tr class="advanced">
                 <th><code>runtime_array_set</code></th>
-                <td>発展　範囲検査後に配列要素へ書き込む</td>
+                <td>セルフホスト後範囲検査後に配列要素へ書き込む</td>
             </tr>
             <tr class="advanced">
                 <th><code>runtime_float_add</code>など</th>
-                <td>発展　ボックス化された浮動小数点演算を行う</td>
+                <td>セルフホスト後ボックス化された浮動小数点演算を行う</td>
             </tr>
             <tr class="advanced">
                 <th><code>runtime_raise</code></th>
-                <td>発展　例外値を送出する</td>
+                <td>セルフホスト後例外値を送出する</td>
             </tr>
             <tr class="advanced">
                 <th><code>runtime_perform</code></th>
-                <td>発展　エフェクトを現在のハンドラへ送る</td>
+                <td>セルフホスト後エフェクトを現在のハンドラへ送る</td>
             </tr>
         </tbody>
     </table>
@@ -1630,7 +1630,7 @@ L⟦make_closure partial_add [add; x]⟧</code></pre>
             </tr>
             <tr class="advanced">
                 <th><code>float64</code></th>
-                <td>発展　非ボックス化された浮動小数点値</td>
+                <td>セルフホスト後非ボックス化された浮動小数点値</td>
                 <td>浮動小数点専用命令とレジスタを導入する場合</td>
             </tr>
         </tbody>
@@ -1656,8 +1656,8 @@ L⟦make_closure partial_add [add; x]⟧</code></pre>
         <li>整数、真偽値、単位値、文字、定数コンストラクタがタグ付き即値へ変換されている</li>
         <li>文字列と定数ブロックが静的データまたはヒープブロックへ変換されている</li>
         <li>タプル、レコード、ヴァリアント、リスト、参照セルが具体的なブロック表現へ変換されている</li>
-        <li class="advanced">発展　浮動小数点数が専用の静的データまたはヒープブロックへ変換されている</li>
-        <li class="advanced">発展　配列が可変長ブロックとランタイム操作へ変換されている</li>
+        <li class="advanced">セルフホスト後浮動小数点数が専用の静的データまたはヒープブロックへ変換されている</li>
+        <li class="advanced">セルフホスト後配列が可変長ブロックとランタイム操作へ変換されている</li>
         <li>ブロック作成がヒープ確保、ヘッダ書込み、フィールド書込みへ変換されている</li>
         <li>フィールド読出しが<code>load</code>へ変換されている</li>
         <li>フィールド書込みが<code>store</code>へ変換されている</li>

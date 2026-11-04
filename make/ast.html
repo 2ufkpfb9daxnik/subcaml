@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>抽象構文木</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="site-header">
+        <button class="theme-toggle" type="button"></button>
+    </div>
+
+    <h1>抽象構文木</h1>
+
+    <p>
+        構文解析は、位置情報付きトークン列を、プログラムの階層構造を表す抽象構文木へ変換します。
+        抽象構文木では、括弧、区切り記号、予約語そのものを保持するのではなく、
+        宣言、式、パターン、型、モジュールなどの意味のある構造をノードとして保持します。
+    </p>
+
+    <ul>
+        <li>位置情報付きトークン列</li>
+        <li>↓ 構文解析・優先順位処理</li>
+        <li>名前解決前の抽象構文木</li>
+        <li>↓ 名前解決</li>
+        <li>解決済み抽象構文木</li>
+        <li>↓ 型推論</li>
+        <li>型付き抽象構文木</li>
+    </ul>
+
+    <h2>入力と出力</h2>
+
+    <table>
+        <thead><tr><th>項目</th><th>内容</th></tr></thead>
+        <tbody>
+            <tr><th>入力</th><td><code>token.html</code>で定義した位置情報付きトークン列</td></tr>
+            <tr><th>出力</th><td>名前が文字列または未解決パスのまま格納された抽象構文木</td></tr>
+            <tr><th>処理</th><td>文法の認識、演算子優先順位、結合方向、関数適用、括弧構造の決定</td></tr>
+            <tr><th>失敗</th><td>予期しないトークン、閉じ記号の不足、宣言や式の不足、禁止された構文</td></tr>
+        </tbody>
+    </table>
+
+    <h2>抽象構文木で保持する情報</h2>
+
+    <table>
+        <thead><tr><th>情報</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr><th>ノードの種類</th><td>宣言、式、パターン、型などの構造を表す</td></tr>
+            <tr><th>子ノード</th><td>部分式、部分パターン、型引数、宣言列を保持する</td></tr>
+            <tr><th>未解決名</th><td>値名、型名、コンストラクタ名、フィールド名、モジュールパスを名前解決へ渡す</td></tr>
+            <tr><th>リテラル値</th><td>整数、浮動小数点数、文字、文字列、真偽値、単位値を保持する</td></tr>
+            <tr><th>ソース位置</th><td>名前解決、型推論、後続変換のエラー報告に使用する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>位置付きノード</h2>
+
+    <pre><code>type 'a located = {
+    desc : 'a;
+    span : span;
+}</code></pre>
+
+    <p>
+        各主要ノードは、先頭トークンの開始位置から末尾トークンの終了位置までを表す
+        <code>span</code>を持ちます。括弧で囲まれた式では、外側の括弧を含む位置を保持します。
+    </p>
+
+    <h2>名前とパス</h2>
+
+    <table>
+        <thead><tr><th>構文</th><th>内部表現</th><th>例</th></tr></thead>
+        <tbody>
+            <tr><th>非修飾名</th><td><code>Longident [name]</code></td><td><code>x</code>、<code>tree</code>、<code>Some</code></td></tr>
+            <tr><th>修飾名</th><td><code>Longident [module1; ...; name]</code></td><td><code>String.length</code>、<code>A.B.t</code></td></tr>
+            <tr><th>モジュールパス</th><td><code>Longident [module1; ...; moduleN]</code></td><td><code>A</code>、<code>A.B.C</code></td></tr>
+        </tbody>
+    </table>
+
+    <pre><code>type longident = string list</code></pre>
+
+    <p>
+        構文解析ではパスの各要素を文字列として保持します。
+        各部分が本当にモジュールか、末尾が値、型、コンストラクタのどれかは名前解決で決定します。
+    </p>
+
+    <h2>定数</h2>
+
+    <pre><code>type constant =
+    | Int of int
+    | Float of float
+    | Bool of bool
+    | Char of char
+    | String of string
+    | Unit</code></pre>
+
+    <table>
+        <thead><tr><th>トークン列</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>INT(42)</code></th><td><code>Constant (Int 42)</code></td></tr>
+            <tr><th><code>FLOAT(3.14)</code></th><td><code>Constant (Float 3.14)</code></td></tr>
+            <tr><th><code>TRUE</code></th><td><code>Constant (Bool true)</code></td></tr>
+            <tr><th><code>FALSE</code></th><td><code>Constant (Bool false)</code></td></tr>
+            <tr><th><code>CHAR('a')</code></th><td><code>Constant (Char 'a')</code></td></tr>
+            <tr><th><code>STRING("text")</code></th><td><code>Constant (String "text")</code></td></tr>
+            <tr><th><code>LPAREN RPAREN</code></th><td><code>Constant Unit</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>プログラム</h2>
+
+    <pre><code>type program = structure_item list</code></pre>
+
+    <p>
+        ソースファイル全体は、トップレベル宣言を出現順に並べた列として表します。
+        ファイル末尾の<code>EOF</code>は抽象構文木へ残しません。
+    </p>
+
+    <h2>宣言</h2>
+
+    <pre><code>type structure_item = structure_item_desc located
+
+and structure_item_desc =
+    | ValueDefinition of rec_flag * value_binding list
+    | TypeDefinition of type_declaration list
+    | ModuleDefinition of string * module_expression
+    | Open of longident
+    | Include of module_expression
+    | External of string * type_expression * string
+    | ModuleTypeDefinition of string * module_type
+    | ExceptionDefinition of constructor_declaration
+    | EffectDefinition of effect_declaration</code></pre>
+
+    <table>
+        <thead><tr><th>ソース構文</th><th>抽象構文ノード</th></tr></thead>
+        <tbody>
+            <tr><th><code>let p = e</code></th><td><code>ValueDefinition (Nonrecursive, [{ pattern = p; expression = e }])</code></td></tr>
+            <tr><th><code>let p1 = e1 and p2 = e2</code></th><td><code>ValueDefinition (Nonrecursive, [binding1; binding2])</code></td></tr>
+            <tr><th><code>let rec f p = e</code></th><td><code>ValueDefinition (Recursive, [function_binding])</code></td></tr>
+            <tr><th><code>type t = T</code></th><td><code>TypeDefinition [declaration]</code></td></tr>
+            <tr><th><code>module M = m</code></th><td><code>ModuleDefinition ("M", m)</code></td></tr>
+            <tr><th><code>open M</code></th><td><code>Open ["M"]</code></td></tr>
+            <tr><th><code>include m</code></th><td><code>Include m</code></td></tr>
+            <tr><th><code>external x : T = "name"</code></th><td><code>External ("x", T, "name")</code></td></tr>
+            <tr class="advanced"><th><code>exception C of T</code></th><td><code>ExceptionDefinition constructor</code></td></tr>
+            <tr class="advanced"><th><code>module type S = MT</code></th><td><code>ModuleTypeDefinition ("S", MT)</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>再帰性</h2>
+
+    <pre><code>type rec_flag =
+    | Nonrecursive
+    | Recursive</code></pre>
+
+    <p>
+        <code>and</code>で結ばれた定義は、一つの<code>ValueDefinition</code>または
+        <code>TypeDefinition</code>の中に列として保持します。
+        再帰グループのスコープ規則は名前解決で適用します。
+    </p>
+
+    <h2>値束縛</h2>
+
+    <pre><code>type value_binding = {
+    pattern : pattern;
+    expression : expression;
+    binding_span : span;
+}</code></pre>
+
+    <p>
+        関数定義の糖衣構文は、構文解析時に無名関数へ変換します。
+        これにより、トップレベルと局所の関数定義を通常の値束縛として統一して扱えます。
+    </p>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>let f x y = e</code></th><td><code>let f = fun x -&gt; fun y -&gt; e</code></td></tr>
+            <tr><th><code>let rec f x = e</code></th><td><code>ValueDefinition (Recursive, [{ pattern = f; expression = Function (x, e) }])</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>式</h2>
+
+    <pre><code>type expression = expression_desc located
+
+and expression_desc =
+    | Constant of constant
+    | Identifier of longident
+    | Primitive of primitive * expression list
+    | IfThenElse of expression * expression * expression
+    | Let of rec_flag * value_binding list * expression
+    | Function of pattern * expression
+    | Apply of expression * expression
+    | Tuple of expression list
+    | Record of (longident * expression) list
+    | Field of expression * longident
+    | RecordUpdate of expression * (longident * expression) list
+    | SetField of expression * longident * expression
+    | Constructor of longident * expression option
+    | List of expression list
+    | Cons of expression * expression
+    | Match of expression * case list
+    | Sequence of expression * expression
+    | Reference of expression
+    | Dereference of expression
+    | Assign of expression * expression
+    | While of expression * expression
+    | For of string * expression * direction * expression * expression
+    | Constraint of expression * type_expression
+    | Array of expression list
+    | ArrayGet of expression * expression
+    | ArraySet of expression * expression * expression
+    | Raise of expression
+    | TryWith of expression * case list
+    | Perform of expression
+    | Continue of expression * expression
+    | Discontinue of expression * expression
+    | LetModule of string * module_expression * expression
+    | LetOpen of longident * expression
+    | OpenExpression of longident * expression
+    | PackModule of longident * module_type
+    | UnpackModule of string * expression * module_type * expression</code></pre>
+
+    <h2>変数と修飾名</h2>
+
+    <table>
+        <thead><tr><th>トークン列</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>LIDENT("x")</code></th><td><code>Identifier ["x"]</code></td></tr>
+            <tr><th><code>UIDENT("M") DOT LIDENT("x")</code></th><td><code>Identifier ["M"; "x"]</code></td></tr>
+            <tr><th><code>UIDENT("A") DOT UIDENT("B") DOT LIDENT("x")</code></th><td><code>Identifier ["A"; "B"; "x"]</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>条件式</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>if e1 then e2 else e3</code></th><td><code>IfThenElse (e1, e2, e3)</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        基本仕様では<code>else</code>を必須とします。
+        <code>if e1 then e2</code>を許可する場合は、構文解析時に
+        <code>IfThenElse (e1, e2, Unit)</code>へ変換し、型検査で<code>e2 : unit</code>を要求します。
+    </p>
+
+    <h2>局所定義</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>let p = e1 in e2</code></th><td><code>Let (Nonrecursive, [binding], e2)</code></td></tr>
+            <tr><th><code>let rec f x = e1 in e2</code></th><td><code>Let (Recursive, [function_binding], e2)</code></td></tr>
+            <tr><th><code>let rec f = e1 and g = e2 in e3</code></th><td><code>Let (Recursive, [binding_f; binding_g], e3)</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>無名関数と関数適用</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>fun p -&gt; e</code></th><td><code>Function (p, e)</code></td></tr>
+            <tr><th><code>fun p1 p2 -&gt; e</code></th><td><code>Function (p1, Function (p2, e))</code></td></tr>
+            <tr><th><code>f x</code></th><td><code>Apply (f, x)</code></td></tr>
+            <tr><th><code>f x y</code></th><td><code>Apply (Apply (f, x), y)</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        カリー化と左結合は抽象構文木の形で明示します。
+        複数引数専用の関数ノードや適用ノードは使用しません。
+    </p>
+
+    <h2>組</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>(e1, e2)</code></th><td><code>Tuple [e1; e2]</code></td></tr>
+            <tr><th><code>(e1, e2, e3)</code></th><td><code>Tuple [e1; e2; e3]</code></td></tr>
+            <tr><th><code>(e)</code></th><td><code>e</code>と同じノード。外側の位置だけ保持できる</td></tr>
+            <tr><th><code>()</code></th><td><code>Constant Unit</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>レコード</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>{ x = e1; y = e2 }</code></th><td><code>Record [(["x"], e1); (["y"], e2)]</code></td></tr>
+            <tr><th><code>e.x</code></th><td><code>Field (e, ["x"])</code></td></tr>
+            <tr><th><code>{ e with x = e1; y = e2 }</code></th><td><code>RecordUpdate (e, fields)</code></td></tr>
+            <tr><th><code>e1.x &lt;- e2</code></th><td><code>SetField (e1, ["x"], e2)</code></td></tr>
+            <tr><th><code>e.M.x</code></th><td><code>Field (e, ["M"; "x"])</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        フィールド名がどのレコード型に属するかは抽象構文木では決定しません。
+        名前解決は候補を収集し、必要な場合は型推論が対象レコード型を確定します。
+    </p>
+
+    <h2>コンストラクタ</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>None</code></th><td><code>Constructor (["None"], None)</code></td></tr>
+            <tr><th><code>Some e</code></th><td><code>Constructor (["Some"], Some e)</code></td></tr>
+            <tr><th><code>M.Some e</code></th><td><code>Constructor (["M"; "Some"], Some e)</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        コンストラクタが複数の引数を取る場合、引数は組として一つの式にします。
+        <code>C (e1, e2)</code>は<code>Constructor (C, Some (Tuple [e1; e2]))</code>になります。
+    </p>
+
+    <h2>リスト</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>構文解析直後</th><th>後続の脱糖候補</th></tr></thead>
+        <tbody>
+            <tr><th><code>[]</code></th><td><code>List []</code></td><td><code>Constructor ([], None)</code></td></tr>
+            <tr><th><code>[e1; e2; e3]</code></th><td><code>List [e1; e2; e3]</code></td><td><code>e1 :: (e2 :: (e3 :: []))</code></td></tr>
+            <tr><th><code>e1 :: e2</code></th><td><code>Cons (e1, e2)</code></td><td>組込みconsコンストラクタ</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        エラー位置と元の表記を保つため、名前解決前ASTでは<code>List</code>と<code>Cons</code>を保持します。
+        Core変換までに通常のコンストラクタへ脱糖します。
+    </p>
+
+    <h2>match式</h2>
+
+    <pre><code>type case = {
+    case_pattern : pattern;
+    case_guard : expression option;
+    case_body : expression;
+    case_span : span;
+}</code></pre>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>match e with p -&gt; body</code></th><td><code>Match (e, [{ pattern = p; guard = None; body }])</code></td></tr>
+            <tr><th><code>match e with p when g -&gt; body</code></th><td><code>Match (e, [{ pattern = p; guard = Some g; body }])</code></td></tr>
+            <tr><th>先頭の<code>|</code></th><td>省略可能な区切りであり、ASTには残さない</td></tr>
+        </tbody>
+    </table>
+
+    <h2>逐次実行と参照</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>e1; e2</code></th><td><code>Sequence (e1, e2)</code></td></tr>
+            <tr><th><code>ref e</code></th><td><code>Reference e</code></td></tr>
+            <tr><th><code>!e</code></th><td><code>Dereference e</code></td></tr>
+            <tr><th><code>e1 := e2</code></th><td><code>Assign (e1, e2)</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        <code>ref</code>、<code>!</code>、<code>:=</code>をプリミティブ適用として表すこともできますが、
+        値制限と副作用判定を明確にするため、名前解決前ASTでは専用ノードを使用します。
+    </p>
+
+    <h2>ループ</h2>
+
+    <pre><code>type direction =
+    | UpTo
+    | DownTo</code></pre>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>while e1 do e2 done</code></th><td><code>While (e1, e2)</code></td></tr>
+            <tr><th><code>for x = e1 to e2 do e3 done</code></th><td><code>For ("x", e1, UpTo, e2, e3)</code></td></tr>
+            <tr><th><code>for x = e1 downto e2 do e3 done</code></th><td><code>For ("x", e1, DownTo, e2, e3)</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>型注釈</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>(e : T)</code></th><td><code>Constraint (e, T)</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>プリミティブ演算</h2>
+
+    <pre><code>type primitive =
+    | IntNeg | IntAdd | IntSub | IntMul | IntDiv | IntMod
+    | FloatNeg | FloatAdd | FloatSub | FloatMul | FloatDiv
+    | Equal | NotEqual | Less | LessEqual | Greater | GreaterEqual
+    | BooleanNot | BooleanAnd | BooleanOr
+    | StringConcat</code></pre>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>-e</code></th><td><code>Primitive (IntNeg, [e])</code></td></tr>
+            <tr><th><code>e1 + e2</code></th><td><code>Primitive (IntAdd, [e1; e2])</code></td></tr>
+            <tr><th><code>-.e</code></th><td><code>Primitive (FloatNeg, [e])</code></td></tr>
+            <tr><th><code>e1 +. e2</code></th><td><code>Primitive (FloatAdd, [e1; e2])</code></td></tr>
+            <tr><th><code>e1 = e2</code></th><td><code>Primitive (Equal, [e1; e2])</code></td></tr>
+            <tr><th><code>not e</code></th><td><code>Primitive (BooleanNot, [e])</code></td></tr>
+            <tr><th><code>e1 &amp;&amp; e2</code></th><td><code>Primitive (BooleanAnd, [e1; e2])</code></td></tr>
+            <tr><th><code>e1 ^ e2</code></th><td><code>Primitive (StringConcat, [e1; e2])</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        <code>&amp;&amp;</code>と<code>||</code>は短絡評価が必要です。
+        ASTではプリミティブとして区別し、Core変換で条件式へ変換するか、専用Coreノードへ変換します。
+    </p>
+
+    <h2>パターン</h2>
+
+    <pre><code>type pattern = pattern_desc located
+
+and pattern_desc =
+    | WildcardPattern
+    | VariablePattern of string
+    | ConstantPattern of constant
+    | TuplePattern of pattern list
+    | RecordPattern of (longident * pattern) list
+    | ConstructorPattern of longident * pattern option
+    | ListPattern of pattern list
+    | ConsPattern of pattern * pattern
+    | OrPattern of pattern * pattern
+    | AliasPattern of pattern * string
+    | ConstraintPattern of pattern * type_expression
+    | ExceptionPattern of pattern
+    | EffectPattern of pattern * pattern
+    | ModulePattern of string * module_type option</code></pre>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>_</code></th><td><code>WildcardPattern</code></td></tr>
+            <tr><th><code>x</code></th><td><code>VariablePattern "x"</code></td></tr>
+            <tr><th><code>42</code></th><td><code>ConstantPattern (Int 42)</code></td></tr>
+            <tr><th><code>(p1, p2)</code></th><td><code>TuplePattern [p1; p2]</code></td></tr>
+            <tr><th><code>{ x = p1; y = p2 }</code></th><td><code>RecordPattern [(["x"], p1); (["y"], p2)]</code></td></tr>
+            <tr><th><code>None</code></th><td><code>ConstructorPattern (["None"], None)</code></td></tr>
+            <tr><th><code>Some p</code></th><td><code>ConstructorPattern (["Some"], Some p)</code></td></tr>
+            <tr><th><code>[]</code></th><td><code>ListPattern []</code></td></tr>
+            <tr><th><code>[p1; p2]</code></th><td><code>ListPattern [p1; p2]</code></td></tr>
+            <tr><th><code>p1 :: p2</code></th><td><code>ConsPattern (p1, p2)</code></td></tr>
+            <tr><th><code>p1 | p2</code></th><td><code>OrPattern (p1, p2)</code></td></tr>
+            <tr><th><code>p as x</code></th><td><code>AliasPattern (p, "x")</code></td></tr>
+            <tr><th><code>(p : T)</code></th><td><code>ConstraintPattern (p, T)</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>パターンと式の識別子</h2>
+
+    <p>
+        小文字識別子は式では参照ですが、パターンでは新しい変数束縛です。
+        大文字識別子はパターンでもコンストラクタ候補として扱います。
+    </p>
+
+    <table>
+        <thead><tr><th>トークン</th><th>式文脈</th><th>パターン文脈</th></tr></thead>
+        <tbody>
+            <tr><th><code>LIDENT("x")</code></th><td><code>Identifier ["x"]</code></td><td><code>VariablePattern "x"</code></td></tr>
+            <tr><th><code>UIDENT("Some")</code></th><td><code>Constructor (["Some"], ...)</code></td><td><code>ConstructorPattern (["Some"], ...)</code></td></tr>
+            <tr><th><code>UNDERSCORE</code></th><td>式としては構文エラー</td><td><code>WildcardPattern</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>型式</h2>
+
+    <pre><code>type type_expression = type_expression_desc located
+
+and type_expression_desc =
+    | TypeVariable of string
+    | TypeConstructor of longident * type_expression list
+    | ArrowType of type_expression * type_expression
+    | TupleType of type_expression list
+    | PackageType of module_type</code></pre>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>'a</code></th><td><code>TypeVariable "a"</code></td></tr>
+            <tr><th><code>int</code></th><td><code>TypeConstructor (["int"], [])</code></td></tr>
+            <tr><th><code>'a list</code></th><td><code>TypeConstructor (["list"], [TypeVariable "a"])</code></td></tr>
+            <tr><th><code>('a, int) result</code></th><td><code>TypeConstructor (["result"], ['a; int])</code></td></tr>
+            <tr><th><code>A.B.t</code></th><td><code>TypeConstructor (["A"; "B"; "t"], [])</code></td></tr>
+            <tr><th><code>T1 -&gt; T2</code></th><td><code>ArrowType (T1, T2)</code></td></tr>
+            <tr><th><code>T1 * T2 * T3</code></th><td><code>TupleType [T1; T2; T3]</code></td></tr>
+            <tr class="advanced"><th><code>(module S)</code></th><td><code>PackageType S</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>型の結合方向</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>A -&gt; B -&gt; C</code></th><td><code>ArrowType (A, ArrowType (B, C))</code></td></tr>
+            <tr><th><code>A * B -&gt; C</code></th><td><code>ArrowType (TupleType [A; B], C)</code></td></tr>
+            <tr><th><code>A -&gt; B * C</code></th><td><code>ArrowType (A, TupleType [B; C])</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        関数型は右結合、組型は関数型より強く結合します。
+        括弧はASTの構造決定に使用した後、通常は専用ノードとして残しません。
+    </p>
+
+    <h2>型宣言</h2>
+
+    <pre><code>type type_declaration = {
+    type_name : string;
+    type_parameters : string list;
+    type_kind : type_kind;
+    type_declaration_span : span;
+}
+
+and type_kind =
+    | AbstractType
+    | AliasType of type_expression
+    | VariantType of constructor_declaration list
+    | RecordType of field_declaration list
+
+and constructor_declaration = {
+    constructor_name : string;
+    constructor_argument : type_expression option;
+    constructor_span : span;
+}
+
+and field_declaration = {
+    field_name : string;
+    mutable_flag : bool;
+    field_type : type_expression;
+    field_span : span;
+}</code></pre>
+
+    <table>
+        <thead><tr><th>ソース</th><th>type_kind</th></tr></thead>
+        <tbody>
+            <tr><th><code>type t</code></th><td><code>AbstractType</code></td></tr>
+            <tr><th><code>type t = int</code></th><td><code>AliasType int</code></td></tr>
+            <tr><th><code>type t = A | B of int</code></th><td><code>VariantType [A; B of int]</code></td></tr>
+            <tr><th><code>type t = { x : int; mutable y : bool }</code></th><td><code>RecordType [x; y]</code></td></tr>
+            <tr><th><code>type 'a t = ...</code></th><td><code>type_parameters = ["a"]</code></td></tr>
+            <tr><th><code>type ('a, 'b) t = ...</code></th><td><code>type_parameters = ["a"; "b"]</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>相互再帰型宣言</h2>
+
+    <p>
+        <code>type t1 = T1 and t2 = T2</code>は、一つの
+        <code>TypeDefinition [decl1; decl2]</code>として保持します。
+        同じ宣言グループ内の型名を先に登録する処理は名前解決が行います。
+    </p>
+
+    <h2>モジュール式</h2>
+
+    <pre><code>type module_expression = module_expression_desc located
+
+and module_expression_desc =
+    | ModuleIdentifier of longident
+    | Structure of structure_item list
+    | ModuleConstraint of module_expression * module_type
+    | Functor of string * module_type * module_expression
+    | FunctorApply of module_expression * module_expression
+    | Unpack of expression * module_type</code></pre>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>M</code></th><td><code>ModuleIdentifier ["M"]</code></td></tr>
+            <tr><th><code>A.B</code></th><td><code>ModuleIdentifier ["A"; "B"]</code></td></tr>
+            <tr><th><code>struct d1 ... dn end</code></th><td><code>Structure [d1; ...; dn]</code></td></tr>
+            <tr><th><code>(m : S)</code></th><td><code>ModuleConstraint (m, S)</code></td></tr>
+            <tr class="advanced"><th><code>functor (X : S) -&gt; m</code></th><td><code>Functor ("X", S, m)</code></td></tr>
+            <tr class="advanced"><th><code>m1(m2)</code></th><td><code>FunctorApply (m1, m2)</code></td></tr>
+            <tr class="advanced"><th><code>(val e : S)</code></th><td><code>Unpack (e, S)</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>モジュール型</h2>
+
+    <pre><code>type module_type = module_type_desc located
+
+and module_type_desc =
+    | ModuleTypeIdentifier of longident
+    | Signature of signature_item list
+    | FunctorType of string * module_type * module_type
+    | WithType of module_type * longident * type_expression</code></pre>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>S</code></th><td><code>ModuleTypeIdentifier ["S"]</code></td></tr>
+            <tr><th><code>sig s1 ... sn end</code></th><td><code>Signature [s1; ...; sn]</code></td></tr>
+            <tr class="advanced"><th><code>functor (X : S1) -&gt; S2</code></th><td><code>FunctorType ("X", S1, S2)</code></td></tr>
+            <tr class="advanced"><th><code>S with type t = T</code></th><td><code>WithType (S, ["t"], T)</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>シグネチャ項目</h2>
+
+    <pre><code>type signature_item = signature_item_desc located
+
+and signature_item_desc =
+    | ValueSpecification of string * type_expression
+    | TypeSpecification of type_declaration
+    | ModuleSpecification of string * module_type
+    | ModuleTypeSpecification of string * module_type option
+    | ExceptionSpecification of constructor_declaration
+    | IncludeSpecification of module_type</code></pre>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>val x : T</code></th><td><code>ValueSpecification ("x", T)</code></td></tr>
+            <tr><th><code>type t</code></th><td><code>TypeSpecification abstract_t</code></td></tr>
+            <tr><th><code>type t = T</code></th><td><code>TypeSpecification alias_t</code></td></tr>
+            <tr><th><code>module M : S</code></th><td><code>ModuleSpecification ("M", S)</code></td></tr>
+            <tr class="advanced"><th><code>module type S</code></th><td><code>ModuleTypeSpecification ("S", None)</code></td></tr>
+            <tr class="advanced"><th><code>module type S = S1</code></th><td><code>ModuleTypeSpecification ("S", Some S1)</code></td></tr>
+            <tr><th><code>exception C of T</code></th><td><code>ExceptionSpecification constructor</code></td></tr>
+            <tr><th><code>include S</code></th><td><code>IncludeSpecification S</code></td></tr>
+            <tr class="advanced"><th><code>[| e1; e2 |]</code></th><td><code>Array [e1; e2]</code></td></tr>
+            <tr class="advanced"><th><code>e1.(e2)</code></th><td><code>ArrayGet (e1, e2)</code></td></tr>
+            <tr class="advanced"><th><code>e1.(e2) &lt;- e3</code></th><td><code>ArraySet (e1, e2, e3)</code></td></tr>
+            <tr class="advanced"><th><code>raise e</code></th><td><code>Raise e</code></td></tr>
+            <tr class="advanced"><th><code>try e with ...</code></th><td><code>TryWith (e, cases)</code></td></tr>
+            <tr class="advanced"><th><code>perform e</code></th><td><code>Perform e</code></td></tr>
+            <tr class="advanced"><th><code>continue e1 e2</code></th><td><code>Continue (e1, e2)</code></td></tr>
+            <tr class="advanced"><th><code>discontinue e1 e2</code></th><td><code>Discontinue (e1, e2)</code></td></tr>
+            <tr class="advanced"><th><code>let module M = m in e</code></th><td><code>LetModule ("M", m, e)</code></td></tr>
+            <tr class="advanced"><th><code>let open M in e</code></th><td><code>LetOpen (["M"], e)</code></td></tr>
+            <tr class="advanced"><th><code>M.(e)</code></th><td><code>OpenExpression (["M"], e)</code></td></tr>
+            <tr class="advanced"><th><code>(module M : S)</code></th><td><code>PackModule (["M"], S)</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>演算子の優先順位</h2>
+
+    <p>下にある段階ほど強く結合します。</p>
+
+    <table>
+        <thead><tr><th>段階</th><th>構文</th><th>結合方向</th><th>ASTノード</th></tr></thead>
+        <tbody>
+            <tr><th>1</th><td><code>;</code></td><td>右結合</td><td><code>Sequence</code></td></tr>
+            <tr><th>2</th><td><code>:=</code>、<code>&lt;-</code></td><td>右結合</td><td><code>Assign</code>、<code>SetField</code>、<code>ArraySet</code></td></tr>
+            <tr><th>3</th><td><code>||</code></td><td>右結合</td><td><code>Primitive BooleanOr</code></td></tr>
+            <tr><th>4</th><td><code>&amp;&amp;</code></td><td>右結合</td><td><code>Primitive BooleanAnd</code></td></tr>
+            <tr><th>5</th><td><code>=</code>、<code>&lt;&gt;</code>、<code>&lt;</code>、<code>&lt;=</code>、<code>&gt;</code>、<code>&gt;=</code></td><td>左結合</td><td>比較プリミティブ</td></tr>
+            <tr><th>6</th><td><code>::</code></td><td>右結合</td><td><code>Cons</code></td></tr>
+            <tr><th>7</th><td><code>+</code>、<code>-</code>、<code>+.</code>、<code>-.</code>、<code>^</code></td><td>左結合</td><td>加減算、連結プリミティブ</td></tr>
+            <tr><th>8</th><td><code>*</code>、<code>/</code>、<code>mod</code>、<code>*.</code>、<code>/.</code></td><td>左結合</td><td>乗除算プリミティブ</td></tr>
+            <tr><th>9</th><td>単項<code>-</code>、<code>-.</code>、<code>not</code>、<code>!</code>、<code>ref</code></td><td>前置</td><td>単項プリミティブ、参照ノード</td></tr>
+            <tr><th>10</th><td>関数適用</td><td>左結合</td><td><code>Apply</code></td></tr>
+            <tr><th>11</th><td>フィールド参照、配列参照</td><td>左から順に後置</td><td><code>Field</code>、<code>ArrayGet</code></td></tr>
+            <tr><th>12</th><td>定数、識別子、コンストラクタ、括弧、リスト、レコード</td><td>原子的</td><td>各基本ノード</td></tr>
+        </tbody>
+    </table>
+
+    <h2>優先順位の変換例</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr><th><code>a + b * c</code></th><td><code>IntAdd (a, IntMul (b, c))</code></td></tr>
+            <tr><th><code>a - b - c</code></th><td><code>IntSub (IntSub (a, b), c)</code></td></tr>
+            <tr><th><code>a :: b :: c</code></th><td><code>Cons (a, Cons (b, c))</code></td></tr>
+            <tr><th><code>f x y</code></th><td><code>Apply (Apply (f, x), y)</code></td></tr>
+            <tr><th><code>f x + g y</code></th><td><code>IntAdd (Apply (f, x), Apply (g, y))</code></td></tr>
+            <tr><th><code>!r.x</code></th><td><code>Dereference (Field (r, x))</code></td></tr>
+            <tr><th><code>e1; e2; e3</code></th><td><code>Sequence (e1, Sequence (e2, e3))</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>構文解析方式</h2>
+
+    <table>
+        <thead><tr><th>対象</th><th>推奨方式</th></tr></thead>
+        <tbody>
+            <tr><th>宣言、match、let、module</th><td>再帰下降構文解析</td></tr>
+            <tr><th>演算子式</th><td>優先順位ごとの再帰下降、Pratt parser、またはMenhirの優先順位宣言</td></tr>
+            <tr><th>関数適用</th><td>原子的式が続く間、左から<code>Apply</code>を構築する</td></tr>
+            <tr><th>型式</th><td>型適用、組型、関数型の順に優先順位を分ける</td></tr>
+            <tr><th>パターン</th><td>原子的パターン、コンストラクタ、cons、OR、as、型注釈を段階化する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>構文解析関数</h2>
+
+    <table>
+        <thead><tr><th>関数</th><th>入力</th><th>出力</th></tr></thead>
+        <tbody>
+            <tr><th><code>parse_program</code></th><td>トークン列</td><td><code>program</code></td></tr>
+            <tr><th><code>parse_structure_item</code></th><td>宣言の先頭</td><td><code>structure_item</code></td></tr>
+            <tr><th><code>parse_expression</code></th><td>式の先頭</td><td><code>expression</code></td></tr>
+            <tr><th><code>parse_pattern</code></th><td>パターンの先頭</td><td><code>pattern</code></td></tr>
+            <tr><th><code>parse_type_expression</code></th><td>型式の先頭</td><td><code>type_expression</code></td></tr>
+            <tr><th><code>parse_module_expression</code></th><td>モジュール式の先頭</td><td><code>module_expression</code></td></tr>
+            <tr><th><code>parse_module_type</code></th><td>モジュール型の先頭</td><td><code>module_type</code></td></tr>
+            <tr><th><code>parse_signature_item</code></th><td>シグネチャ項目の先頭</td><td><code>signature_item</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>トークン操作</h2>
+
+    <pre><code>peek()              次のトークンを消費せず返す
+advance()           次のトークンを消費して返す
+accept(token_kind)  一致すれば消費してtrueを返す
+expect(token_kind)  一致すれば消費し、不一致なら構文エラー
+span_from(start)    startから直前トークン末尾までの範囲を作る</code></pre>
+
+    <h2>構文上の糖衣と保持方針</h2>
+
+    <table>
+        <thead><tr><th>構文</th><th>ASTでの方針</th><th>理由</th></tr></thead>
+        <tbody>
+            <tr><th>複数引数関数</th><td>構文解析時に一引数<code>Function</code>へ変換する</td><td>カリー化を直ちに明示できる</td></tr>
+            <tr><th>複数引数適用</th><td>構文解析時に左結合<code>Apply</code>へ変換する</td><td>適用規則を単純化できる</td></tr>
+            <tr><th>リストリテラル</th><td><code>List</code>として保持する</td><td>元の位置と診断を保ち、Core変換で脱糖する</td></tr>
+            <tr><th>参照操作</th><td>専用ノードとして保持する</td><td>副作用と値制限を明示できる</td></tr>
+            <tr><th>short-circuit演算</th><td>専用primitiveとして保持する</td><td>評価順序を失わない</td></tr>
+            <tr><th>for、while</th><td>専用ノードとして保持する</td><td>型検査と診断後にCoreへ脱糖する</td></tr>
+            <tr><th>括弧</th><td>構造決定後は除去する</td><td>意味のない具象構文だから</td></tr>
+            <tr><th>先頭の<code>|</code></th><td>除去する</td><td>分岐区切りであり意味を持たない</td></tr>
+        </tbody>
+    </table>
+
+    <h2>変換例</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>抽象構文</th></tr></thead>
+        <tbody>
+            <tr>
+                <th><pre><code>let id x = x</code></pre></th>
+                <td><pre><code>ValueDefinition (
+  Nonrecursive,
+  [{ pattern = VariablePattern "id";
+     expression =
+       Function (
+         VariablePattern "x",
+         Identifier ["x"] ) }]
+)</code></pre></td>
+            </tr>
+            <tr>
+                <th><pre><code>let rec map f xs =
+  match xs with
+  | [] -&gt; []
+  | x :: rest -&gt; f x :: map f rest</code></pre></th>
+                <td><pre><code>ValueDefinition (
+  Recursive,
+  [{ pattern = VariablePattern "map";
+     expression =
+       Function (VariablePattern "f",
+         Function (VariablePattern "xs",
+           Match (Identifier ["xs"], [
+             { pattern = ListPattern [];
+               guard = None;
+               body = List [] };
+             { pattern = ConsPattern (
+                   VariablePattern "x",
+                   VariablePattern "rest");
+               guard = None;
+               body = Cons (
+                   Apply (Identifier ["f"], Identifier ["x"]),
+                   Apply (
+                     Apply (Identifier ["map"], Identifier ["f"]),
+                     Identifier ["rest"])) }
+           ]))) }]
+)</code></pre></td>
+            </tr>
+            <tr>
+                <th><pre><code>type 'a option =
+  | None
+  | Some of 'a</code></pre></th>
+                <td><pre><code>TypeDefinition [{
+  type_name = "option";
+  type_parameters = ["a"];
+  type_kind = VariantType [
+    { constructor_name = "None";
+      constructor_argument = None };
+    { constructor_name = "Some";
+      constructor_argument = Some (TypeVariable "a") }
+  ]
+}]</code></pre></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>構文エラー</h2>
+
+    <table>
+        <thead><tr><th>エラー</th><th>例</th><th>報告内容</th></tr></thead>
+        <tbody>
+            <tr><th>予期しないトークン</th><td><code>let = 1</code></td><td>実際のトークンと期待したパターンまたは識別子</td></tr>
+            <tr><th>式の不足</th><td><code>let x =</code></td><td><code>=</code>の後に式が必要であること</td></tr>
+            <tr><th>閉じ括弧の不足</th><td><code>(x + 1</code></td><td>開き括弧位置とEOF位置</td></tr>
+            <tr><th>閉じ角括弧の不足</th><td><code>[1; 2</code></td><td>リスト開始位置と期待する<code>]</code></td></tr>
+            <tr><th>閉じ波括弧の不足</th><td><code>{ x = 1</code></td><td>レコード開始位置と期待する<code>}</code></td></tr>
+            <tr><th><code>in</code>の不足</th><td><code>let x = 1 x + 1</code></td><td>局所letで<code>in</code>が必要な位置</td></tr>
+            <tr><th><code>then</code>または<code>else</code>の不足</th><td><code>if b x else y</code></td><td>条件式の対応する予約語</td></tr>
+            <tr><th><code>-&gt;</code>の不足</th><td><code>fun x x + 1</code></td><td>仮引数列の後に<code>-&gt;</code>が必要</td></tr>
+            <tr><th>空のmatch分岐</th><td><code>match x with</code></td><td>少なくとも一つのcaseが必要</td></tr>
+            <tr><th>不正な代入左辺</th><td><code>(x + y) &lt;- z</code></td><td>フィールド参照または配列参照だけが許可される</td></tr>
+            <tr><th>不正な再帰束縛</th><td><code>let rec (x, y) = e</code></td><td>基本仕様では再帰定義の左辺に関数名が必要</td></tr>
+            <tr><th>宣言位置の式</th><td>トップレベルに裸の<code>x + 1</code></td><td>トップレベルで許可する項目を提示する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>エラー回復</h2>
+
+    <table>
+        <thead><tr><th>文脈</th><th>同期トークン</th></tr></thead>
+        <tbody>
+            <tr><th>トップレベル宣言</th><td><code>LET</code>、<code>TYPE</code>、<code>MODULE</code>、<code>OPEN</code>、<code>INCLUDE</code>、<code>EXTERNAL</code>、<code>EOF</code></td></tr>
+            <tr><th>match分岐</th><td><code>BAR</code>、<code>END</code>、<code>IN</code>、<code>EOF</code></td></tr>
+            <tr><th>レコード</th><td><code>SEMI</code>、<code>RBRACE</code></td></tr>
+            <tr><th>リスト</th><td><code>SEMI</code>、<code>RBRACKET</code></td></tr>
+            <tr><th>シグネチャ</th><td><code>VAL</code>、<code>TYPE</code>、<code>MODULE</code>、<code>INCLUDE</code>、<code>END</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        通常のコンパイルでは最初の構文エラーで停止できます。
+        エディタやLSPでは、同期トークンまで読み飛ばし、エラーノードを挿入して後続の解析を継続できます。
+    </p>
+
+    <h2>検査用テスト</h2>
+
+    <table>
+        <thead><tr><th>分類</th><th>入力</th><th>期待するAST</th></tr></thead>
+        <tbody>
+            <tr><th>優先順位</th><td><code>1 + 2 * 3</code></td><td><code>Add (1, Mul (2, 3))</code></td></tr>
+            <tr><th>左結合</th><td><code>10 - 3 - 2</code></td><td><code>Sub (Sub (10, 3), 2)</code></td></tr>
+            <tr><th>右結合</th><td><code>x :: y :: zs</code></td><td><code>Cons (x, Cons (y, zs))</code></td></tr>
+            <tr><th>関数適用</th><td><code>f x y</code></td><td><code>Apply (Apply (f, x), y)</code></td></tr>
+            <tr><th>複数引数関数</th><td><code>fun x y -&gt; x</code></td><td><code>Function (x, Function (y, x))</code></td></tr>
+            <tr><th>逐次実行</th><td><code>a; b; c</code></td><td><code>Sequence (a, Sequence (b, c))</code></td></tr>
+            <tr><th>型</th><td><code>int -&gt; bool -&gt; int</code></td><td><code>Arrow (int, Arrow (bool, int))</code></td></tr>
+            <tr><th>パターン</th><td><code>Some (x, y) | None</code></td><td><code>OrPattern (...)</code>。束縛集合の不一致は名前解決で検査</td></tr>
+            <tr><th>モジュール</th><td><code>module M = struct let x = 1 end</code></td><td><code>ModuleDefinition (M, Structure [...])</code></td></tr>
+            <tr><th>エラー</th><td><code>if x then</code></td><td>then分岐式不足</td></tr>
+        </tbody>
+    </table>
+
+    <h2>構文解析後に成立する条件</h2>
+
+    <ul>
+        <li>トークン列全体が一つのプログラムとして消費されている</li>
+        <li><code>EOF</code>より前に未消費トークンが残っていない</li>
+        <li>括弧、角括弧、波括弧、<code>struct/end</code>、<code>sig/end</code>が対応している</li>
+        <li>各演算子の優先順位と結合方向がASTの親子関係へ反映されている</li>
+        <li>関数適用が左結合の<code>Apply</code>へ変換されている</li>
+        <li>複数引数関数が一引数の<code>Function</code>の入れ子へ変換されている</li>
+        <li>複数の非再帰定義と相互再帰定義が一つの束縛グループとして保持されている</li>
+        <li>すべての主要ノードが元ソース上の位置範囲を持つ</li>
+        <li>識別子と修飾名が文字列のパスとして保持されている</li>
+        <li>名前解決前に値名、型名、フィールド名の参照先が勝手に確定されていない</li>
+        <li>リテラルが型に依存しない定数ノードとして保持されている</li>
+        <li>パターンと式の構文が別のノード型として区別されている</li>
+        <li>型式が式とは別の構文木として保持されている</li>
+        <li>モジュール式、モジュール型、シグネチャ項目が区別されている</li>
+        <li>構文上許可されない再帰束縛や代入左辺が拒否されている</li>
+        <li>名前解決、型推論、脱糖で必要な元の構文情報が保持されている</li>
+    </ul>
+
+    <h2>次の段階との関係</h2>
+
+    <table>
+        <thead><tr><th>ASTから渡す情報</th><th>名前解決での用途</th></tr></thead>
+        <tbody>
+            <tr><th>値名とパターン変数</th><td>値識別子の作成と参照先の決定</td></tr>
+            <tr><th>型名と型変数</th><td>型識別子、型変数識別子の解決</td></tr>
+            <tr><th>コンストラクタ名</th><td>所有するヴァリアント型とコンストラクタ識別子の解決</td></tr>
+            <tr><th>フィールド名</th><td>レコードフィールド候補の収集</td></tr>
+            <tr><th>モジュールパス</th><td>各モジュール識別子と末尾要素の解決</td></tr>
+            <tr><th>束縛グループ</th><td>非再帰、再帰、相互再帰のスコープ構築</td></tr>
+            <tr><th>位置情報</th><td>未定義名、重複束縛、ORパターン不一致の報告</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        名前解決後は、文字列として保持されていた名前が一意な内部識別子へ置き換えられます。
+        その後、型推論が解決済みASTへ型を付与し、型付きASTを生成します。
+    </p>
+
+    <footer>
+        <a href="index.html">トップページ</a>
+    </footer>
+</body>
+</html>

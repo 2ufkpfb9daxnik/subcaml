@@ -144,12 +144,12 @@ type constructor_id = {
                 </td>
             </tr>
             <tr class="advanced">
-                <th>発展　モジュール型</th>
+                <th>セルフホスト後モジュール型</th>
                 <td><code>module type S = ...</code></td>
                 <td>モジュール型注釈、ファンクタの引数型</td>
             </tr>
             <tr class="advanced">
-                <th>発展　エフェクトコンストラクタ</th>
+                <th>セルフホスト後エフェクトコンストラクタ</th>
                 <td><code>type _ Effect.t += C : ...</code></td>
                 <td><code>perform C</code>、エフェクトパターン</td>
             </tr>
@@ -297,11 +297,11 @@ type constructor_id = {
                 <td><code>String</code></td>
             </tr>
             <tr class="advanced">
-                <th>発展　型構築子</th>
+                <th>セルフホスト後型構築子</th>
                 <td><code>array</code>、<code>exn</code></td>
             </tr>
             <tr class="advanced">
-                <th>発展　組込みモジュール</th>
+                <th>セルフホスト後組込みモジュール</th>
                 <td><code>Array</code>、<code>Effect</code></td>
             </tr>
         </tbody>
@@ -1168,11 +1168,11 @@ x</code></pre>
                     <span class="math">T</span>
                     <code>array</code>
                 </th>
-                <td>発展　組込みの<code>array</code>型識別子と解決済み引数型</td>
+                <td>セルフホスト後組込みの<code>array</code>型識別子と解決済み引数型</td>
             </tr>
             <tr class="advanced">
                 <th><code>(module S)</code></th>
-                <td>発展　解決済みモジュール型識別子</td>
+                <td>セルフホスト後解決済みモジュール型識別子</td>
             </tr>
         </tbody>
     </table>
@@ -1567,7 +1567,7 @@ x</code></pre>
                     <span class="math">m</span>
                 </th>
                 <td>
-                    発展　モジュール型
+                    セルフホスト後モジュール型
                     <span class="math">S</span>を解決し、
                     モジュール引数
                     <span class="math">X</span>を追加した環境で本体を解決する
@@ -1580,7 +1580,7 @@ x</code></pre>
                     <span class="math">m</span><sub>2</sub><code>)</code>
                 </th>
                 <td>
-                    発展　両方のモジュール式を解決する。
+                    セルフホスト後両方のモジュール式を解決する。
                     ファンクタ型との適合性は型検査で判定する
                 </td>
             </tr>
@@ -1776,7 +1776,7 @@ x</code></pre>
         基本仕様では、言語仕様に列挙された演算子を予約済みプリミティブとして扱います。
     </p>
 
-    <h2>型推論で    解決</h2>
+    <h2>型推論で解決</h2>
 
     <p>
         名前だけでは一意に決められず、型情報が必要なものは、

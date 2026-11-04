@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>型推論</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="site-header">
+        <button class="theme-toggle" type="button"></button>
+    </div>
+
+    <h1>型推論</h1>
+
+    <p>
+        型推論は、名前解決済み抽象構文木に対して各式、パターン、宣言の型を求め、
+        型の整合性を検査する処理です。
+        型が未確定な位置には新しい型変数を割り当て、式の構造から型等式を生成し、
+        単一化によって最も一般的な型を求めます。
+    </p>
+
+    <ul>
+        <li>名前解決済み抽象構文木</li>
+        <li>↓ 型変数生成・制約生成・単一化・一般化</li>
+        <li>型付き抽象構文木</li>
+        <li>↓ 網羅性検査・脱糖・Core中間表現への変換</li>
+    </ul>
+
+    <p>
+        基本アルゴリズムにはHindley–Milner型推論のAlgorithm Wを使用します。
+        型環境は文字列ではなく、名前解決で得た一意な値識別子をキーとします。
+        <code>let</code>では型スキームを一般化し、値を使用するたびに新しい型変数で具体化します。
+        参照、可変フィールド、配列などの副作用を持つ式には値制限を適用します。
+    </p>
+
+    <h2>入力と出力</h2>
+
+    <table>
+        <thead><tr><th>項目</th><th>内容</th></tr></thead>
+        <tbody>
+            <tr><th>入力</th><td>名前解決済み抽象構文木、宣言情報、組込み型環境</td></tr>
+            <tr><th>出力</th><td>各ノードに型を付与した型付き抽象構文木</td></tr>
+            <tr><th>副出力</th><td>値の型スキーム、型宣言情報、コンストラクタ型、フィールド型、警告</td></tr>
+            <tr><th>失敗</th><td>単一化不能、occurs check失敗、型構築子の引数数不一致、値制限違反などの型エラー</td></tr>
+        </tbody>
+    </table>
+
+    <h2>型の内部表現</h2>
+
+    <table>
+        <thead><tr><th>型</th><th>内部表現</th><th>説明</th></tr></thead>
+        <tbody>
+            <tr><th><span class="math">α</span></th><td><code>TVar α</code></td><td>単相的な未確定型変数</td></tr>
+            <tr><th><code>int</code></th><td><code>TInt</code></td><td>整数型</td></tr>
+            <tr><th><code>bool</code></th><td><code>TBool</code></td><td>真偽値型</td></tr>
+            <tr class = "advanced"><th><code>float</code></th><td><code>TFloat</code></td><td>浮動小数点型</td></tr>
+            <tr><th><code>char</code></th><td><code>TChar</code></td><td>文字型</td></tr>
+            <tr><th><code>string</code></th><td><code>TString</code></td><td>文字列型</td></tr>
+            <tr><th><code>unit</code></th><td><code>TUnit</code></td><td>単位型</td></tr>
+            <tr><th><span class="math">T</span><sub>1</sub> <code>-&gt;</code> <span class="math">T</span><sub>2</sub></th><td><code>TArrow (t1, t2)</code></td><td>一つの引数を取る関数型</td></tr>
+            <tr><th><span class="math">T</span><sub>1</sub> <code>* ... *</code> <span class="math">T</span><sub>n</sub></th><td><code>TTuple [t1; ...; tn]</code></td><td>組型</td></tr>
+            <tr><th><span class="math">T</span> <code>list</code></th><td><code>TCon (list_id, [t])</code></td><td>リスト型</td></tr>
+            <tr><th><span class="math">T</span> <code>ref</code></th><td><code>TCon (ref_id, [t])</code></td><td>参照型</td></tr>
+            <tr><th><span class="math">T</span><sub>1</sub>, ..., <span class="math">T</span><sub>n</sub> <span class="math">t</span></th><td><code>TCon (type_id, [t1; ...; tn])</code></td><td>ユーザー定義型</td></tr>
+            <tr class="advanced"><th><span class="math">T</span> <code>array</code></th><td><code>TCon (array_id, [t])</code></td><td>セルフホスト後配列型</td></tr>
+            <tr class="advanced"><th><code>exn</code></th><td><code>TCon (exn_id, [])</code></td><td>セルフホスト後例外型</td></tr>
+        </tbody>
+    </table>
+
+    <pre><code>type tyvar = int
+
+type ty =
+    | TVar of tyvar
+    | TInt
+    | TBool
+    | TFloat
+    | TChar
+    | TString
+    | TUnit
+    | TArrow of ty * ty
+    | TTuple of ty list
+    | TCon of type_id * ty list</code></pre>
+
+    <h2>型スキーム</h2>
+
+    <p>
+        型環境は値識別子を単なる型ではなく型スキームへ対応付けます。
+        型スキーム
+        <span class="math">∀α</span><sub>1</sub> ... <span class="math">α</span><sub>n</sub><code>.</code><span class="math">T</span>は、
+        指定した型変数を使用のたびに任意の新しい型へ置き換えられることを表します。
+    </p>
+
+    <table>
+        <thead><tr><th>表記</th><th>内部表現</th><th>意味</th></tr></thead>
+        <tbody>
+            <tr><th><span class="math">T</span></th><td><code>Forall ([], t)</code></td><td>単相的な型スキーム</td></tr>
+            <tr><th><span class="math">∀α.T</span></th><td><code>Forall ([alpha], t)</code></td><td><span class="math">α</span>を多相的に使用できる</td></tr>
+            <tr><th><span class="math">∀α. α -&gt; α</span></th><td><code>Forall ([a], TArrow (TVar a, TVar a))</code></td><td>恒等関数の型スキーム</td></tr>
+        </tbody>
+    </table>
+
+    <pre><code>type scheme = Forall of tyvar list * ty
+
+type type_environment = scheme ValueIdMap.t</code></pre>
+
+    <h2>単相的型変数と多相的型変数</h2>
+
+    <table>
+        <thead><tr><th>分類</th><th>意味</th><th>扱い</th></tr></thead>
+        <tbody>
+            <tr><th>単相的型変数</th><td>型推論中に正体が決まる未確定な型</td><td>単一化によって一つの型へ決定される</td></tr>
+            <tr><th>多相的型変数</th><td>型スキームの<code>forall</code>で束縛された変数</td><td>値を参照するたびに新しい型変数へ具体化する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>新しい型変数</h2>
+
+    <p>
+        型変数は値名から生成せず、単調増加するカウンタから生成します。
+        これにより、同名の値がシャドーイングされる場合や、値名と無関係な中間型でも衝突しません。
+    </p>
+
+    <pre><code>fresh_type_variable(state):
+    alpha = state.next_type_variable
+    state.next_type_variable = alpha + 1
+    return TVar alpha</code></pre>
+
+    <h2>自由型変数</h2>
+
+    <table>
+        <thead><tr><th>対象</th><th>自由型変数</th></tr></thead>
+        <tbody>
+            <tr><th><span class="math">FTV</span><code>(α)</code></th><td>{<span class="math">α</span>}</td></tr>
+            <tr><th><span class="math">FTV</span><code>(int)</code></th><td>∅</td></tr>
+            <tr><th><span class="math">FTV</span><code>(T1 -&gt; T2)</code></th><td><span class="math">FTV</span><code>(T1) ∪ FTV(T2)</code></td></tr>
+            <tr><th><span class="math">FTV</span><code>(TCon(t, [T1; ...; Tn]))</code></th><td>各引数型の自由型変数の和集合</td></tr>
+            <tr><th><span class="math">FTV</span><code>(∀α1...αn.T)</code></th><td><span class="math">FTV</span><code>(T) - {α1, ..., αn}</code></td></tr>
+            <tr><th><span class="math">FTV</span><code>(Γ)</code></th><td>環境中の全型スキームの自由型変数の和集合</td></tr>
+        </tbody>
+    </table>
+
+    <h2>型代入</h2>
+
+    <p>
+        型代入
+        <span class="math">S</span>は、単相的型変数を型へ対応付けます。
+        代入は型、型スキーム、型環境、型付き構文木へ再帰的に適用します。
+    </p>
+
+    <table>
+        <thead><tr><th>対象</th><th>代入の適用</th></tr></thead>
+        <tbody>
+            <tr><th><code>S(TVar α)</code></th><td><span class="math">α</span>が代入にあれば対応する型、なければ<code>TVar α</code></td></tr>
+            <tr><th><code>S(TArrow (t1, t2))</code></th><td><code>TArrow (S(t1), S(t2))</code></td></tr>
+            <tr><th><code>S(TTuple ts)</code></th><td>各要素へ代入を適用する</td></tr>
+            <tr><th><code>S(TCon (id, ts))</code></th><td>各型引数へ代入を適用する</td></tr>
+            <tr><th><code>S(Forall (as, t))</code></th><td>束縛変数<code>as</code>への対応を除いた代入を<code>t</code>へ適用する</td></tr>
+            <tr><th><code>S(Γ)</code></th><td>環境中の各型スキームへ代入を適用する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>代入の合成</h2>
+
+    <p>
+        <span class="math">S</span><sub>2</sub>を後から適用する合成を
+        <span class="math">S</span><sub>2</sub><code> ○ </code><span class="math">S</span><sub>1</sub>と書きます。
+    </p>
+
+    <pre><code>(S2 ○ S1)(T) = S2(S1(T))</code></pre>
+
+    <table>
+        <thead><tr><th>処理</th><th>内容</th></tr></thead>
+        <tbody>
+            <tr><th>既存代入の更新</th><td><span class="math">S</span><sub>1</sub>の各右辺へ<span class="math">S</span><sub>2</sub>を適用する</td></tr>
+            <tr><th>新規対応の追加</th><td><span class="math">S</span><sub>1</sub>にない<span class="math">S</span><sub>2</sub>の対応を追加する</td></tr>
+            <tr><th>不変条件</th><td>合成後の代入を一度適用すれば最新の型が得られる</td></tr>
+        </tbody>
+    </table>
+
+    <h2>単一化</h2>
+
+    <p>
+        単一化は、二つの型を一致させる最も一般的な代入を求めます。
+        単一化できない場合は型エラーを返します。
+    </p>
+
+    <table>
+        <thead><tr><th>左辺</th><th>右辺</th><th>処理</th></tr></thead>
+        <tbody>
+            <tr><th><span class="math">T</span></th><th><span class="math">T</span></th><td>追加の代入は不要</td></tr>
+            <tr><th><span class="math">α</span></th><th><span class="math">T</span></th><td><span class="math">α</span>が<span class="math">T</span>に出現しなければ<code>{α ↦ T}</code></td></tr>
+            <tr><th><span class="math">T</span></th><th><span class="math">α</span></th><td>左右を交換して型変数の規則を適用する</td></tr>
+            <tr><th><span class="math">A</span><sub>1</sub><code>-&gt;</code><span class="math">A</span><sub>2</sub></th><th><span class="math">B</span><sub>1</sub><code>-&gt;</code><span class="math">B</span><sub>2</sub></th><td>引数型同士と結果型同士を単一化する</td></tr>
+            <tr><th><code>TTuple [A1; ...; An]</code></th><th><code>TTuple [B1; ...; Bn]</code></th><td>要素数が同じなら各要素を単一化する</td></tr>
+            <tr><th><code>TCon (id, As)</code></th><th><code>TCon (id, Bs)</code></th><td>同じ型構築子かつ同じ引数数なら各引数を単一化する</td></tr>
+            <tr><th>その他</th><th>その他</th><td>型構築子不一致として失敗する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>occurs check</h2>
+
+    <p>
+        型変数を、その型変数自身を含む型へ代入してはなりません。
+        これを許すと有限の型では表現できない無限型になります。
+    </p>
+
+    <table>
+        <thead><tr><th>等式</th><th>結果</th></tr></thead>
+        <tbody>
+            <tr><th><span class="math">α = int</span></th><td>成功。<code>{α ↦ int}</code></td></tr>
+            <tr><th><span class="math">α = β -&gt; int</span></th><td><span class="math">α ≠ β</span>なら成功</td></tr>
+            <tr><th><span class="math">α = α -&gt; int</span></th><td>occurs check失敗</td></tr>
+            <tr><th><span class="math">α = α list</span></th><td>occurs check失敗</td></tr>
+        </tbody>
+    </table>
+
+    <h2>型スキームの具体化</h2>
+
+    <p>
+        値環境から型スキームを取り出すたびに、量化された型変数を
+        互いに異なる新しい単相的型変数へ置き換えます。
+    </p>
+
+    <table>
+        <thead><tr><th>型スキーム</th><th>1回目の使用</th><th>2回目の使用</th></tr></thead>
+        <tbody>
+            <tr><th><code>∀α. α -&gt; α</code></th><td><code>β -&gt; β</code></td><td><code>γ -&gt; γ</code></td></tr>
+            <tr><th><code>int -&gt; int</code></th><td><code>int -&gt; int</code></td><td><code>int -&gt; int</code></td></tr>
+        </tbody>
+    </table>
+
+    <pre><code>instantiate(Forall (variables, body)):
+    substitution = each variable mapped to a fresh type variable
+    return apply substitution body</code></pre>
+
+    <h2>一般化</h2>
+
+    <p>
+        <code>let</code>で得た型のうち、現在の型環境に自由に現れない型変数だけを量化します。
+    </p>
+
+    <pre><code>generalize(Γ, T) =
+    Forall(FTV(T) - FTV(Γ), T)</code></pre>
+
+    <table>
+        <thead><tr><th>環境</th><th>推論した型</th><th>一般化結果</th></tr></thead>
+        <tbody>
+            <tr><th>空</th><td><code>α -&gt; α</code></td><td><code>∀α. α -&gt; α</code></td></tr>
+            <tr><th><code>y : α</code></th><td><code>unit -&gt; α</code></td><td><code>unit -&gt; α</code></td></tr>
+            <tr><th><code>y : α</code></th><td><code>β -&gt; β</code></td><td><code>∀β. β -&gt; β</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>値制限</h2>
+
+    <p>
+        副作用を持つ式の型変数を無条件に一般化すると、同じ参照セルを異なる型として使用できてしまいます。
+        そのため、非拡大的な式だけを通常どおり一般化し、それ以外は単相的に環境へ登録します。
+    </p>
+
+    <table>
+        <thead><tr><th>式</th><th>非拡大的か</th><th>一般化</th></tr></thead>
+        <tbody>
+            <tr><th>定数</th><td>はい</td><td>許可する</td></tr>
+            <tr><th>変数</th><td>はい</td><td>許可する</td></tr>
+            <tr><th><code>fun p -&gt; e</code></th><td>はい</td><td>許可する</td></tr>
+            <tr><th>タプル、レコード、コンストラクタ</th><td>全要素が非拡大的ならはい</td><td>条件付きで許可する</td></tr>
+            <tr><th>関数適用</th><td>いいえ</td><td>一般化しない</td></tr>
+            <tr><th><code>ref e</code></th><td>いいえ</td><td>一般化しない</td></tr>
+            <tr><th>可変フィールドを持つレコードの生成</th><td>いいえ</td><td>一般化しない</td></tr>
+            <tr class="advanced"><th>配列生成</th><td>いいえ</td><td>一般化しない</td></tr>
+            <tr><th><code>if</code>、<code>match</code></th><td>原則としていいえ</td><td>基本実装では一般化しない</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        基本実装では保守的な値制限を採用します。
+        将来、型変数の変性を追跡できるようになった場合は、OCamlに近い緩和された値制限へ拡張できます。
+    </p>
+
+    <h2>型推論の結果</h2>
+
+    <p>
+        式の推論関数は、型付き式、推論した型、型代入、更新後の状態を返します。
+    </p>
+
+    <pre><code>infer_expression :
+    inference_state -&gt;
+    type_environment -&gt;
+    resolved_expression -&gt;
+    typed_expression * ty * substitution * inference_state</code></pre>
+
+    <p>
+        以下の表では
+        <span class="math">W(Γ,e) = (S,T,e')</span>を、環境
+        <span class="math">Γ</span>で式<span class="math">e</span>を推論し、
+        代入<span class="math">S</span>、型<span class="math">T</span>、型付き式<span class="math">e'</span>を得る処理として表します。
+    </p>
+
+    <h2>定数と変数の推論</h2>
+
+    <table>
+        <thead><tr><th>式</th><th>推論する型</th><th>処理</th></tr></thead>
+        <tbody>
+            <tr><th>整数定数</th><td><code>int</code></td><td>追加制約なし</td></tr>
+            <tr class="advanced"><th>浮動小数点定数</th><td><code>float</code></td><td>追加制約なし</td></tr>
+            <tr><th>真偽値定数</th><td><code>bool</code></td><td>追加制約なし</td></tr>
+            <tr><th>文字定数</th><td><code>char</code></td><td>追加制約なし</td></tr>
+            <tr><th>文字列定数</th><td><code>string</code></td><td>追加制約なし</td></tr>
+            <tr><th><code>()</code></th><td><code>unit</code></td><td>追加制約なし</td></tr>
+            <tr><th>値識別子<span class="math">x</span></th><td><code>instantiate(Γ(x))</code></td><td>名前解決済み識別子で型スキームを検索する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>プリミティブ演算の推論</h2>
+
+    <table>
+        <thead><tr><th>演算</th><th>要求する型</th><th>結果型</th></tr></thead>
+        <tbody>
+            <tr><th><code>~-</code></th><td><code>int</code></td><td><code>int</code></td></tr>
+            <tr><th><code>+</code>、<code>-</code>、<code>*</code>、<code>/</code>、<code>mod</code></th><td>両辺を<code>int</code>と単一化</td><td><code>int</code></td></tr>
+            <tr class = "advanced"><th><code>~-.</code></th><td><code>float</code></td><td><code>float</code></td></tr>
+            <tr class = "advanced"><th><code>+.</code>、<code>-.</code>、<code>*.</code>、<code>/.</code></th><td>両辺を<code>float</code>と単一化</td><td><code>float</code></td></tr>
+            <tr><th><code>=</code>、<code>&lt;&gt;</code></th><td>両辺の型を相互に単一化</td><td><code>bool</code></td></tr>
+            <tr><th><code>&lt;</code>、<code>&lt;=</code>、<code>&gt;</code>、<code>&gt;=</code></th><td>両辺の型を相互に単一化</td><td><code>bool</code></td></tr>
+            <tr><th><code>not</code></th><td><code>bool</code></td><td><code>bool</code></td></tr>
+            <tr><th><code>&amp;&amp;</code>、<code>||</code></th><td>両辺を<code>bool</code>と単一化</td><td><code>bool</code></td></tr>
+            <tr><th><code>^</code></th><td>両辺を<code>string</code>と単一化</td><td><code>string</code></td></tr>
+            <tr><th><code>ref</code></th><td><span class="math">α</span></td><td><span class="math">α ref</span></td></tr>
+            <tr><th><code>!</code></th><td><span class="math">α ref</span></td><td><span class="math">α</span></td></tr>
+            <tr><th><code>:=</code></th><td>左辺を<span class="math">α ref</span>、右辺を<span class="math">α</span>と単一化</td><td><code>unit</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        構造的比較について、名前解決段階では同じ型であることだけを要求します。
+        関数値を含む比較を静的に完全排除しない基本仕様では、関数値の比較はランタイムエラーになります。
+    </p>
+
+    <h2>条件式</h2>
+
+    <table>
+        <thead><tr><th>式</th><th>推論手順</th><th>結果型</th></tr></thead>
+        <tbody>
+            <tr>
+                <th><code>if e1 then e2 else e3</code></th>
+                <td>
+                    <ol>
+                        <li><span class="math">e</span><sub>1</sub>を推論し、その型を<code>bool</code>と単一化する</li>
+                        <li>得られた代入を環境へ適用して<span class="math">e</span><sub>2</sub>を推論する</li>
+                        <li>さらに代入を適用して<span class="math">e</span><sub>3</sub>を推論する</li>
+                        <li>二つの分岐の型を単一化する</li>
+                    </ol>
+                </td>
+                <td>単一化後の分岐型</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>無名関数</h2>
+
+    <table>
+        <thead><tr><th>式</th><th>推論手順</th><th>結果型</th></tr></thead>
+        <tbody>
+            <tr>
+                <th><code>fun p -&gt; e</code></th>
+                <td>
+                    <ol>
+                        <li>パターン<span class="math">p</span>へ新しい期待型<span class="math">α</span>を与えて推論する</li>
+                        <li>パターンが束縛する値を単相的型スキームとして環境へ追加する</li>
+                        <li>拡張環境で本体<span class="math">e</span>を推論する</li>
+                    </ol>
+                </td>
+                <td><span class="math">S(α) -&gt; T</span></td>
+            </tr>
+            <tr>
+                <th><code>fun p1 ... pn -&gt; e</code></th>
+                <td>左から順に一引数関数を入れ子にしたものとして推論する</td>
+                <td><span class="math">T1 -&gt; ... -&gt; Tn -&gt; T</span></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>関数適用</h2>
+
+    <table>
+        <thead><tr><th>式</th><th>推論手順</th><th>結果型</th></tr></thead>
+        <tbody>
+            <tr>
+                <th><span class="math">e</span><sub>1</sub> <span class="math">e</span><sub>2</sub></th>
+                <td>
+                    <ol>
+                        <li><span class="math">e</span><sub>1</sub>を推論して型<span class="math">T</span><sub>1</sub>を得る</li>
+                        <li>代入後の環境で<span class="math">e</span><sub>2</sub>を推論して型<span class="math">T</span><sub>2</sub>を得る</li>
+                        <li>新しい型変数<span class="math">α</span>を作る</li>
+                        <li><span class="math">T</span><sub>1</sub>と<span class="math">T</span><sub>2</sub><code>-&gt;</code><span class="math">α</span>を単一化する</li>
+                    </ol>
+                </td>
+                <td>単一化後の<span class="math">α</span></td>
+            </tr>
+            <tr>
+                <th><span class="math">e e</span><sub>1</sub> ... <span class="math">e</span><sub>n</sub></th>
+                <td>関数適用を左結合の一引数適用として順番に推論する</td>
+                <td>最後の適用結果の型</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>非再帰let</h2>
+
+    <table>
+        <thead><tr><th>式</th><th>推論手順</th><th>環境への登録</th></tr></thead>
+        <tbody>
+            <tr>
+                <th><code>let p = e1 in e2</code></th>
+                <td>
+                    <ol>
+                        <li><span class="math">e</span><sub>1</sub>を推論して型<span class="math">T</span><sub>1</sub>を得る</li>
+                        <li>パターン<span class="math">p</span>を期待型<span class="math">T</span><sub>1</sub>で推論する</li>
+                        <li>最新の代入を環境と束縛型へ適用する</li>
+                        <li>各パターン変数を値制限に従って一般化する</li>
+                        <li>拡張環境で<span class="math">e</span><sub>2</sub>を推論する</li>
+                    </ol>
+                </td>
+                <td>非拡大的なら<code>generalize(Γ, T)</code>、それ以外なら<code>Forall([], T)</code></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>再帰関数</h2>
+
+    <table>
+        <thead><tr><th>式</th><th>推論手順</th><th>一般化</th></tr></thead>
+        <tbody>
+            <tr>
+                <th><code>let rec f p1 ... pn = e1 in e2</code></th>
+                <td>
+                    <ol>
+                        <li><span class="math">f</span>へ新しい単相型変数<span class="math">α</span>を割り当てる</li>
+                        <li><span class="math">f : α</span>を単相的に環境へ仮登録する</li>
+                        <li>各仮引数パターンと本体を推論して関数型<span class="math">T</span><sub>f</sub>を得る</li>
+                        <li><span class="math">α</span>と<span class="math">T</span><sub>f</sub>を単一化する</li>
+                        <li>仮登録前の環境に対して確定した関数型を一般化する</li>
+                        <li>一般化した<span class="math">f</span>を登録して<span class="math">e</span><sub>2</sub>を推論する</li>
+                    </ol>
+                </td>
+                <td>関数定義は非拡大的なので、環境に自由でない型変数を一般化する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>相互再帰関数</h2>
+
+    <table>
+        <thead><tr><th>段階</th><th>処理</th></tr></thead>
+        <tbody>
+            <tr><th>1</th><td>グループ内のすべての関数へ異なる新しい単相型変数を割り当てる</td></tr>
+            <tr><th>2</th><td>すべての仮型を同時に環境へ登録する</td></tr>
+            <tr><th>3</th><td>最新の代入を引き継ぎながら各関数の仮引数と本体を推論する</td></tr>
+            <tr><th>4</th><td>各関数の仮型と推論した関数型を単一化する</td></tr>
+            <tr><th>5</th><td>グループ全体の推論完了後、外側の環境に対して各関数型を一般化する</td></tr>
+            <tr><th>6</th><td>一般化した全関数を同時に後続環境へ登録する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>タプルと逐次実行</h2>
+
+    <table>
+        <thead><tr><th>式</th><th>制約</th><th>結果型</th></tr></thead>
+        <tbody>
+            <tr><th><code>(e1, ..., en)</code></th><td>各要素を左から右へ推論する</td><td><code>T1 * ... * Tn</code></td></tr>
+            <tr><th><code>e1; e2</code></th><td><span class="math">e</span><sub>1</sub>の型を<code>unit</code>と単一化し、その後<span class="math">e</span><sub>2</sub>を推論する</td><td><span class="math">e</span><sub>2</sub>の型</td></tr>
+            <tr><th><code>while e1 do e2 done</code></th><td><span class="math">e</span><sub>1</sub>を<code>bool</code>、<span class="math">e</span><sub>2</sub>を<code>unit</code>と単一化する</td><td><code>unit</code></td></tr>
+            <tr><th><code>for x = e1 to e2 do e3 done</code></th><td>境界を<code>int</code>、<span class="math">x</span>を単相的<code>int</code>、本体を<code>unit</code>とする</td><td><code>unit</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>コンストラクタ</h2>
+
+    <p>
+        各コンストラクタは型宣言から型スキームを持ちます。
+        多相ヴァリアント型のコンストラクタは、使用するたびに型引数を具体化します。
+    </p>
+
+    <table>
+        <thead><tr><th>型宣言</th><th>コンストラクタの型スキーム</th></tr></thead>
+        <tbody>
+            <tr><th><code>type color = Red | Blue</code></th><td><code>Red : color</code>、<code>Blue : color</code></td></tr>
+            <tr><th><code>type 'a option = None | Some of 'a</code></th><td><code>None : ∀α. α option</code>、<code>Some : ∀α. α -&gt; α option</code></td></tr>
+            <tr><th><code>type ('a,'b) result = Ok of 'a | Error of 'b</code></th><td><code>Ok : ∀αβ. α -&gt; (α,β) result</code></td></tr>
+        </tbody>
+    </table>
+
+    <table>
+        <thead><tr><th>式</th><th>推論</th></tr></thead>
+        <tbody>
+            <tr><th>引数なしコンストラクタ<span class="math">C</span></th><td><span class="math">C</span>の型スキームを具体化した結果型</td></tr>
+            <tr><th><span class="math">C e</span></th><td><span class="math">C</span>を<span class="math">A -&gt; R</span>として具体化し、<span class="math">e</span>の型と<span class="math">A</span>を単一化する</td></tr>
+            <tr><th><code>[]</code></th><td>新しい型変数<span class="math">α</span>について<span class="math">α list</span></td></tr>
+            <tr><th><span class="math">e</span><sub>1</sub><code>::</code><span class="math">e</span><sub>2</sub></th><td><span class="math">e</span><sub>1</sub>を<span class="math">α</span>、<span class="math">e</span><sub>2</sub>を<span class="math">α list</span>と単一化する</td></tr>
+            <tr><th><code>[e1; ...; en]</code></th><td>全要素を同じ<span class="math">α</span>と単一化し、結果を<span class="math">α list</span>とする</td></tr>
+        </tbody>
+    </table>
+
+    <h2>パターンの型推論</h2>
+
+    <p>
+        パターン推論は期待型を受け取り、パターンが束縛する各値識別子の単相型と型付きパターンを返します。
+    </p>
+
+    <pre><code>infer_pattern :
+    inference_state -&gt;
+    expected_type:ty -&gt;
+    resolved_pattern -&gt;
+    typed_pattern * monomorphic_bindings * substitution</code></pre>
+
+    <table>
+        <thead><tr><th>パターン</th><th>型制約</th><th>束縛</th></tr></thead>
+        <tbody>
+            <tr><th><code>_</code></th><td>なし</td><td>なし</td></tr>
+            <tr><th>変数<span class="math">x</span></th><td>なし</td><td><span class="math">x</span>を期待型へ束縛する</td></tr>
+            <tr><th>定数<span class="math">c</span></th><td>期待型を定数の型と単一化する</td><td>なし</td></tr>
+            <tr><th><code>(p1, ..., pn)</code></th><td>期待型を新しい要素型からなるタプル型と単一化する</td><td>各部分パターンの束縛を結合する</td></tr>
+            <tr><th><span class="math">C</span></th><td>期待型を具体化したコンストラクタの結果型と単一化する</td><td>なし</td></tr>
+            <tr><th><span class="math">C p</span></th><td>コンストラクタ型を<span class="math">A -&gt; R</span>として具体化し、期待型と<span class="math">R</span>を単一化する</td><td><span class="math">p</span>を期待型<span class="math">A</span>で推論する</td></tr>
+            <tr><th><code>[]</code></th><td>期待型を<span class="math">α list</span>と単一化する</td><td>なし</td></tr>
+            <tr><th><span class="math">p</span><sub>1</sub><code>::</code><span class="math">p</span><sub>2</sub></th><td>期待型を<span class="math">α list</span>とし、各部分を<span class="math">α</span>と<span class="math">α list</span>で推論する</td><td>両方の束縛</td></tr>
+            <tr><th><span class="math">p</span><code> as </code><span class="math">x</span></th><td><span class="math">p</span>を期待型で推論する</td><td>部分パターンの束縛と<span class="math">x</span>の期待型</td></tr>
+            <tr><th><code>(p : T)</code></th><td>注釈型と期待型を単一化する</td><td><span class="math">p</span>の束縛</td></tr>
+        </tbody>
+    </table>
+
+    <h2>ORパターンの型推論</h2>
+
+    <table>
+        <thead><tr><th>段階</th><th>処理</th></tr></thead>
+        <tbody>
+            <tr><th>1</th><td>両側を同じ期待型で独立に推論する</td></tr>
+            <tr><th>2</th><td>名前解決で保証された同じ値識別子集合を確認する</td></tr>
+            <tr><th>3</th><td>対応する各値識別子の束縛型を単一化する</td></tr>
+            <tr><th>4</th><td>統合した束縛型をガードと分岐本体の環境へ追加する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>match式</h2>
+
+    <table>
+        <thead><tr><th>段階</th><th>処理</th></tr></thead>
+        <tbody>
+            <tr><th>1</th><td>マッチ対象式を推論して型<span class="math">T</span><sub>s</sub>を得る</td></tr>
+            <tr><th>2</th><td>結果型用の新しい型変数<span class="math">α</span>を作る</td></tr>
+            <tr><th>3</th><td>各分岐のパターンを期待型<span class="math">T</span><sub>s</sub>で推論する</td></tr>
+            <tr><th>4</th><td>パターン束縛を単相的に追加した環境でガードを推論し、<code>bool</code>と単一化する</td></tr>
+            <tr><th>5</th><td>同じ環境で分岐本体を推論し、その型を<span class="math">α</span>と単一化する</td></tr>
+            <tr><th>6</th><td>全分岐処理後の<span class="math">α</span>をmatch式の型とする</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        パターンの網羅性と冗長性は、型推論でコンストラクタと対象型が確定した後に別の解析として検査します。
+    </p>
+
+    <h2>レコード型情報</h2>
+
+    <pre><code>type field_info = {
+    field_id : field_id;
+    owner_type : type_id;
+    parameters : tyvar list;
+    field_type : ty;
+    mutable_field : bool;
+    index : int;
+}</code></pre>
+
+    <p>
+        名前解決がフィールド候補集合を残した場合、型推論は対象式または他のフィールドから所有レコード型を決定します。
+    </p>
+
+    <table>
+        <thead><tr><th>式</th><th>推論</th></tr></thead>
+        <tbody>
+            <tr><th><code>{ l1 = e1; ...; ln = en }</code></th><td>候補レコード型を一つへ絞り、型引数を新鮮化し、各式の型を対応するフィールド型と単一化する</td></tr>
+            <tr><th><span class="math">e</span><code>.l</code></th><td>候補ごとに対象レコード型とフィールド型を構築し、対象式の型と単一化可能な候補を一つへ絞る</td></tr>
+            <tr><th><code>{ e with l = e1; ... }</code></th><td>基礎式の型からレコード型を決定し、更新式を各フィールド型と単一化する</td></tr>
+            <tr><th><span class="math">e</span><sub>1</sub><code>.l &lt;- </code><span class="math">e</span><sub>2</sub></th><td>対象レコード型とフィールドを確定し、可変性を検査し、右辺をフィールド型と単一化する</td></tr>
+            <tr><th>レコードパターン</th><td>期待型から所有レコード型を決定し、各部分パターンをフィールド型で推論する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>型注釈</h2>
+
+    <p>
+        名前解決済みの型注釈は、宣言された型変数を内部型へ変換して使用します。
+        式またはパターンから推論した型を注釈型と単一化します。
+    </p>
+
+    <table>
+        <thead><tr><th>構文</th><th>処理</th></tr></thead>
+        <tbody>
+            <tr><th><code>(e : T)</code></th><td><span class="math">e</span>を推論し、その型を注釈型<span class="math">T</span>と単一化する</td></tr>
+            <tr><th><code>(p : T)</code></th><td>パターンの期待型と注釈型<span class="math">T</span>を単一化する</td></tr>
+            <tr><th><code>external x : T = s</code></th><td>注釈型を検査し、その型スキームを<span class="math">x</span>へ登録する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>型宣言の検査</h2>
+
+    <table>
+        <thead><tr><th>宣言</th><th>検査内容</th><th>生成する情報</th></tr></thead>
+        <tbody>
+            <tr><th>型別名</th><td>型構築子の引数数、束縛型変数、再帰別名の妥当性</td><td>型引数と別名本体</td></tr>
+            <tr><th>ヴァリアント型</th><td>各コンストラクタ引数型が整形式であること</td><td>各コンストラクタの多相型スキーム</td></tr>
+            <tr><th>レコード型</th><td>各フィールド型が整形式で、同一レコード内で名前が重複しないこと</td><td>所有型、型引数、フィールド型、可変性、配置順</td></tr>
+            <tr><th>相互再帰型</th><td>グループ内の全型名を利用して各右辺を検査する</td><td>相互参照を含む型宣言表</td></tr>
+        </tbody>
+    </table>
+
+    <h2>型別名</h2>
+
+    <p>
+        型別名は名前解決時には別の型識別子として保持し、型の比較または単一化時に必要に応じて展開します。
+        無限展開を避けるため、展開中の型識別子を追跡します。
+    </p>
+
+    <table>
+        <thead><tr><th>型宣言</th><th>単一化時の扱い</th></tr></thead>
+        <tbody>
+            <tr><th><code>type meters = int</code></th><td><code>meters</code>を<code>int</code>へ展開できる</td></tr>
+            <tr><th><code>type 'a box = 'a list</code></th><td><code>int box</code>を<code>int list</code>へ展開する</td></tr>
+            <tr><th><code>type t = t</code></th><td>不正な循環型別名として宣言時に拒否する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>トップレベル宣言</h2>
+
+    <table>
+        <thead><tr><th>宣言</th><th>処理</th></tr></thead>
+        <tbody>
+            <tr><th><code>let p = e</code></th><td>局所letと同様に右辺とパターンを推論し、値制限に従って型スキームを後続環境へ追加する</td></tr>
+            <tr><th>非再帰関数定義</th><td>無名関数相当として推論し、関数名へ一般化した型スキームを登録する</td></tr>
+            <tr><th>再帰・相互再帰関数定義</th><td>仮型を先に登録して全本体を推論し、グループ完了後に一般化する</td></tr>
+            <tr><th><code>type</code></th><td>型宣言を検査し、コンストラクタ型とフィールド型を登録する</td></tr>
+            <tr><th><code>external</code></th><td>明示型を検査して値環境へ型スキームとして登録する</td></tr>
+            <tr><th><code>module</code></th><td>モジュール本体を新しい型環境で上から順番に検査し、型付きモジュール環境を作る</td></tr>
+            <tr><th><code>open</code></th><td>名前解決済み参照なので型推論環境の探索規則は変更せず、モジュールの型付き宣言情報を参照可能にする</td></tr>
+            <tr><th><code>include</code></th><td>名前解決済みの各識別子について、対応する型情報を現在のモジュール環境へ取り込む</td></tr>
+        </tbody>
+    </table>
+
+    <h2>モジュール</h2>
+
+    <p>
+        基本モジュールは、値識別子から型スキーム、型識別子から型宣言情報、
+        コンストラクタとフィールドから各型情報への対応をまとめた型付き環境として扱います。
+    </p>
+
+    <table>
+        <thead><tr><th>モジュール式</th><th>型検査</th></tr></thead>
+        <tbody>
+            <tr><th>モジュール識別子<span class="math">M</span></th><td>名前解決済みモジュール識別子から型付きモジュール環境を取得する</td></tr>
+            <tr><th><code>struct d1 ... dn end</code></th><td>宣言を上から順番に推論し、公開する型付き環境を返す</td></tr>
+            <tr><th><code>(m : S)</code></th><td>モジュール式を推論し、得た環境がシグネチャ<span class="math">S</span>を満たすか検査する</td></tr>
+            <tr class="advanced"><th>ファンクタ</th><td>セルフホスト後引数シグネチャを満たす仮想モジュールを環境へ追加して本体を検査する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>シグネチャ適合</h2>
+
+    <table>
+        <thead><tr><th>シグネチャ項目</th><th>検査</th></tr></thead>
+        <tbody>
+            <tr><th><code>val x : T</code></th><td>実装側の型スキームが要求型のインスタンス以上に一般的であることを検査する</td></tr>
+            <tr><th><code>type t</code></th><td>実装側に対応する型が存在することを検査し、外側には抽象型として公開する</td></tr>
+            <tr><th><code>type t = T</code></th><td>実装側の型が指定された型と定義的に等しいことを検査する</td></tr>
+            <tr><th><code>module M : S</code></th><td>内部モジュールを再帰的に適合検査する</td></tr>
+            <tr><th><code>include S</code></th><td>取り込まれた全項目を検査する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>外部関数宣言</h2>
+
+    <p>
+        <code>external</code>には完全な型注釈が必要です。
+        型注釈に自由な明示型変数がある場合、それらを型スキームとして量化します。
+    </p>
+
+    <table>
+        <thead><tr><th>宣言</th><th>登録する型</th></tr></thead>
+        <tbody>
+            <tr><th><code>external print_int : int -&gt; unit = "runtime_print_int"</code></th><td><code>int -&gt; unit</code></td></tr>
+            <tr><th><code>external id : 'a -&gt; 'a = "runtime_id"</code></th><td><code>∀α. α -&gt; α</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>型付き抽象構文木</h2>
+
+    <p>
+        型推論後は、各式とパターンへ最新の代入を適用した確定型を保存します。
+        内部に未解決型変数が残ることは許されますが、その型変数は一意であり、
+        その後の代入によって変更されない正規化済みの状態にします。
+    </p>
+
+    <pre><code>type typed_expression = {
+    expression_desc : typed_expression_desc;
+    expression_type : ty;
+    location : source_location;
+}</code></pre>
+
+    <table>
+        <thead><tr><th>情報</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr><th>式の型</th><td>脱糖、パターンコンパイル、値表現選択</td></tr>
+            <tr><th>パターンの型</th><td>網羅性検査、コンストラクタ判定、束縛値の型</td></tr>
+            <tr><th>値識別子の型スキーム</th><td>後続宣言とモジュール公開情報</td></tr>
+            <tr><th>コンストラクタの所有型</th><td>パターンマッチの網羅性検査</td></tr>
+            <tr><th>フィールド情報</th><td>レコード配置、可変性、フィールド番号</td></tr>
+        </tbody>
+    </table>
+
+    <h2>推論例</h2>
+
+    <table>
+        <thead><tr><th>式</th><th>主な制約</th><th>推論結果</th></tr></thead>
+        <tbody>
+            <tr><th><code>fun x -&gt; x</code></th><td><span class="math">x : α</span>、本体も<span class="math">α</span></td><td><span class="math">α -&gt; α</span></td></tr>
+            <tr><th><code>fun f -&gt; fun x -&gt; f (f x)</code></th><td><span class="math">f : α -&gt; α</span></td><td><span class="math">(α -&gt; α) -&gt; α -&gt; α</span></td></tr>
+            <tr><th><code>let id = fun x -&gt; x in (id 1, id true)</code></th><td><code>id : ∀α. α -&gt; α</code>を二度別々に具体化</td><td><code>int * bool</code></td></tr>
+            <tr><th><code>fun id -&gt; (id 1, id true)</code></th><td>同じ単相的<code>id</code>に<code>int -&gt; β</code>と<code>bool -&gt; γ</code>を要求</td><td>型エラー</td></tr>
+            <tr><th><code>fun x -&gt; x x</code></th><td><span class="math">α = α -&gt; β</span></td><td>occurs checkによる型エラー</td></tr>
+            <tr><th><code>let r = ref [] in (r := [1]; !r)</code></th><td>値制限により<code>r</code>は単相的<span class="math">α list ref</span></td><td><code>int list</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>型エラー</h2>
+
+    <table>
+        <thead><tr><th>エラー</th><th>発生条件</th><th>報告内容</th></tr></thead>
+        <tbody>
+            <tr><th>型不一致</th><td>異なる型構築子を単一化しようとした</td><td>期待型、実際の型、主要位置、関連位置</td></tr>
+            <tr><th>無限型</th><td>型変数を自身を含む型と単一化した</td><td>型変数、対象型、制約を生成した式</td></tr>
+            <tr><th>関数でない値の適用</th><td>関数位置の型を引数型から関数型へ単一化できない</td><td>関数位置の型と適用位置</td></tr>
+            <tr><th>条件型エラー</th><td><code>if</code>、<code>while</code>、ガードの型が<code>bool</code>でない</td><td>実際の型と条件位置</td></tr>
+            <tr><th>分岐型不一致</th><td><code>if</code>または<code>match</code>の結果型が一致しない</td><td>各分岐の型と位置</td></tr>
+            <tr><th>逐次式エラー</th><td><code>e1; e2</code>の<span class="math">e</span><sub>1</sub>が<code>unit</code>でない</td><td>実際の型と式の位置</td></tr>
+            <tr><th>コンストラクタ引数エラー</th><td>引数の有無または型が宣言と一致しない</td><td>コンストラクタ宣言位置と使用位置</td></tr>
+            <tr><th>レコード候補不一致</th><td>指定されたフィールド集合を持つレコード型がない</td><td>フィールド名、候補型、作成位置</td></tr>
+            <tr><th>曖昧なレコードフィールド</th><td>型情報を使っても候補を一つへ絞れない</td><td>候補となるレコード型と型注釈の提案位置</td></tr>
+            <tr><th>不変フィールドへの代入</th><td><code>mutable</code>でないフィールドへ代入した</td><td>フィールド宣言位置と代入位置</td></tr>
+            <tr><th>型構築子の引数数不一致</th><td>型宣言の型引数数と使用時の引数数が異なる</td><td>要求数、実際の数、型宣言位置</td></tr>
+            <tr><th>不正な再帰型別名</th><td>型別名が値構築子を介さず直接循環する</td><td>循環する型名の経路</td></tr>
+            <tr><th>シグネチャ不適合</th><td>モジュールが要求された値、型、モジュールを提供しない</td><td>不足項目または不一致項目</td></tr>
+        </tbody>
+    </table>
+
+    <h2>エラー位置の保持</h2>
+
+    <p>
+        単一化制約には、その制約を生成したソース位置と説明を付けます。
+        単一化失敗時には、最後の二型だけでなく、制約の由来も報告します。
+    </p>
+
+    <pre><code>type type_constraint = {
+    left : ty;
+    right : ty;
+    location : source_location;
+    reason : constraint_reason;
+}</code></pre>
+
+    <table>
+        <thead><tr><th>制約の由来</th><th>説明例</th></tr></thead>
+        <tbody>
+            <tr><th>関数適用</th><td>この式は引数を受け取る関数でなければならない</td></tr>
+            <tr><th>条件式</th><td>条件は<code>bool</code>でなければならない</td></tr>
+            <tr><th>分岐</th><td>両方の分岐は同じ型を返さなければならない</td></tr>
+            <tr><th>フィールド代入</th><td>代入値はフィールドの宣言型と一致しなければならない</td></tr>
+            <tr><th>型注釈</th><td>推論した型は明示された型と一致しなければならない</td></tr>
+        </tbody>
+    </table>
+
+    <h2>警告</h2>
+
+    <table>
+        <thead><tr><th>警告</th><th>条件</th></tr></thead>
+        <tbody>
+            <tr><th>値制限による弱い型変数</th><td>副作用を持つlet右辺の型変数を一般化しなかった</td></tr>
+            <tr><th>不要な型注釈</th><td>注釈を除いても同じ最も一般的な型を得られる</td></tr>
+            <tr><th>常に同じ型へ具体化される多相値</th><td>一般化した値が一種類の型でしか使用されない</td></tr>
+            <tr><th>比較できない可能性のある型</th><td>構造的比較の型に未確定型変数が残り、関数値を含む可能性がある</td></tr>
+            <tr><th>部分適用の結果未使用</th><td>関数適用の結果が関数型のまま逐次式などで破棄される</td></tr>
+        </tbody>
+    </table>
+
+    <h2>実装順序</h2>
+
+    <table>
+        <thead><tr><th>段階</th><th>実装内容</th></tr></thead>
+        <tbody>
+            <tr><th>1</th><td>型、型スキーム、型環境、型代入のデータ型</td></tr>
+            <tr><th>2</th><td>自由型変数、代入適用、代入合成</td></tr>
+            <tr><th>3</th><td>occurs checkと単一化</td></tr>
+            <tr><th>4</th><td>新しい型変数、具体化、一般化</td></tr>
+            <tr><th>5</th><td>定数、変数、関数、適用、ifのAlgorithm W</td></tr>
+            <tr><th>6</th><td>let多相、let rec、相互再帰、値制限</td></tr>
+            <tr><th>7</th><td>パターン、match、コンストラクタ、リスト</td></tr>
+            <tr><th>8</th><td>レコード、参照、可変フィールド</td></tr>
+            <tr><th>9</th><td>型宣言、外部関数、トップレベル宣言</td></tr>
+            <tr><th>10</th><td>モジュール、シグネチャ、型付きAST、診断</td></tr>
+        </tbody>
+    </table>
+
+    <h2>検査用テスト</h2>
+
+    <table>
+        <thead><tr><th>分類</th><th>テスト</th><th>期待結果</th></tr></thead>
+        <tbody>
+            <tr><th>単一化</th><td><code>α</code>と<code>int</code></td><td><code>{α ↦ int}</code></td></tr>
+            <tr><th>単一化</th><td><code>α -&gt; β</code>と<code>int -&gt; bool</code></td><td><code>{α ↦ int, β ↦ bool}</code></td></tr>
+            <tr><th>occurs check</th><td><code>α</code>と<code>α list</code></td><td>失敗</td></tr>
+            <tr><th>let多相</th><td><code>let id x = x in (id 1, id true)</code></td><td><code>int * bool</code></td></tr>
+            <tr><th>ラムダの単相性</th><td><code>(fun id -&gt; (id 1, id true)) (fun x -&gt; x)</code></td><td>型エラー</td></tr>
+            <tr><th>値制限</th><td><code>let r = ref []</code></td><td><code>r</code>の要素型を一般化しない</td></tr>
+            <tr><th>再帰</th><td>階乗関数</td><td><code>int -&gt; int</code></td></tr>
+            <tr><th>相互再帰</th><td><code>even</code>と<code>odd</code></td><td>両方とも<code>int -&gt; bool</code></td></tr>
+            <tr><th>パターン</th><td><code>fun (x, y) -&gt; x</code></td><td><code>α * β -&gt; α</code></td></tr>
+            <tr><th>コンストラクタ</th><td><code>Some 1</code></td><td><code>int option</code></td></tr>
+            <tr><th>match</th><td><code>match x with None -&gt; 0 | Some n -&gt; n</code></td><td><code>x : int option</code>、結果<code>int</code></td></tr>
+            <tr><th>型注釈</th><td><code>((fun x -&gt; x) : int -&gt; int)</code></td><td><code>int -&gt; int</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>型推論後に成立する条件</h2>
+
+    <ul>
+        <li>すべての式ノードが一つの型を持つ</li>
+        <li>すべてのパターンノードが対象値の型を持つ</li>
+        <li>すべての値識別子が有効範囲内で一つの型スキームへ対応する</li>
+        <li>同じ単相的値識別子のすべての使用が同じ型代入を共有する</li>
+        <li>多相的値を使用する各位置で型スキームが独立に具体化されている</li>
+        <li>関数適用の関数位置が引数型から結果型への関数型を持つ</li>
+        <li>条件式、while条件、matchガードが<code>bool</code>型を持つ</li>
+        <li>ifとmatchのすべての分岐が同じ結果型を持つ</li>
+        <li>逐次式の左辺とループ本体が<code>unit</code>型を持つ</li>
+        <li>コンストラクタの引数型と結果型が型宣言に一致する</li>
+        <li>レコードの各フィールドが一つの所有型とフィールド型へ確定している</li>
+        <li>可変フィールドへの代入だけが許可されている</li>
+        <li>参照の読出しと書込みが同じ要素型を使用する</li>
+        <li>一般化された型変数が現在の型環境に自由に現れない</li>
+        <li>値制限の対象となる式の型変数が不正に一般化されていない</li>
+        <li>型代入が型付き抽象構文木と型環境へ完全に適用されている</li>
+        <li>型別名を除き、単一化不能な型等式が残っていない</li>
+        <li>occurs checkに反する無限型が存在しない</li>
+        <li>各モジュールが型付きの公開環境を持つ</li>
+        <li>モジュール型制約を持つモジュールが要求されたシグネチャへ適合する</li>
+    </ul>
+
+    <h2>次の段階との関係</h2>
+
+    <table>
+        <thead><tr><th>次の処理</th><th>型推論結果の用途</th></tr></thead>
+        <tbody>
+            <tr><th>網羅性検査</th><td>対象型のコンストラクタ集合と各パターンの型を使用する</td></tr>
+            <tr><th>冗長性検査</th><td>先行パターンが後続パターンを包含するか型ごとに判定する</td></tr>
+            <tr><th>脱糖</th><td>型付き構文をより小さなCore構文へ変換する</td></tr>
+            <tr><th>パターンマッチコンパイル</th><td>確定したコンストラクタ、タグ、フィールド型を使用する</td></tr>
+            <tr><th>値表現の選択</th><td>即値、ヒープブロック、関数値などを型から区別する</td></tr>
+            <tr><th>エラーメッセージ</th><td>型、識別子、宣言位置、制約由来を使用する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>参考資料</h2>
+
+    <ul>
+        <li><a href="https://www.logic.cs.tsukuba.ac.jp/jikken/type-inf.html" target="_blank" rel="noopener noreferrer">単純な式に対する型推論</a></li>
+        <li><a href="https://www.logic.cs.tsukuba.ac.jp/jikken/type-unify.html" target="_blank" rel="noopener noreferrer">単一化</a></li>
+        <li><a href="https://www.logic.cs.tsukuba.ac.jp/jikken/type-general.html" target="_blank" rel="noopener noreferrer">一般的な型推論</a></li>
+        <li><a href="https://kuis-isle3sw.github.io/IoPLMaterials/textbook/chap04-7.html" target="_blank" rel="noopener noreferrer">多相的letの型推論</a></li>
+    </ul>
+
+    <footer>
+        <a href="index.html">トップページ</a>
+    </footer>
+</body>
+</html>

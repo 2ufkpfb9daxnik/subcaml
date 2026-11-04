@@ -444,7 +444,7 @@ live_out(B) =
             </tr>
             <tr class="advanced">
                 <th><span class="math">is_gc_root</span><code>(v)</code></th>
-                <td>発展　仮想レジスタがGCで追跡すべき値を保持するかどうか</td>
+                <td>セルフホスト後仮想レジスタがGCで追跡すべき値を保持するかどうか</td>
             </tr>
         </tbody>
     </table>
@@ -1172,7 +1172,7 @@ jumpr temporary_code</code></pre>
                     <pre><code>move loc(v) to r1
 jump runtime_raise</code></pre>
                 </td>
-                <td>発展　例外値を規定位置へ配置し、例外ランタイムへ移動する</td>
+                <td>セルフホスト後例外値を規定位置へ配置し、例外ランタイムへ移動する</td>
             </tr>
         </tbody>
     </table>
@@ -1207,7 +1207,7 @@ jump runtime_raise</code></pre>
                 </td>
             </tr>
             <tr class="advanced">
-                <th>発展　値が十分に密である</th>
+                <th>セルフホスト後値が十分に密である</th>
                 <td>ジャンプテーブル</td>
                 <td>
                     最小値と最大値の範囲検査後に、
@@ -1301,7 +1301,7 @@ mov r2, temporary</code></pre>
             </tr>
             <tr class="advanced">
                 <th>GCルート情報</th>
-                <td>発展　GCセーフポイントでポインタを保持するスロットを記録する</td>
+                <td>セルフホスト後GCセーフポイントでポインタを保持するスロットを記録する</td>
             </tr>
         </tbody>
     </table>
@@ -1499,7 +1499,7 @@ jump L_false</code></pre>
             <tr class="advanced">
                 <th>浮動小数点定数</th>
                 <td><code>.data</code>内の64ビットワード</td>
-                <td>発展　IEEE 754 binary64のビット列を出力する</td>
+                <td>セルフホスト後IEEE 754 binary64のビット列を出力する</td>
             </tr>
             <tr>
                 <th>ラベル参照</th>
@@ -1527,7 +1527,7 @@ jump L_false</code></pre>
         <li>末尾呼出しの前に現在のスタックフレームが安全に破棄される</li>
         <li>間接呼出しと間接末尾呼出しでコードアドレスがフレーム破棄前に保護される</li>
         <li>並列コピーに循環がある場合、一時レジスタまたは一時スロットが使用される</li>
-        <li class="advanced">発展　GCセーフポイントで生存するポインタの位置が記録されている</li>
+        <li class="advanced">セルフホスト後GCセーフポイントで生存するポインタの位置が記録されている</li>
     </ul>
 
     <h2>変換後に成立する条件</h2>

@@ -141,12 +141,12 @@
                 </td>
             </tr>
             <tr class="advanced">
-                <th>発展　配列ポインタ</th>
+                <th>セルフホスト後配列ポインタ</th>
                 <td>可変長ヒープブロックへのポインタ</td>
                 <td>配列</td>
             </tr>
             <tr class="advanced">
-                <th>発展　浮動小数点値</th>
+                <th>セルフホスト後浮動小数点値</th>
                 <td>IEEE 754 binary64を格納した専用ブロックへのポインタ</td>
                 <td><code>float</code></td>
             </tr>
@@ -309,7 +309,7 @@ untag_int(w) = w &gt;&gt; 1</code></pre>
                 <td>フィールド数を表す</td>
             </tr>
             <tr class="advanced">
-                <th>発展　GC情報</th>
+                <th>セルフホスト後GC情報</th>
                 <td>世代、色、マーク状態などを保持する</td>
             </tr>
         </tbody>
@@ -376,12 +376,12 @@ header_size(header) =
                 <td>バイト長とUTF-8データ</td>
             </tr>
             <tr class="advanced">
-                <th>発展　配列</th>
+                <th>セルフホスト後配列</th>
                 <td><code>array_tag</code></td>
                 <td>各要素。ヘッダのサイズ欄を配列長として使用する</td>
             </tr>
             <tr class="advanced">
-                <th>発展　浮動小数点数</th>
+                <th>セルフホスト後浮動小数点数</th>
                 <td><code>float_tag</code></td>
                 <td>IEEE 754 binary64のビット列</td>
             </tr>
@@ -1000,7 +1000,7 @@ callr r5</code></pre>
     </p>
 
     <section class="advanced">
-        <h2>発展　ガベージコレクション</h2>
+        <h2>セルフホスト後ガベージコレクション</h2>
 
         <p>
             ガベージコレクションを導入する場合は、
@@ -1738,7 +1738,7 @@ done</code></pre>
             <tr class="advanced">
                 <th><code>runtime_gc</code></th>
                 <td>なし</td>
-                <td>発展　GCを実行して単位値を返す</td>
+                <td>セルフホスト後GCを実行して単位値を返す</td>
             </tr>
         </tbody>
     </table>
@@ -1867,7 +1867,7 @@ done</code></pre>
     </p>
 
     <section class="advanced">
-        <h3>発展　浮動小数点数</h3>
+        <h3>セルフホスト後浮動小数点数</h3>
 
         <table>
             <thead>
@@ -1918,7 +1918,7 @@ done</code></pre>
     </section>
 
     <section class="advanced">
-        <h3>発展　配列</h3>
+        <h3>セルフホスト後配列</h3>
 
         <table>
             <thead>
@@ -1964,7 +1964,7 @@ done</code></pre>
     </section>
 
     <section class="advanced">
-        <h3>発展　例外</h3>
+        <h3>セルフホスト後例外</h3>
 
         <table>
             <thead>
@@ -1995,7 +1995,7 @@ done</code></pre>
     </section>
 
     <section class="advanced">
-        <h3>発展　継続とエフェクト</h3>
+        <h3>セルフホスト後継続とエフェクト</h3>
 
         <table>
             <thead>
@@ -2147,8 +2147,8 @@ done</code></pre>
         <li>間接ジャンプ先と間接呼出し先が有効なコードアドレスである</li>
         <li>メモリアクセスの実効アドレスが有効な割当て済み領域にある</li>
         <li>ランタイムAPIが呼出し規約に従って引数と戻り値を扱う</li>
-        <li class="advanced">発展　配列操作が配列ブロックだけを対象にする</li>
-        <li class="advanced">発展　GC後もすべての生存ポインタが有効なブロックを指す</li>
+        <li class="advanced">セルフホスト後配列操作が配列ブロックだけを対象にする</li>
+        <li class="advanced">セルフホスト後GC後もすべての生存ポインタが有効なブロックを指す</li>
     </ul>
 
     <h2>実装後に成立する条件</h2>

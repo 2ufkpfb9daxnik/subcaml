@@ -155,7 +155,7 @@
                     <code>float</code>
                     <span class="math">L r</span>
                 </th>
-                <td>発展　浮動小数点定数</td>
+                <td>セルフホスト後浮動小数点定数</td>
                 <td>
                     ラベル
                     <span class="math">L</span>へ浮動小数点数
@@ -327,7 +327,7 @@ v2
             </tr>
             <tr class="advanced">
                 <th><code>float64</code></th>
-                <td>発展　非ボックス化された浮動小数点数</td>
+                <td>セルフホスト後非ボックス化された浮動小数点数</td>
                 <td>浮動小数点専用レジスタを追加する場合</td>
             </tr>
         </tbody>
@@ -709,7 +709,7 @@ v2
                     <code>raise</code>
                     <span class="math">v</span>
                 </th>
-                <td>発展　例外の送出</td>
+                <td>セルフホスト後例外の送出</td>
                 <td><span class="math">v</span></td>
                 <td>通常の後続ブロックを持たない</td>
             </tr>
@@ -913,7 +913,7 @@ v2
                     <code>float</code>
                     <span class="math">L r</span>
                 </td>
-                <td>発展　浮動小数点定数とラベルをそのまま保持する</td>
+                <td>セルフホスト後浮動小数点定数とラベルをそのまま保持する</td>
             </tr>
             <tr>
                 <th>
@@ -1316,7 +1316,7 @@ L_join:
                     <code>raise</code>
                     <span class="math">v</span><sub>x</sub>
                 </td>
-                <td>発展　通常の後続を持たない例外送出終端命令を生成する</td>
+                <td>セルフホスト後通常の後続を持たない例外送出終端命令を生成する</td>
             </tr>
         </tbody>
     </table>
@@ -1442,7 +1442,7 @@ L_else:
                     <code>raise</code>
                     <span class="math">v</span><sub>x</sub>
                 </td>
-                <td>発展　例外送出終端命令を生成する</td>
+                <td>セルフホスト後例外送出終端命令を生成する</td>
             </tr>
             <tr>
                 <th>その他の式<span class="math">e</span></th>
@@ -1508,7 +1508,7 @@ main_entry:
                     <span class="math">v</span><sub>length</sub><code>,</code>
                     <span class="math">v</span><sub>initial</sub><code>)</code>
                 </td>
-                <td>発展　配列を作成し、結果を仮想レジスタへ格納する</td>
+                <td>セルフホスト後配列を作成し、結果を仮想レジスタへ格納する</td>
             </tr>
             <tr class="advanced">
                 <th>
@@ -1521,7 +1521,7 @@ main_entry:
                     <code>runtime_array_length(</code>
                     <span class="math">v</span><sub>array</sub><code>)</code>
                 </td>
-                <td>発展　配列の長さを取得する</td>
+                <td>セルフホスト後配列の長さを取得する</td>
             </tr>
             <tr class="advanced">
                 <th>
@@ -1536,7 +1536,7 @@ main_entry:
                     <span class="math">v</span><sub>array</sub><code>,</code>
                     <span class="math">v</span><sub>index</sub><code>)</code>
                 </td>
-                <td>発展　範囲検査後に配列要素を読み出す</td>
+                <td>セルフホスト後範囲検査後に配列要素を読み出す</td>
             </tr>
             <tr class="advanced">
                 <th>
@@ -1553,7 +1553,7 @@ main_entry:
                     <span class="math">v</span><sub>index</sub><code>,</code>
                     <span class="math">v</span><sub>value</sub><code>)</code>
                 </td>
-                <td>発展　範囲検査後に配列要素へ書き込む</td>
+                <td>セルフホスト後範囲検査後に配列要素へ書き込む</td>
             </tr>
         </tbody>
     </table>
@@ -1708,7 +1708,7 @@ main_entry:
         <li>末尾位置の間接呼出しが<code>tailcallr</code>へ変換されている</li>
         <li>静的データとコードラベルが具体的なアドレスへ変換されず、ラベルのまま保持されている</li>
         <li>まだ物理レジスタ、spillスロット、スタックフレームの配置は決定されていない</li>
-        <li class="advanced">発展　配列操作がランタイム関数の呼出しへ変換されている</li>
+        <li class="advanced">セルフホスト後配列操作がランタイム関数の呼出しへ変換されている</li>
     </ul>
 
     <h2>次の変換との関係</h2>

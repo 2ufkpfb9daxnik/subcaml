@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>トークン列</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="site-header">
+        <button class="theme-toggle" type="button"></button>
+    </div>
+
+    <h1>トークン列</h1>
+
+    <p>
+        字句解析は、UTF-8のソースコードを、構文解析器が処理できるトークン列へ変換する処理です。
+        空白とコメントを読み飛ばし、予約語、識別子、リテラル、演算子、区切り記号を認識します。
+        各トークンには、エラー報告に使用するソース位置を付与します。
+    </p>
+
+    <ul>
+        <li>UTF-8ソースコード</li>
+        <li>↓ 字句解析</li>
+        <li>位置情報付きトークン列</li>
+        <li>↓ 構文解析</li>
+        <li>抽象構文木</li>
+    </ul>
+
+    <h2>入力と出力</h2>
+
+    <table>
+        <thead><tr><th>項目</th><th>内容</th></tr></thead>
+        <tbody>
+            <tr><th>入力</th><td>UTF-8で符号化されたソースファイル</td></tr>
+            <tr><th>出力</th><td>位置情報を持つトークンの列と終端トークン<code>EOF</code></td></tr>
+            <tr><th>読み飛ばすもの</th><td>空白、改行、コメント</td></tr>
+            <tr><th>失敗</th><td>不正文字、閉じていないコメント、閉じていない文字列、不正なエスケープ、不正な数値</td></tr>
+        </tbody>
+    </table>
+
+    <h2>トークンの内部表現</h2>
+
+    <pre><code>type position = {
+    offset : int;
+    line : int;
+    column : int;
+}
+
+type span = {
+    start_pos : position;
+    end_pos : position;
+}
+
+type located_token = {
+    token : token;
+    span : span;
+}</code></pre>
+
+    <p>
+        <code>offset</code>はファイル先頭からのバイト位置、<code>line</code>と<code>column</code>は1から始まる表示位置とします。
+        <code>end_pos</code>はトークン直後の位置を指す半開区間として扱います。
+    </p>
+
+    <h2>トークン型</h2>
+
+    <pre><code>type token =
+    | INT of int
+    | FLOAT of float
+    | CHAR of char
+    | STRING of string
+    | LIDENT of string
+    | UIDENT of string
+    | TYVAR of string
+    | UNDERSCORE
+    | LET | REC | AND | IN | FUN
+    | IF | THEN | ELSE
+    | MATCH | WITH | WHEN | AS
+    | TYPE | OF | MUTABLE
+    | MODULE | STRUCT | END | OPEN | INCLUDE
+    | SIG | VAL | EXTERNAL
+    | WHILE | DO | DONE
+    | FOR | TO | DOWNTO
+    | TRUE | FALSE
+    | REF | NOT | MOD
+    | LPAREN | RPAREN
+    | LBRACKET | RBRACKET
+    | LBRACE | RBRACE
+    | COMMA | SEMI | COLON | DOT | BAR
+    | LBRACKET_BAR | BAR_RBRACKET
+    | EQUAL | NOT_EQUAL
+    | LESS | LESS_EQUAL | GREATER | GREATER_EQUAL
+    | PLUS | MINUS | STAR | SLASH
+    | PLUS_DOT | MINUS_DOT | STAR_DOT | SLASH_DOT
+    | CONS | ASSIGN | LEFT_ARROW | ARROW
+    | AND_AND | OR_OR | CARET | BANG
+    | EOF
+    | EXCEPTION | RAISE | TRY
+    | EFFECT | PERFORM | CONTINUE | DISCONTINUE
+    | FUNCTOR</code></pre>
+
+    <h2>識別子</h2>
+
+    <table>
+        <thead><tr><th>分類</th><th>字句形式</th><th>トークン</th><th>主な用途</th></tr></thead>
+        <tbody>
+            <tr><th>小文字識別子</th><td>小文字または<code>_</code>で始まり、英数字、<code>_</code>、<code>'</code>が続く</td><td><code>LIDENT(name)</code></td><td>値名、型名、フィールド名</td></tr>
+            <tr><th>大文字識別子</th><td>大文字で始まり、英数字、<code>_</code>、<code>'</code>が続く</td><td><code>UIDENT(name)</code></td><td>コンストラクタ名、モジュール名、モジュール型名</td></tr>
+            <tr><th>型変数</th><td><code>'</code>の後に小文字識別子</td><td><code>TYVAR(name)</code></td><td><code>'a</code>、<code>'value</code>などの型変数</td></tr>
+            <tr><th>ワイルドカード</th><td><code>_</code>だけ</td><td><code>UNDERSCORE</code></td><td>ワイルドカードパターン、発展構文の匿名型引数</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        字句解析器は、<code>LIDENT</code>が予約語表に存在する場合、識別子ではなく対応する予約語トークンを返します。
+        コンストラクタ、モジュール、モジュール型の区別は字句解析では行わず、構文解析と名前解決で決定します。
+    </p>
+
+    <h2>識別子として使用できる文字</h2>
+
+    <table>
+        <thead><tr><th>位置</th><th>基本仕様</th><th>例</th></tr></thead>
+        <tbody>
+            <tr><th>小文字識別子の先頭</th><td><code>a</code>から<code>z</code>または<code>_</code></td><td><code>x</code>、<code>value</code>、<code>_tmp</code></td></tr>
+            <tr><th>大文字識別子の先頭</th><td><code>A</code>から<code>Z</code></td><td><code>Some</code>、<code>Tree</code>、<code>String</code></td></tr>
+            <tr><th>継続文字</th><td>ASCII英数字、<code>_</code>、<code>'</code></td><td><code>map2</code>、<code>value'</code>、<code>Tree_node</code></td></tr>
+            <tr><th>型変数名</th><td>小文字から始まる識別子</td><td><code>'a</code>、<code>'key</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        初期実装では識別子をASCIIに限定します。
+        UTF-8の日本語識別子などを許可する場合は、Unicode識別子の正規化方式と文字分類を別途仕様化します。
+    </p>
+
+    <h2>予約語</h2>
+
+    <table>
+        <thead><tr><th>字句</th><th>トークン</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr><th><code>let</code></th><td><code>LET</code></td><td>値定義</td></tr>
+            <tr><th><code>rec</code></th><td><code>REC</code></td><td>再帰定義</td></tr>
+            <tr><th><code>and</code></th><td><code>AND</code></td><td>複数定義、相互再帰定義</td></tr>
+            <tr><th><code>in</code></th><td><code>IN</code></td><td>局所定義の本体</td></tr>
+            <tr><th><code>fun</code></th><td><code>FUN</code></td><td>無名関数</td></tr>
+            <tr><th><code>if</code></th><td><code>IF</code></td><td>条件式</td></tr>
+            <tr><th><code>then</code></th><td><code>THEN</code></td><td>条件成立時の分岐</td></tr>
+            <tr><th><code>else</code></th><td><code>ELSE</code></td><td>条件不成立時の分岐</td></tr>
+            <tr><th><code>match</code></th><td><code>MATCH</code></td><td>パターンマッチ</td></tr>
+            <tr><th><code>with</code></th><td><code>WITH</code></td><td>分岐、レコード更新、型制約</td></tr>
+            <tr><th><code>when</code></th><td><code>WHEN</code></td><td>ガード</td></tr>
+            <tr><th><code>as</code></th><td><code>AS</code></td><td>別名パターン</td></tr>
+            <tr><th><code>type</code></th><td><code>TYPE</code></td><td>型宣言</td></tr>
+            <tr><th><code>of</code></th><td><code>OF</code></td><td>コンストラクタ引数</td></tr>
+            <tr><th><code>mutable</code></th><td><code>MUTABLE</code></td><td>可変レコードフィールド</td></tr>
+            <tr><th><code>module</code></th><td><code>MODULE</code></td><td>モジュール宣言、第一級モジュール</td></tr>
+            <tr><th><code>struct</code></th><td><code>STRUCT</code></td><td>ストラクチャ開始</td></tr>
+            <tr><th><code>end</code></th><td><code>END</code></td><td>ストラクチャ、シグネチャの終了</td></tr>
+            <tr><th><code>open</code></th><td><code>OPEN</code></td><td>モジュールを開く</td></tr>
+            <tr><th><code>include</code></th><td><code>INCLUDE</code></td><td>モジュール内容の取り込み</td></tr>
+            <tr><th><code>sig</code></th><td><code>SIG</code></td><td>シグネチャ開始</td></tr>
+            <tr><th><code>val</code></th><td><code>VAL</code></td><td>値の仕様</td></tr>
+            <tr><th><code>external</code></th><td><code>EXTERNAL</code></td><td>外部関数宣言</td></tr>
+            <tr><th><code>while</code></th><td><code>WHILE</code></td><td>whileループ</td></tr>
+            <tr><th><code>do</code></th><td><code>DO</code></td><td>ループ本体の開始</td></tr>
+            <tr><th><code>done</code></th><td><code>DONE</code></td><td>ループ本体の終了</td></tr>
+            <tr><th><code>for</code></th><td><code>FOR</code></td><td>forループ</td></tr>
+            <tr><th><code>to</code></th><td><code>TO</code></td><td>昇順forループ</td></tr>
+            <tr><th><code>downto</code></th><td><code>DOWNTO</code></td><td>降順forループ</td></tr>
+            <tr><th><code>true</code></th><td><code>TRUE</code></td><td>真偽値定数</td></tr>
+            <tr><th><code>false</code></th><td><code>FALSE</code></td><td>真偽値定数</td></tr>
+            <tr><th><code>ref</code></th><td><code>REF</code></td><td>参照の作成、参照型</td></tr>
+            <tr><th><code>not</code></th><td><code>NOT</code></td><td>論理否定</td></tr>
+            <tr><th><code>mod</code></th><td><code>MOD</code></td><td>整数の剰余</td></tr>
+            <tr class="advanced"><th><code>exception</code></th><td><code>EXCEPTION</code></td><td>例外定義、例外パターン</td></tr>
+            <tr class="advanced"><th><code>raise</code></th><td><code>RAISE</code></td><td>例外送出</td></tr>
+            <tr class="advanced"><th><code>try</code></th><td><code>TRY</code></td><td>例外処理、エフェクト処理</td></tr>
+            <tr class="advanced"><th><code>effect</code></th><td><code>EFFECT</code></td><td>エフェクト定義、エフェクトパターン</td></tr>
+            <tr class="advanced"><th><code>perform</code></th><td><code>PERFORM</code></td><td>エフェクト実行</td></tr>
+            <tr class="advanced"><th><code>continue</code></th><td><code>CONTINUE</code></td><td>継続の再開</td></tr>
+            <tr class="advanced"><th><code>discontinue</code></th><td><code>DISCONTINUE</code></td><td>継続からの例外送出</td></tr>
+            <tr class="advanced"><th><code>functor</code></th><td><code>FUNCTOR</code></td><td>ファンクタ</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        発展用の語も最初から予約語として扱うと、セルフホスト後に字句仕様を変更せず機能を追加できます。
+        初期段階で通常の識別子として使用できるようにしたい場合は、発展機能を導入する時点で互換性が失われます。
+        基本仕様では最初から予約語とします。
+    </p>
+
+    <h2>プリミティブ型名と標準名</h2>
+
+    <table>
+        <thead><tr><th>字句</th><th>字句解析結果</th><th>理由</th></tr></thead>
+        <tbody>
+            <tr><th><code>int</code>、<code>bool</code>、<code>float</code></th><td><code>LIDENT</code></td><td>型名前空間で組込み型として名前解決する</td></tr>
+            <tr><th><code>char</code>、<code>string</code>、<code>unit</code></th><td><code>LIDENT</code></td><td>型としての意味は構文解析後に決まる</td></tr>
+            <tr><th><code>list</code>、<code>array</code>、<code>exn</code></th><td><code>LIDENT</code></td><td>型構築子または組込み型として扱う</td></tr>
+            <tr><th><code>String</code>、<code>Array</code>、<code>Effect</code></th><td><code>UIDENT</code></td><td>組込みモジュール名として名前解決する</td></tr>
+            <tr><th><code>length</code>、<code>get</code>、<code>make</code></th><td><code>LIDENT</code></td><td>モジュール内の値名として名前解決する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>整数リテラル</h2>
+
+    <table>
+        <thead><tr><th>形式</th><th>例</th><th>トークン</th></tr></thead>
+        <tbody>
+            <tr><th>10進整数</th><td><code>0</code>、<code>42</code>、<code>1000000</code></td><td><code>INT(value)</code></td></tr>
+            <tr><th>区切り付き10進整数</th><td><code>1_000_000</code></td><td><code>INT(1000000)</code></td></tr>
+            <tr><th>負の整数</th><td><code>-42</code></td><td><code>MINUS INT(42)</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        符号は数値トークンへ含めません。
+        <code>-42</code>は単項マイナスと整数リテラルの二つのトークンとして扱います。
+        これにより、二項減算と単項マイナスの区別を構文解析で統一して処理できます。
+    </p>
+
+    <h2>整数の区切り文字</h2>
+
+    <table>
+        <thead><tr><th>入力</th><th>結果</th></tr></thead>
+        <tbody>
+            <tr><th><code>1_000</code></th><td>有効。値は<code>1000</code></td></tr>
+            <tr><th><code>_1000</code></th><td>整数ではなく識別子として認識する</td></tr>
+            <tr><th><code>1000_</code></th><td>不正な数値リテラル</td></tr>
+            <tr><th><code>1__000</code></th><td>不正な数値リテラル</td></tr>
+        </tbody>
+    </table>
+
+    <h2>浮動小数点リテラル</h2>
+
+    <table>
+        <thead><tr><th>形式</th><th>例</th><th>トークン</th></tr></thead>
+        <tbody>
+            <tr><th>小数点形式</th><td><code>0.0</code>、<code>3.14</code></td><td><code>FLOAT(value)</code></td></tr>
+            <tr><th>指数形式</th><td><code>1e3</code>、<code>1.5e-2</code>、<code>2E+8</code></td><td><code>FLOAT(value)</code></td></tr>
+            <tr><th>区切り付き</th><td><code>1_000.25</code>、<code>1.0e1_0</code></td><td>区切りを除去して変換する</td></tr>
+            <tr><th>負の浮動小数点数</th><td><code>-3.14</code></td><td><code>MINUS FLOAT(3.14)</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        <code>1.</code>は<code>FLOAT(1.0)</code>ではなく、<code>INT(1)</code>と<code>DOT</code>として扱います。
+        浮動小数点リテラルの小数点形式では、小数点の後に少なくとも一桁を必要とします。
+        これにより、修飾名やフィールド参照との競合を避けます。
+    </p>
+
+    <h2>数値の範囲</h2>
+
+    <table>
+        <thead><tr><th>種類</th><th>規則</th></tr></thead>
+        <tbody>
+            <tr><th>整数</th><td>字句解析時に任意精度の文字列表現を保持し、対象の<code>int</code>範囲を超える場合は範囲外エラーとする</td></tr>
+            <tr><th>浮動小数点数</th><td>IEEE 754倍精度へ変換し、オーバーフローまたは不正形式を字句エラーとする</td></tr>
+            <tr><th><code>nan</code>、<code>infinity</code></th><td>通常の識別子として扱い、浮動小数点リテラルにはしない</td></tr>
+        </tbody>
+    </table>
+
+    <h2>文字リテラル</h2>
+
+    <table>
+        <thead><tr><th>形式</th><th>例</th><th>結果</th></tr></thead>
+        <tbody>
+            <tr><th>通常文字</th><td><code>'a'</code></td><td><code>CHAR('a')</code></td></tr>
+            <tr><th>空白文字</th><td><code>' '</code></td><td><code>CHAR(' ')</code></td></tr>
+            <tr><th>エスケープ文字</th><td><code>'\n'</code></td><td>改行文字</td></tr>
+            <tr><th>Unicode文字</th><td><code>'あ'</code></td><td>Unicodeスカラー値一つ</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        文字リテラルは、一つのUnicodeスカラー値または一つのエスケープ列だけを含みます。
+        空文字、複数文字、改行を直接含む文字リテラルはエラーです。
+    </p>
+
+    <h2>文字列リテラル</h2>
+
+    <table>
+        <thead><tr><th>形式</th><th>例</th><th>結果</th></tr></thead>
+        <tbody>
+            <tr><th>空文字列</th><td><code>""</code></td><td><code>STRING("")</code></td></tr>
+            <tr><th>通常文字列</th><td><code>"hello"</code></td><td><code>STRING("hello")</code></td></tr>
+            <tr><th>エスケープを含む文字列</th><td><code>"a\nb"</code></td><td>改行文字を含む文字列</td></tr>
+            <tr><th>Unicode文字列</th><td><code>"こんにちは"</code></td><td>UTF-8として読み取り、内部文字列表現へ変換する</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        通常の文字列リテラルに改行を直接含めることはできません。
+        改行は<code>\n</code>で表します。
+        生文字列と複数行文字列は基本仕様に含めません。
+    </p>
+
+    <h2>エスケープ列</h2>
+
+    <table>
+        <thead><tr><th>エスケープ</th><th>意味</th></tr></thead>
+        <tbody>
+            <tr><th><code>\\</code></th><td>バックスラッシュ</td></tr>
+            <tr><th><code>\"</code></th><td>二重引用符</td></tr>
+            <tr><th><code>\'</code></th><td>単一引用符</td></tr>
+            <tr><th><code>\n</code></th><td>改行</td></tr>
+            <tr><th><code>\r</code></th><td>復帰</td></tr>
+            <tr><th><code>\t</code></th><td>水平タブ</td></tr>
+            <tr><th><code>\b</code></th><td>バックスペース</td></tr>
+            <tr><th><code>\xHH</code></th><td>2桁の16進数で表す1バイト</td></tr>
+            <tr><th><code>\u{H...}</code></th><td>1桁から6桁の16進数で表すUnicodeスカラー値</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        Unicodeエスケープは<code>0</code>から<code>10FFFF</code>までとし、サロゲート領域
+        <code>D800</code>から<code>DFFF</code>は拒否します。
+    </p>
+
+    <h2>区切り記号</h2>
+
+    <table>
+        <thead><tr><th>字句</th><th>トークン</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr><th><code>(</code></th><td><code>LPAREN</code></td><td>括弧、組、単位値、型注釈</td></tr>
+            <tr><th><code>)</code></th><td><code>RPAREN</code></td><td>閉じ括弧</td></tr>
+            <tr><th><code>[</code></th><td><code>LBRACKET</code></td><td>リスト</td></tr>
+            <tr><th><code>]</code></th><td><code>RBRACKET</code></td><td>リストの終了</td></tr>
+            <tr><th><code>{</code></th><td><code>LBRACE</code></td><td>レコード</td></tr>
+            <tr><th><code>}</code></th><td><code>RBRACE</code></td><td>レコードの終了</td></tr>
+            <tr><th><code>,</code></th><td><code>COMMA</code></td><td>組、型引数、エフェクト節</td></tr>
+            <tr><th><code>;</code></th><td><code>SEMI</code></td><td>逐次実行、リスト要素、レコードフィールド</td></tr>
+            <tr><th><code>:</code></th><td><code>COLON</code></td><td>型注釈、フィールド型、シグネチャ</td></tr>
+            <tr><th><code>.</code></th><td><code>DOT</code></td><td>修飾名、フィールド参照</td></tr>
+            <tr><th><code>|</code></th><td><code>BAR</code></td><td>ヴァリアント、match分岐、ORパターン</td></tr>
+            <tr class="advanced"><th><code>[|</code></th><td><code>LBRACKET_BAR</code></td><td>配列リテラルの開始</td></tr>
+            <tr class="advanced"><th><code>|]</code></th><td><code>BAR_RBRACKET</code></td><td>配列リテラルの終了</td></tr>
+        </tbody>
+    </table>
+
+    <h2>演算子トークン</h2>
+
+    <table>
+        <thead><tr><th>字句</th><th>トークン</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr><th><code>=</code></th><td><code>EQUAL</code></td><td>定義、等価比較</td></tr>
+            <tr><th><code>&lt;&gt;</code></th><td><code>NOT_EQUAL</code></td><td>非等価比較</td></tr>
+            <tr><th><code>&lt;</code></th><td><code>LESS</code></td><td>順序比較</td></tr>
+            <tr><th><code>&lt;=</code></th><td><code>LESS_EQUAL</code></td><td>順序比較</td></tr>
+            <tr><th><code>&gt;</code></th><td><code>GREATER</code></td><td>順序比較</td></tr>
+            <tr><th><code>&gt;=</code></th><td><code>GREATER_EQUAL</code></td><td>順序比較</td></tr>
+            <tr><th><code>+</code></th><td><code>PLUS</code></td><td>整数加算</td></tr>
+            <tr><th><code>-</code></th><td><code>MINUS</code></td><td>整数減算、単項マイナス</td></tr>
+            <tr><th><code>*</code></th><td><code>STAR</code></td><td>整数乗算、組型</td></tr>
+            <tr><th><code>/</code></th><td><code>SLASH</code></td><td>整数除算</td></tr>
+            <tr><th><code>+.</code></th><td><code>PLUS_DOT</code></td><td>浮動小数点加算</td></tr>
+            <tr><th><code>-.</code></th><td><code>MINUS_DOT</code></td><td>浮動小数点減算、浮動小数点単項マイナス</td></tr>
+            <tr><th><code>*.</code></th><td><code>STAR_DOT</code></td><td>浮動小数点乗算</td></tr>
+            <tr><th><code>/.</code></th><td><code>SLASH_DOT</code></td><td>浮動小数点除算</td></tr>
+            <tr><th><code>::</code></th><td><code>CONS</code></td><td>リストの構築と分解</td></tr>
+            <tr><th><code>:=</code></th><td><code>ASSIGN</code></td><td>参照への代入</td></tr>
+            <tr><th><code>&lt;-</code></th><td><code>LEFT_ARROW</code></td><td>可変フィールド、配列要素への代入</td></tr>
+            <tr><th><code>-&gt;</code></th><td><code>ARROW</code></td><td>関数、match分岐、関数型</td></tr>
+            <tr><th><code>&amp;&amp;</code></th><td><code>AND_AND</code></td><td>論理積</td></tr>
+            <tr><th><code>||</code></th><td><code>OR_OR</code></td><td>論理和</td></tr>
+            <tr><th><code>^</code></th><td><code>CARET</code></td><td>文字列連結</td></tr>
+            <tr><th><code>!</code></th><td><code>BANG</code></td><td>参照の読み出し</td></tr>
+        </tbody>
+    </table>
+
+    <h2>最長一致</h2>
+
+    <p>
+        同じ先頭文字を持つトークンは、最も長く一致する字句を優先します。
+    </p>
+
+    <table>
+        <thead><tr><th>入力先頭</th><th>優先順位</th></tr></thead>
+        <tbody>
+            <tr><th><code>&lt;</code></th><td><code>&lt;-</code>、<code>&lt;=</code>、<code>&lt;&gt;</code>を先に試し、該当しなければ<code>&lt;</code></td></tr>
+            <tr><th><code>&gt;</code></th><td><code>&gt;=</code>を先に試し、該当しなければ<code>&gt;</code></td></tr>
+            <tr><th><code>:</code></th><td><code>::</code>、<code>:=</code>を先に試し、該当しなければ<code>:</code></td></tr>
+            <tr><th><code>-</code></th><td><code>-&gt;</code>、<code>-.</code>を先に試し、該当しなければ<code>-</code></td></tr>
+            <tr><th><code>+</code></th><td><code>+.</code>を先に試し、該当しなければ<code>+</code></td></tr>
+            <tr><th><code>*</code></th><td>コメント開始<code>(*</code>は<code>(</code>の処理で認識し、<code>*.</code>を先に試す</td></tr>
+            <tr><th><code>/</code></th><td><code>/.</code>を先に試し、該当しなければ<code>/</code></td></tr>
+            <tr><th><code>|</code></th><td><code>||</code>、<code>|]</code>を先に試し、該当しなければ<code>|</code></td></tr>
+            <tr><th><code>[</code></th><td><code>[|</code>を先に試し、該当しなければ<code>[</code></td></tr>
+            <tr><th><code>&amp;</code></th><td><code>&amp;&amp;</code>だけを有効とし、単独の<code>&amp;</code>はエラー</td></tr>
+        </tbody>
+    </table>
+
+    <h2>空白</h2>
+
+    <table>
+        <thead><tr><th>文字</th><th>処理</th></tr></thead>
+        <tbody>
+            <tr><th>半角空白</th><td>読み飛ばす</td></tr>
+            <tr><th>水平タブ</th><td>読み飛ばし、列番号を次のタブ位置へ進める</td></tr>
+            <tr><th>改行<code>\n</code></th><td>読み飛ばし、行番号を1増やし列番号を1へ戻す</td></tr>
+            <tr><th>復帰改行<code>\r\n</code></th><td>一つの改行として扱う</td></tr>
+            <tr><th>単独の復帰<code>\r</code></th><td>一つの改行として扱う</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        改行は文の終端トークンにはなりません。
+        宣言や式の境界は構文によって決定します。
+    </p>
+
+    <h2>コメント</h2>
+
+    <table>
+        <thead><tr><th>形式</th><th>例</th><th>処理</th></tr></thead>
+        <tbody>
+            <tr><th>ブロックコメント</th><td><code>(* comment *)</code></td><td>全体を読み飛ばす</td></tr>
+            <tr><th>入れ子コメント</th><td><code>(* outer (* inner *) outer *)</code></td><td>深さを数えて読み飛ばす</td></tr>
+            <tr><th>複数行コメント</th><td><code>(* line 1<br>line 2 *)</code></td><td>行番号を更新しながら読み飛ばす</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        コメントは入れ子を許可します。
+        コメント内の文字列記号や演算子はトークン化しません。
+        ファイル終端までにコメント深さが0へ戻らない場合は、コメント開始位置を示してエラーにします。
+    </p>
+
+    <h2>コメント認識の状態</h2>
+
+    <table>
+        <thead><tr><th>入力</th><th>処理</th></tr></thead>
+        <tbody>
+            <tr><th><code>(*</code></th><td>コメント深さを1増やす</td></tr>
+            <tr><th><code>*)</code></th><td>コメント深さを1減らす</td></tr>
+            <tr><th>その他の文字</th><td>位置情報だけを更新して読み飛ばす</td></tr>
+            <tr><th><code>EOF</code></th><td>深さが0でなければ閉じていないコメントエラー</td></tr>
+        </tbody>
+    </table>
+
+    <h2>ドットの扱い</h2>
+
+    <table>
+        <thead><tr><th>入力</th><th>トークン列</th></tr></thead>
+        <tbody>
+            <tr><th><code>M.x</code></th><td><code>UIDENT("M") DOT LIDENT("x")</code></td></tr>
+            <tr><th><code>e.field</code></th><td><code>LIDENT("e") DOT LIDENT("field")</code></td></tr>
+            <tr><th><code>3.14</code></th><td><code>FLOAT(3.14)</code></td></tr>
+            <tr><th><code>3.foo</code></th><td><code>INT(3) DOT LIDENT("foo")</code></td></tr>
+            <tr class="advanced"><th><code>a.(i)</code></th><td><code>LIDENT("a") DOT LPAREN LIDENT("i") RPAREN</code></td></tr>
+            <tr class="advanced"><th><code>M.(e)</code></th><td><code>UIDENT("M") DOT LPAREN LIDENT("e") RPAREN</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>単項演算子と二項演算子</h2>
+
+    <p>
+        字句解析器は、<code>-</code>、<code>-.</code>、<code>!</code>が単項か二項かを判定しません。
+        同じトークンを返し、構文解析器が出現位置から判定します。
+    </p>
+
+    <table>
+        <thead><tr><th>ソース</th><th>トークン列</th><th>構文上の意味</th></tr></thead>
+        <tbody>
+            <tr><th><code>-x</code></th><td><code>MINUS LIDENT("x")</code></td><td>整数の単項マイナス</td></tr>
+            <tr><th><code>x - y</code></th><td><code>LIDENT("x") MINUS LIDENT("y")</code></td><td>整数減算</td></tr>
+            <tr><th><code>-.x</code></th><td><code>MINUS_DOT LIDENT("x")</code></td><td>浮動小数点の単項マイナス</td></tr>
+            <tr><th><code>x -. y</code></th><td><code>LIDENT("x") MINUS_DOT LIDENT("y")</code></td><td>浮動小数点減算</td></tr>
+            <tr><th><code>!r</code></th><td><code>BANG LIDENT("r")</code></td><td>参照読出し</td></tr>
+        </tbody>
+    </table>
+
+    <h2>字句解析を行わない構文上の区別</h2>
+
+    <table>
+        <thead><tr><th>区別</th><th>決定する段階</th></tr></thead>
+        <tbody>
+            <tr><th><code>=</code>が定義記号か比較演算子か</th><td>構文解析</td></tr>
+            <tr><th><code>|</code>がヴァリアント区切り、match分岐、ORパターンのどれか</th><td>構文解析</td></tr>
+            <tr><th><code>;</code>が逐次実行、リスト区切り、レコード区切りのどれか</th><td>構文解析</td></tr>
+            <tr><th><code>x</code>が値名、型名、フィールド名のどれか</th><td>構文解析と名前解決</td></tr>
+            <tr><th><code>C</code>がコンストラクタ、モジュール、モジュール型のどれか</th><td>構文解析と名前解決</td></tr>
+            <tr><th><code>-</code>が単項演算子か二項演算子か</th><td>構文解析</td></tr>
+            <tr><th><code>M.x</code>が値、型、フィールドのどれを参照するか</th><td>構文解析と名前解決</td></tr>
+            <tr><th>関数適用の境界</th><td>構文解析</td></tr>
+        </tbody>
+    </table>
+
+    <h2>字句解析規則の優先順位</h2>
+
+    <table>
+        <thead><tr><th>優先順位</th><th>規則</th></tr></thead>
+        <tbody>
+            <tr><th>1</th><td>空白とコメントを読み飛ばす</td></tr>
+            <tr><th>2</th><td>文字列リテラルと文字リテラルを認識する</td></tr>
+            <tr><th>3</th><td>数値リテラルを最長一致で認識する</td></tr>
+            <tr><th>4</th><td>識別子を認識し、予約語表を検索する</td></tr>
+            <tr><th>5</th><td>複数文字の演算子と区切り記号を最長一致で認識する</td></tr>
+            <tr><th>6</th><td>単一文字の演算子と区切り記号を認識する</td></tr>
+            <tr><th>7</th><td>どの規則にも一致しない文字を字句エラーにする</td></tr>
+        </tbody>
+    </table>
+
+    <h2>単一引用符の曖昧性</h2>
+
+    <p>
+        単一引用符は文字リテラルと型変数の両方に使用します。
+        次の規則で区別します。
+    </p>
+
+    <table>
+        <thead><tr><th>入力形式</th><th>結果</th></tr></thead>
+        <tbody>
+            <tr><th><code>'a'</code></th><td>閉じる単一引用符があるため<code>CHAR('a')</code></td></tr>
+            <tr><th><code>'\n'</code></th><td>一つのエスケープと閉じる引用符があるため<code>CHAR('\n')</code></td></tr>
+            <tr><th><code>'a</code></th><td>閉じる引用符がなく型変数名として有効なため<code>TYVAR("a")</code></td></tr>
+            <tr><th><code>'value</code></th><td><code>TYVAR("value")</code></td></tr>
+            <tr><th><code>''</code></th><td>空の文字リテラルとしてエラー</td></tr>
+            <tr><th><code>'ab'</code></th><td>複数文字の文字リテラルとしてエラー</td></tr>
+        </tbody>
+    </table>
+
+    <h2>トークン列の例</h2>
+
+    <table>
+        <thead><tr><th>ソース</th><th>トークン列</th></tr></thead>
+        <tbody>
+            <tr>
+                <th><pre><code>let add x y = x + y</code></pre></th>
+                <td><pre><code>LET
+LIDENT("add")
+LIDENT("x")
+LIDENT("y")
+EQUAL
+LIDENT("x")
+PLUS
+LIDENT("y")
+EOF</code></pre></td>
+            </tr>
+            <tr>
+                <th><pre><code>let rec length xs =
+  match xs with
+  | [] -&gt; 0
+  | _ :: rest -&gt; 1 + length rest</code></pre></th>
+                <td><pre><code>LET REC LIDENT("length") LIDENT("xs") EQUAL
+MATCH LIDENT("xs") WITH
+BAR LBRACKET RBRACKET ARROW INT(0)
+BAR UNDERSCORE CONS LIDENT("rest") ARROW
+INT(1) PLUS LIDENT("length") LIDENT("rest")
+EOF</code></pre></td>
+            </tr>
+            <tr>
+                <th><pre><code>type 'a option =
+  | None
+  | Some of 'a</code></pre></th>
+                <td><pre><code>TYPE TYVAR("a") LIDENT("option") EQUAL
+BAR UIDENT("None")
+BAR UIDENT("Some") OF TYVAR("a")
+EOF</code></pre></td>
+            </tr>
+            <tr>
+                <th><pre><code>module M = struct
+  let x = 1
+end
+open M</code></pre></th>
+                <td><pre><code>MODULE UIDENT("M") EQUAL STRUCT
+LET LIDENT("x") EQUAL INT(1)
+END
+OPEN UIDENT("M")
+EOF</code></pre></td>
+            </tr>
+            <tr>
+                <th><pre><code>{ point with x = point.x +. 1.0 }</code></pre></th>
+                <td><pre><code>LBRACE LIDENT("point") WITH
+LIDENT("x") EQUAL
+LIDENT("point") DOT LIDENT("x") PLUS_DOT FLOAT(1.0)
+RBRACE EOF</code></pre></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>位置情報の例</h2>
+
+    <pre><code>let x = 42</code></pre>
+
+    <table>
+        <thead><tr><th>トークン</th><th>開始位置</th><th>終了位置</th></tr></thead>
+        <tbody>
+            <tr><th><code>LET</code></th><td>1行1列、offset 0</td><td>1行4列、offset 3</td></tr>
+            <tr><th><code>LIDENT("x")</code></th><td>1行5列、offset 4</td><td>1行6列、offset 5</td></tr>
+            <tr><th><code>EQUAL</code></th><td>1行7列、offset 6</td><td>1行8列、offset 7</td></tr>
+            <tr><th><code>INT(42)</code></th><td>1行9列、offset 8</td><td>1行11列、offset 10</td></tr>
+            <tr><th><code>EOF</code></th><td>1行11列、offset 10</td><td>1行11列、offset 10</td></tr>
+        </tbody>
+    </table>
+
+    <h2>字句エラー</h2>
+
+    <table>
+        <thead><tr><th>エラー</th><th>条件</th><th>報告内容</th></tr></thead>
+        <tbody>
+            <tr><th>不正な文字</th><td>どのトークン規則にも一致しない</td><td>文字、Unicodeコードポイント、位置</td></tr>
+            <tr><th>閉じていないコメント</th><td>コメント深さが0になる前にEOFへ到達した</td><td>最も外側の未完了コメントの開始位置</td></tr>
+            <tr><th>閉じていない文字列</th><td>二重引用符を閉じる前に改行またはEOFへ到達した</td><td>文字列開始位置</td></tr>
+            <tr><th>閉じていない文字</th><td>単一引用符を閉じる前に改行またはEOFへ到達した</td><td>文字開始位置</td></tr>
+            <tr><th>空の文字リテラル</th><td><code>''</code>が現れた</td><td>リテラル全体の位置</td></tr>
+            <tr><th>複数文字の文字リテラル</th><td>文字リテラルに二つ以上のUnicodeスカラー値がある</td><td>リテラル全体の位置</td></tr>
+            <tr><th>不正なエスケープ</th><td>定義されていないエスケープ列を使用した</td><td>バックスラッシュから不正文字までの位置</td></tr>
+            <tr><th>不正なUnicodeエスケープ</th><td>範囲外、空、7桁以上、サロゲート値</td><td>エスケープ全体の位置と理由</td></tr>
+            <tr><th>不正な数値区切り</th><td><code>_</code>が先頭、末尾、連続位置にある</td><td>数値リテラル全体の位置</td></tr>
+            <tr><th>整数範囲外</th><td>対象の整数表現へ変換できない</td><td>リテラルと許容範囲</td></tr>
+            <tr><th>浮動小数点範囲外</th><td>無限大へオーバーフローする</td><td>リテラルの位置</td></tr>
+            <tr><th>単独の演算子文字</th><td>単独の<code>&amp;</code>など未定義の記号が現れる</td><td>文字と位置、候補となる有効な演算子</td></tr>
+        </tbody>
+    </table>
+
+    <h2>エラーからの回復</h2>
+
+    <table>
+        <thead><tr><th>利用形態</th><th>方針</th></tr></thead>
+        <tbody>
+            <tr><th>通常のコンパイル</th><td>最初の字句エラーで停止する</td></tr>
+            <tr><th>エディタ、LSP</th><td>不正文字を一文字読み飛ばしてエラートークンを記録し、可能な限り後続を字句解析する</td></tr>
+            <tr><th>未完了文字列</th><td>改行位置で打ち切り、次の行から再開する</td></tr>
+            <tr><th>未完了コメント</th><td>EOFまでコメントとして扱い、一つの診断を出す</td></tr>
+        </tbody>
+    </table>
+
+    <h2>字句解析器の状態</h2>
+
+    <pre><code>type lexer_state = {
+    source : bytes;
+    byte_offset : int;
+    line : int;
+    column : int;
+    comment_stack : position list;
+}</code></pre>
+
+    <table>
+        <thead><tr><th>状態</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr><th><code>source</code></th><td>入力されたUTF-8バイト列</td></tr>
+            <tr><th><code>byte_offset</code></th><td>次に読むバイトの位置</td></tr>
+            <tr><th><code>line</code></th><td>現在の行番号</td></tr>
+            <tr><th><code>column</code></th><td>現在の表示列</td></tr>
+            <tr><th><code>comment_stack</code></th><td>入れ子コメントの開始位置</td></tr>
+        </tbody>
+    </table>
+
+    <h2>実装上の関数</h2>
+
+    <table>
+        <thead><tr><th>関数</th><th>役割</th></tr></thead>
+        <tbody>
+            <tr><th><code>next_token</code></th><td>次の位置情報付きトークンを返す</td></tr>
+            <tr><th><code>peek_char</code></th><td>入力位置を進めず次のUnicodeスカラー値を見る</td></tr>
+            <tr><th><code>advance_char</code></th><td>一文字読み、offset、行、列を更新する</td></tr>
+            <tr><th><code>skip_trivia</code></th><td>空白とコメントを読み飛ばす</td></tr>
+            <tr><th><code>lex_identifier</code></th><td>識別子を読み、予約語表を検索する</td></tr>
+            <tr><th><code>lex_number</code></th><td>整数または浮動小数点数を読み取る</td></tr>
+            <tr><th><code>lex_string</code></th><td>文字列とエスケープを読み取る</td></tr>
+            <tr><th><code>lex_char_or_type_variable</code></th><td>文字リテラルと型変数を区別する</td></tr>
+            <tr><th><code>lex_symbol</code></th><td>演算子と区切り記号を最長一致で認識する</td></tr>
+        </tbody>
+    </table>
+
+    <h2>実装順序</h2>
+
+    <table>
+        <thead><tr><th>段階</th><th>実装内容</th></tr></thead>
+        <tbody>
+            <tr><th>1</th><td>位置情報、トークン型、字句解析状態</td></tr>
+            <tr><th>2</th><td>UTF-8文字の読取りと行・列の更新</td></tr>
+            <tr><th>3</th><td>空白と入れ子コメント</td></tr>
+            <tr><th>4</th><td>識別子、予約語、型変数</td></tr>
+            <tr><th>5</th><td>整数、浮動小数点数、数値区切り</td></tr>
+            <tr><th>6</th><td>文字、文字列、エスケープ</td></tr>
+            <tr><th>7</th><td>演算子、区切り記号、最長一致</td></tr>
+            <tr><th>8</th><td>字句エラーと診断</td></tr>
+            <tr><th>9</th><td>構文解析器との接続</td></tr>
+            <tr><th>10</th><td>LSP向けのエラー回復とコメント保持</td></tr>
+        </tbody>
+    </table>
+
+    <h2>検査用テスト</h2>
+
+    <table>
+        <thead><tr><th>分類</th><th>入力</th><th>期待結果</th></tr></thead>
+        <tbody>
+            <tr><th>予約語</th><td><code>let letter = 1</code></td><td><code>LET LIDENT("letter") EQUAL INT(1)</code></td></tr>
+            <tr><th>大文字識別子</th><td><code>Some M.Tree</code></td><td><code>UIDENT("Some") UIDENT("M") DOT UIDENT("Tree")</code></td></tr>
+            <tr><th>型変数</th><td><code>'a list</code></td><td><code>TYVAR("a") LIDENT("list")</code></td></tr>
+            <tr><th>文字</th><td><code>'a'</code></td><td><code>CHAR('a')</code></td></tr>
+            <tr><th>数値</th><td><code>1_000 3.14 1e3</code></td><td><code>INT(1000) FLOAT(3.14) FLOAT(1000.0)</code></td></tr>
+            <tr><th>最長一致</th><td><code>&lt; &lt;= &lt;&gt; &lt;-</code></td><td><code>LESS LESS_EQUAL NOT_EQUAL LEFT_ARROW</code></td></tr>
+            <tr><th>コメント</th><td><code>1 (* a (* b *) c *) + 2</code></td><td><code>INT(1) PLUS INT(2)</code></td></tr>
+            <tr><th>単項マイナス</th><td><code>-1 -. 2.0</code></td><td><code>MINUS INT(1) MINUS_DOT FLOAT(2.0)</code></td></tr>
+            <tr><th>ドット</th><td><code>M.x p.x 1.0</code></td><td><code>UIDENT DOT LIDENT LIDENT DOT LIDENT FLOAT</code></td></tr>
+            <tr><th>エラー</th><td><code>"abc</code></td><td>閉じていない文字列エラー</td></tr>
+            <tr><th>エラー</th><td><code>(* abc</code></td><td>閉じていないコメントエラー</td></tr>
+            <tr><th>エラー</th><td><code>1__0</code></td><td>不正な数値区切りエラー</td></tr>
+        </tbody>
+    </table>
+
+    <h2>字句解析後に成立する条件</h2>
+
+    <ul>
+        <li>コメントと空白が構文上のトークン列から除かれている</li>
+        <li>すべてのトークンが元ソース上の半開区間を持つ</li>
+        <li>トークンの位置範囲が入力順に単調増加している</li>
+        <li>予約語が<code>LIDENT</code>として残っていない</li>
+        <li>小文字識別子、大文字識別子、型変数が区別されている</li>
+        <li>整数、浮動小数点数、文字、文字列が内部値へ変換されている</li>
+        <li>単項マイナスの符号が数値リテラルへ取り込まれていない</li>
+        <li>複数文字の演算子が最長一致で一つのトークンになっている</li>
+        <li>コメントの入れ子が正しく閉じている</li>
+        <li>文字列と文字のエスケープが検証されている</li>
+        <li>不正なUnicodeスカラー値がトークン値へ入っていない</li>
+        <li>改行形式の違いが位置情報へ正しく反映されている</li>
+        <li>トークン列の末尾に一つだけ<code>EOF</code>がある</li>
+        <li>構文上の文脈を必要とする区別が字句解析で誤って確定されていない</li>
+    </ul>
+
+    <h2>次の段階との関係</h2>
+
+    <table>
+        <thead><tr><th>字句解析から渡す情報</th><th>構文解析での用途</th></tr></thead>
+        <tbody>
+            <tr><th>トークン種別</th><td>文法規則との照合</td></tr>
+            <tr><th>識別子文字列</th><td>抽象構文木の未解決名</td></tr>
+            <tr><th>リテラル値</th><td>定数ノードの構築</td></tr>
+            <tr><th>開始位置と終了位置</th><td>構文ノードの位置、構文エラーの報告</td></tr>
+            <tr><th><code>EOF</code></th><td>入力全体を消費したことの確認</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        構文解析器は、トークン列から宣言、式、パターン、型、モジュール式、モジュール型の構造を組み立てます。
+        演算子の優先順位と結合方向、関数適用、単項演算子の区別は構文解析器が処理します。
+    </p>
+
+    <footer>
+        <a href="index.html">トップページ</a>
+    </footer>
+</body>
+</html>

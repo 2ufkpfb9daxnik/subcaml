@@ -29,7 +29,6 @@
     <p>
         基本仕様では、仮想命令を固定長のビット列へ符号化しません。
         アセンブラは、命令をOCamlのデータ型で表された命令配列へ変換します。
-        命令のバイトコード符号化、オブジェクト形式、リンカは発展仕様とします。
     </p>
 
     <h2>アセンブリプログラムの構文</h2>
@@ -1121,7 +1120,7 @@ addi r14, r14, 1</code></pre>
                     <code>ExternalSymbol</code>
                     <span class="math">name</span>
                 </th>
-                <td>発展　リンク時に解決する外部シンボル</td>
+                <td>セルフホスト後リンク時に解決する外部シンボル</td>
             </tr>
         </tbody>
     </table>
@@ -1581,7 +1580,7 @@ relocation[0] = CodeAddress</code></pre>
             </tr>
             <tr class="advanced">
                 <th>外部リンク</th>
-                <td>発展　ランタイムを別オブジェクトとしてリンクする</td>
+                <td>セルフホスト後ランタイムを別オブジェクトとしてリンクする</td>
                 <td>分割コンパイル導入後に使用する</td>
             </tr>
         </tbody>
@@ -1741,142 +1740,870 @@ relocation[0] = CodeAddress</code></pre>
         <li>未知のtrap番号を基本仕様の実行可能形式へ含めていない</li>
     </ul>
 
-    <h2>発展　オブジェクト形式</h2>
+    <h2>オブジェクト形式</h2>
 
     <table>
-        <thead>
-            <tr>
-                <th>フィールド</th>
-                <th>内容</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr class="advanced">
-                <th><code>code</code></th>
-                <td>発展　ラベルの一部が未解決の命令列</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>data</code></th>
-                <td>発展　静的データ</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>symbols</code></th>
-                <td>発展　このオブジェクト内で定義されたシンボル</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>imports</code></th>
-                <td>発展　別のオブジェクトから参照するシンボル</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>exports</code></th>
-                <td>発展　他のオブジェクトへ公開するシンボル</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>relocations</code></th>
-                <td>発展　リンク時に書き換えるコード位置またはデータ位置</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>entry_candidate</code></th>
-                <td>発展　エントリポイント候補のシンボル</td>
-            </tr>
-        </tbody>
+        <tr>
+            <th>フィールド</th>
+            <td>内容</td>
+        </tr>
+        <tr>
+            <th><code>code</code></th>
+            <td>ラベルの一部が未解決の命令列</td>
+        </tr>
+        <tr>
+            <th><code>data</code></th>
+            <td>静的データ</td>
+        </tr>
+        <tr>
+            <th><code>symbols</code></th>
+            <td>このオブジェクト内で定義されたシンボル</td>
+        </tr>
+        <tr>
+            <th><code>imports</code></th>
+            <td>別のオブジェクトから参照するシンボル</td>
+        </tr>
+        <tr>
+            <th><code>exports</code></th>
+            <td>他のオブジェクトへ公開するシンボル</td>
+        </tr>
+        <tr>
+            <th><code>relocations</code></th>
+            <td>リンク時に書き換えるコード位置またはデータ位置</td>
+        </tr>
+        <tr>
+            <th><code>entry_candidate</code></th>
+            <td>エントリポイント候補のシンボル</td>
+        </tr>
     </table>
+    <h2>リンカ</h2>
 
-    <h2>発展　リンカ</h2>
-
-    <table>
-        <thead>
-            <tr>
-                <th>段階</th>
-                <th>処理</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr class="advanced">
-                <th>1</th>
-                <td>複数のオブジェクトのコード領域とデータ領域を結合する</td>
-            </tr>
-            <tr class="advanced">
-                <th>2</th>
-                <td>公開シンボルを一つの大域シンボル表へ登録する</td>
-            </tr>
-            <tr class="advanced">
-                <th>3</th>
-                <td>各外部シンボルを大域シンボル表から解決する</td>
-            </tr>
-            <tr class="advanced">
-                <th>4</th>
-                <td>結合後のコード位置とデータ位置に基づいて再配置を適用する</td>
-            </tr>
-            <tr class="advanced">
-                <th>5</th>
-                <td>エントリポイントを決定する</td>
-            </tr>
-            <tr class="advanced">
-                <th>6</th>
-                <td>最終的な実行可能形式を生成して検査する</td>
-            </tr>
-        </tbody>
-    </table>
-
-    <h2>発展　命令の符号化</h2>
-
-    <p class="advanced">
-        基本仕様では命令をOCamlの代数的データ型として保持します。
-        固定長または可変長バイトコードを導入する場合は、
-        命令コード、レジスタ番号、即値、オフセット、
-        コードアドレスのビット配置を別途定義します。
+    <p>
+        リンカは、複数のオブジェクト形式とランタイムオブジェクトを結合し、
+        仮想CPUが読み込める実行可能形式を生成します。
     </p>
 
     <table>
-        <thead>
-            <tr>
-                <th>必要な仕様</th>
-                <th>内容</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr class="advanced">
-                <th>命令形式</th>
-                <td>命令コードと各オペランドのビット幅</td>
-            </tr>
-            <tr class="advanced">
-                <th>即値形式</th>
-                <td>符号拡張、ゼロ拡張、範囲外即値の展開方法</td>
-            </tr>
-            <tr class="advanced">
-                <th>アドレス形式</th>
-                <td>絶対アドレス、相対アドレス、再配置形式</td>
-            </tr>
-            <tr class="advanced">
-                <th>デコード</th>
-                <td>仮想CPUがバイト列から命令を復元する規則</td>
-            </tr>
-            <tr class="advanced">
-                <th>互換性</th>
-                <td>実行可能形式のバージョン番号と検査規則</td>
-            </tr>
-        </tbody>
+        <tr>
+            <th>段階</th>
+            <td>処理</td>
+        </tr>
+        <tr>
+            <th>1</th>
+            <td>複数のオブジェクトのコード領域とデータ領域を結合する</td>
+        </tr>
+        <tr>
+            <th>2</th>
+            <td>公開シンボルを一つの大域シンボル表へ登録する</td>
+        </tr>
+        <tr>
+            <th>3</th>
+            <td>各外部シンボルを大域シンボル表から解決する</td>
+        </tr>
+        <tr>
+            <th>4</th>
+            <td>結合後のコード位置とデータ位置に基づいて再配置を適用する</td>
+        </tr>
+        <tr>
+            <th>5</th>
+            <td>エントリポイントを決定する</td>
+        </tr>
+        <tr>
+            <th>6</th>
+            <td>最終的な実行可能形式を生成して検査する</td>
+        </tr>
     </table>
+    <h2>命令の符号化</h2>
+    
+    <p>
+        基本仕様では、各基本命令を1個の64ビット命令語へ符号化します。
+        仮想CPUのレジスタとメモリの1ワードも64ビットであるため、
+        命令列は64ビットワードの配列として保持します。
+    </p>
+    
+    <pre><code>type executable = {
+        code : int64 array;
+        data : int64 array;
+        entry : int;
+    }</code></pre>
+    
+    <p>
+        各命令は必ず1ワードです。
+        通常の命令を実行した後は、プログラムカウンタを1増やします。
+        したがって、コードアドレスは命令語配列の添字と一致します。
+    </p>
+    
+    <table>
+        <tr>
+            <th>項目</th>
+            <td>仕様</td>
+        </tr>
+        <tr>
+            <th>命令語の幅</th>
+            <td>64ビット</td>
+        </tr>
+        <tr>
+            <th>命令の長さ</th>
+            <td>すべて1ワードの固定長</td>
+        </tr>
+        <tr>
+            <th>バイト順序</th>
+            <td>
+                OCamlの<code>int64 array</code>として保持する基本実装では規定しない。
+                ファイルへ出力する場合はリトルエンディアンとする
+            </td>
+        </tr>
+        <tr>
+            <th>レジスタ番号</th>
+            <td>
+                4ビットで表し、<code>0</code>から<code>15</code>を
+                <code>r0</code>から<code>r15</code>へ対応させる
+            </td>
+        </tr>
+        <tr>
+            <th>通常の次命令</th>
+            <td><code>pc + 1</code></td>
+        </tr>
+        <tr>
+            <th>コードアドレス</th>
+            <td>命令語配列内の添字</td>
+        </tr>
+        <tr>
+            <th>メモリアドレス</th>
+            <td>64ビットのワードアドレス</td>
+        </tr>
+    </table>
+    
 
-    <h2>アセンブル後に成立する条件</h2>
+    <h3>命令形式</h3>
+    
+    <p>
+        命令の種類に応じて、64ビット命令語を複数の形式に分けます。
+        最上位8ビットは、すべての形式で命令コードとして使用します。
+    </p>
+    
+    <table>
+        <tr>
+            <th>形式</th>
+            <td>主な用途</td>
+        </tr>
+        <tr>
+            <th>R形式</th>
+            <td>3個のレジスタを使用する演算命令</td>
+        </tr>
+        <tr>
+            <th>U形式</th>
+            <td>1個または2個のレジスタを使用する命令</td>
+        </tr>
+        <tr>
+            <th>I形式</th>
+            <td>レジスタと符号付き即値を使用する命令</td>
+        </tr>
+        <tr>
+            <th>M形式</th>
+            <td>メモリアクセス命令</td>
+        </tr>
+        <tr>
+            <th>B形式</th>
+            <td>条件分岐と直接関数呼出し</td>
+        </tr>
+        <tr>
+            <th>J形式</th>
+            <td>無条件直接ジャンプ</td>
+        </tr>
+        <tr>
+            <th>T形式</th>
+            <td>ランタイム処理番号を持つ命令</td>
+        </tr>
+    </table>
+    
 
+    <h3>R形式</h3>
+    
+    <pre><code>63          56 55      52 51      48 47      44 43             0
+    +--------------+----------+----------+----------+----------------+
+    | opcode 8bit  | rd 4bit  | rs1 4bit| rs2 4bit| reserved 44bit |
+    +--------------+----------+----------+----------+----------------+</code></pre>
+    
+    <table>
+        <tr>
+            <th>フィールド</th>
+            <td>内容</td>
+        </tr>
+        <tr>
+            <th><code>opcode</code></th>
+            <td>命令コード</td>
+        </tr>
+        <tr>
+            <th><code>rd</code></th>
+            <td>結果を書き込むレジスタ</td>
+        </tr>
+        <tr>
+            <th><code>rs1</code></th>
+            <td>第1入力レジスタ</td>
+        </tr>
+        <tr>
+            <th><code>rs2</code></th>
+            <td>第2入力レジスタ</td>
+        </tr>
+        <tr>
+            <th><code>reserved</code></th>
+            <td>0でなければならない</td>
+        </tr>
+    </table>
+    
+    <p>R形式を使用する命令は次のとおりです。</p>
+    
+    <table>
+        <tr>
+            <th>分類</th>
+            <td>命令</td>
+        </tr>
+        <tr>
+            <th>整数演算</th>
+            <td>
+                <code>add</code>、<code>sub</code>、<code>mul</code>、
+                <code>div</code>、<code>rem</code>
+            </td>
+        </tr>
+        <tr>
+            <th>ビット演算</th>
+            <td>
+                <code>and</code>、<code>or</code>、<code>xor</code>、
+                <code>shl</code>、<code>shr</code>、<code>sar</code>
+            </td>
+        </tr>
+        <tr>
+            <th>比較</th>
+            <td><code>seq</code>、<code>slt</code></td>
+        </tr>
+    </table>
+    
+
+    <h3>U形式</h3>
+    
+    <pre><code>63          56 55      52 51      48 47                         0
+    +--------------+----------+----------+----------------------------+
+    | opcode 8bit  | rd 4bit  | rs 4bit | reserved 48bit             |
+    +--------------+----------+----------+----------------------------+</code></pre>
+    
+    <table>
+        <tr>
+            <th>命令</th>
+            <td>フィールドの使用方法</td>
+        </tr>
+        <tr>
+            <th><code>mov rd, rs</code></th>
+            <td><code>rd</code>と<code>rs</code>を使用する</td>
+        </tr>
+        <tr>
+            <th><code>not rd, rs</code></th>
+            <td><code>rd</code>と<code>rs</code>を使用する</td>
+        </tr>
+        <tr>
+            <th><code>jumpr rs</code></th>
+            <td><code>rs</code>だけを使用する</td>
+        </tr>
+        <tr>
+            <th><code>jalr rd, rs</code></th>
+            <td><code>rd</code>へ戻り先を書き込み、<code>rs</code>へ移動する</td>
+        </tr>
+        <tr>
+            <th><code>halt</code></th>
+            <td>すべてのオペランドフィールドを0にする</td>
+        </tr>
+    </table>
+    
+
+    <h3>I形式</h3>
+    
+    <pre><code>63          56 55      52 51      48 47                         0
+    +--------------+----------+----------+----------------------------+
+    | opcode 8bit  | rd 4bit  | rs 4bit | signed immediate 48bit     |
+    +--------------+----------+----------+----------------------------+</code></pre>
+    
+    <table>
+        <tr>
+            <th>命令</th>
+            <td>符号化</td>
+        </tr>
+        <tr>
+            <th><code>addi rd, rs, i</code></th>
+            <td>
+                <code>rd</code>、<code>rs</code>、符号付き48ビット即値
+                <code>i</code>を格納する
+            </td>
+        </tr>
+    </table>
+    
+    <p>
+        48ビット即値は、実行時に64ビットへ符号拡張します。
+        表現できる範囲は
+        <code>-2^47</code>から<code>2^47 - 1</code>までです。
+    </p>
+    
+
+    <h3>M形式</h3>
+    
+    <pre><code>63          56 55      52 51      48 47                         0
+    +--------------+----------+----------+----------------------------+
+    | opcode 8bit  | reg 4bit | base 4bit| signed offset 48bit       |
+    +--------------+----------+----------+----------------------------+</code></pre>
+    
+    <table>
+        <tr>
+            <th>命令</th>
+            <td>フィールドの使用方法</td>
+        </tr>
+        <tr>
+            <th><code>load rd, o(rs)</code></th>
+            <td>
+                <code>reg = rd</code>、
+                <code>base = rs</code>、
+                <code>offset = o</code>
+            </td>
+        </tr>
+        <tr>
+            <th><code>store rs, o(rd)</code></th>
+            <td>
+                <code>reg = rs</code>、
+                <code>base = rd</code>、
+                <code>offset = o</code>
+            </td>
+        </tr>
+    </table>
+    
+    <p>
+        オフセットはワード単位の符号付き48ビット整数として格納し、
+        実行時に64ビットへ符号拡張します。
+    </p>
+    
+
+    <h3>B形式</h3>
+    
+    <pre><code>63          56 55      52 51                                    0
+    +--------------+----------+---------------------------------------+
+    | opcode 8bit  | reg 4bit | signed displacement 52bit            |
+    +--------------+----------+---------------------------------------+</code></pre>
+    
+    <table>
+        <tr>
+            <th>命令</th>
+            <td>フィールドの使用方法</td>
+        </tr>
+        <tr>
+            <th><code>brz rs, L</code></th>
+            <td>
+                <code>reg = rs</code>とし、
+                ラベル<code>L</code>までの相対変位を格納する
+            </td>
+        </tr>
+        <tr>
+            <th><code>brnz rs, L</code></th>
+            <td>
+                <code>reg = rs</code>とし、
+                ラベル<code>L</code>までの相対変位を格納する
+            </td>
+        </tr>
+        <tr>
+            <th><code>jal rd, L</code></th>
+            <td>
+                <code>reg = rd</code>とし、
+                ラベル<code>L</code>までの相対変位を格納する
+            </td>
+        </tr>
+    </table>
+    
+    <p>
+        相対変位は、分岐命令の次の命令位置を基準とします。
+    </p>
+    
+    <pre><code>target_pc = (pc + 1) + sign_extend(displacement)</code></pre>
+    
+    <p>
+        直接分岐を相対アドレスにすることで、
+        オブジェクト内のコードを別の位置へ移動しても、
+        同じオブジェクト内の分岐を再配置せずに使用できます。
+    </p>
+    
+
+    <h3>J形式</h3>
+    
+    <pre><code>63          56 55                                                0
+    +--------------+--------------------------------------------------+
+    | opcode 8bit  | signed displacement 56bit                        |
+    +--------------+--------------------------------------------------+</code></pre>
+    
+    <table>
+        <tr>
+            <th>命令</th>
+            <td>符号化</td>
+        </tr>
+        <tr>
+            <th><code>jump L</code></th>
+            <td>
+                ラベル<code>L</code>までの符号付き56ビット相対変位を格納する
+            </td>
+        </tr>
+    </table>
+    
+    <pre><code>target_pc = (pc + 1) + sign_extend(displacement)</code></pre>
+    
+
+    <h3>T形式</h3>
+    
+    <pre><code>63          56 55                                                0
+    +--------------+--------------------------------------------------+
+    | opcode 8bit  | unsigned operand 56bit                           |
+    +--------------+--------------------------------------------------+</code></pre>
+    
+    <table>
+        <tr>
+            <th>命令</th>
+            <td>符号化</td>
+        </tr>
+        <tr>
+            <th><code>trap n</code></th>
+            <td>ランタイム処理番号<code>n</code>を下位56ビットへ格納する</td>
+        </tr>
+    </table>
+    
+
+    <h3>64ビット定数の読込み</h3>
+    
+    <p>
+        1個の64ビット命令語には、命令コードと任意の64ビット即値を
+        同時に格納できません。
+        そのため、<code>li</code>はアセンブラが展開する疑似命令とします。
+    </p>
+    
+    <table>
+        <tr>
+            <th>即値</th>
+            <td>展開方法</td>
+        </tr>
+        <tr>
+            <th>
+                符号付き48ビットの範囲に収まる値
+            </th>
+            <td>
+                <code>addi rd, r0, i</code>へ展開する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                符号付き48ビットの範囲に収まらない64ビット値
+            </th>
+            <td>
+                定数を静的データ内の定数プールへ配置し、
+                <code>la rd, constant_label</code>と
+                <code>load rd, 0(rd)</code>へ展開する
+            </td>
+        </tr>
+    </table>
+    
+    <p>
+        これにより、ソース言語の63ビット整数をタグ付けした64ビット値、
+        浮動小数点数の64ビット表現、アドレスなどを失わずに扱えます。
+    </p>
+    
+    <pre><code>; 符号付き48ビットに収まる場合
+    li r1, 42
+
+    ; 展開後
+    addi r1, r0, 42</code></pre>
+    
+    <pre><code>; 48ビットに収まらない場合
+    li r1, 0x40091eb851eb851f
+
+    ; 展開後
+    la   r1, .LC0
+    load r1, 0(r1)
+
+    .data
+    .LC0:
+        .word 0x40091eb851eb851f</code></pre>
+    
+
+    <h3>アドレスの読込み</h3>
+    
+    <p>
+        <code>la rd, L</code>も疑似命令とします。
+        コードラベルとデータラベルで展開方法を分けます。
+    </p>
+    
+    <table>
+        <tr>
+            <th>ラベル</th>
+            <td>展開方法</td>
+        </tr>
+        <tr>
+            <th>コードラベル</th>
+            <td>
+                相対変位が即値形式に収まる場合は、現在のコード位置を基準に
+                アドレスを計算する専用命令へ展開する
+            </td>
+        </tr>
+        <tr>
+            <th>データラベル</th>
+            <td>
+                静的データ基底アドレスを基準とする相対アドレス命令、
+                または定数プールを経由する命令列へ展開する
+            </td>
+        </tr>
+        <tr>
+            <th>外部シンボル</th>
+            <td>
+                リンカが決定するアドレスを定数プールへ配置し、
+                ロード命令で読み出す
+            </td>
+        </tr>
+    </table>
+    
+    <p>
+        基本実装を単純にする場合、コードアドレスとデータアドレスは
+        すべて定数プールを経由して読み込んでも構いません。
+        この方式では命令形式を追加せず、64ビットアドレスを完全に保持できます。
+    </p>
+    
+
+    <h3>命令コード</h3>
+    
+    <table>
+        <tr>
+            <th>命令コード</th>
+            <td>命令</td>
+            <td>形式</td>
+        </tr>
+        <tr>
+            <th><code>0x00</code></th>
+            <td><code>halt</code></td>
+            <td>U形式</td>
+        </tr>
+        <tr>
+            <th><code>0x01</code></th>
+            <td><code>mov</code></td>
+            <td>U形式</td>
+        </tr>
+        <tr>
+            <th><code>0x02</code></th>
+            <td><code>addi</code></td>
+            <td>I形式</td>
+        </tr>
+        <tr>
+            <th><code>0x10</code></th>
+            <td><code>add</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x11</code></th>
+            <td><code>sub</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x12</code></th>
+            <td><code>mul</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x13</code></th>
+            <td><code>div</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x14</code></th>
+            <td><code>rem</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x20</code></th>
+            <td><code>and</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x21</code></th>
+            <td><code>or</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x22</code></th>
+            <td><code>xor</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x23</code></th>
+            <td><code>not</code></td>
+            <td>U形式</td>
+        </tr>
+        <tr>
+            <th><code>0x24</code></th>
+            <td><code>shl</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x25</code></th>
+            <td><code>shr</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x26</code></th>
+            <td><code>sar</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x30</code></th>
+            <td><code>seq</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x31</code></th>
+            <td><code>slt</code></td>
+            <td>R形式</td>
+        </tr>
+        <tr>
+            <th><code>0x40</code></th>
+            <td><code>load</code></td>
+            <td>M形式</td>
+        </tr>
+        <tr>
+            <th><code>0x41</code></th>
+            <td><code>store</code></td>
+            <td>M形式</td>
+        </tr>
+        <tr>
+            <th><code>0x50</code></th>
+            <td><code>jump</code></td>
+            <td>J形式</td>
+        </tr>
+        <tr>
+            <th><code>0x51</code></th>
+            <td><code>jumpr</code></td>
+            <td>U形式</td>
+        </tr>
+        <tr>
+            <th><code>0x52</code></th>
+            <td><code>brz</code></td>
+            <td>B形式</td>
+        </tr>
+        <tr>
+            <th><code>0x53</code></th>
+            <td><code>brnz</code></td>
+            <td>B形式</td>
+        </tr>
+        <tr>
+            <th><code>0x54</code></th>
+            <td><code>jal</code></td>
+            <td>B形式</td>
+        </tr>
+        <tr>
+            <th><code>0x55</code></th>
+            <td><code>jalr</code></td>
+            <td>U形式</td>
+        </tr>
+        <tr>
+            <th><code>0x60</code></th>
+            <td><code>trap</code></td>
+            <td>T形式</td>
+        </tr>
+    </table>
+    
+    <p>
+        未使用の命令コードは予約領域とします。
+        仮想CPUが未知の命令コードを読み出した場合は、
+        不正命令として実行を停止します。
+    </p>
+    
+
+    <h3>符号化</h3>
+    
+    <table>
+        <tr>
+            <th>形式</th>
+            <td>符号化</td>
+        </tr>
+        <tr>
+            <th>R形式</th>
+            <td>
+                <code>
+                    opcode &lt;&lt; 56 |
+                    rd &lt;&lt; 52 |
+                    rs1 &lt;&lt; 48 |
+                    rs2 &lt;&lt; 44
+                </code>
+            </td>
+        </tr>
+        <tr>
+            <th>U形式</th>
+            <td>
+                <code>
+                    opcode &lt;&lt; 56 |
+                    rd &lt;&lt; 52 |
+                    rs &lt;&lt; 48
+                </code>
+            </td>
+        </tr>
+        <tr>
+            <th>I形式、M形式</th>
+            <td>
+                上位16ビットへ命令コードとレジスタ番号を格納し、
+                下位48ビットへ即値またはオフセットを格納する
+            </td>
+        </tr>
+        <tr>
+            <th>B形式</th>
+            <td>
+                上位12ビットへ命令コードとレジスタ番号を格納し、
+                下位52ビットへ相対変位を格納する
+            </td>
+        </tr>
+        <tr>
+            <th>J形式、T形式</th>
+            <td>
+                上位8ビットへ命令コードを格納し、
+                下位56ビットへオペランドを格納する
+            </td>
+        </tr>
+    </table>
+    
+
+    <h3>デコード</h3>
+    
+    <table>
+        <tr>
+            <th>フィールド</th>
+            <td>抽出方法</td>
+        </tr>
+        <tr>
+            <th><code>opcode</code></th>
+            <td><code>(word &gt;&gt;&gt; 56) &amp; 0xff</code></td>
+        </tr>
+        <tr>
+            <th><code>rd</code>または<code>reg</code></th>
+            <td><code>(word &gt;&gt;&gt; 52) &amp; 0x0f</code></td>
+        </tr>
+        <tr>
+            <th><code>rs1</code>または<code>base</code></th>
+            <td><code>(word &gt;&gt;&gt; 48) &amp; 0x0f</code></td>
+        </tr>
+        <tr>
+            <th><code>rs2</code></th>
+            <td><code>(word &gt;&gt;&gt; 44) &amp; 0x0f</code></td>
+        </tr>
+        <tr>
+            <th>48ビット即値</th>
+            <td>下位48ビットを取り出して64ビットへ符号拡張する</td>
+        </tr>
+        <tr>
+            <th>52ビット相対変位</th>
+            <td>下位52ビットを取り出して64ビットへ符号拡張する</td>
+        </tr>
+        <tr>
+            <th>56ビット相対変位</th>
+            <td>下位56ビットを取り出して64ビットへ符号拡張する</td>
+        </tr>
+    </table>
+    
+
+    <h3>再配置</h3>
+    
+    <p>
+        オブジェクト形式では、外部シンボルや最終配置が未確定の参照に対して
+        再配置情報を生成します。
+    </p>
+    
+    <table>
+        <tr>
+            <th>再配置種別</th>
+            <td>対象</td>
+            <td>リンク時の処理</td>
+        </tr>
+        <tr>
+            <th><code>PcRelative52</code></th>
+            <td><code>brz</code>、<code>brnz</code>、<code>jal</code></td>
+            <td>
+                シンボル位置から次命令位置を引き、
+                符号付き52ビットへ格納する
+            </td>
+        </tr>
+        <tr>
+            <th><code>PcRelative56</code></th>
+            <td><code>jump</code></td>
+            <td>
+                シンボル位置から次命令位置を引き、
+                符号付き56ビットへ格納する
+            </td>
+        </tr>
+        <tr>
+            <th><code>AbsoluteCode64</code></th>
+            <td>定数プール内の関数コードアドレス</td>
+            <td>64ビットの最終コードアドレスを書き込む</td>
+        </tr>
+        <tr>
+            <th><code>AbsoluteData64</code></th>
+            <td>定数プールまたは静的データ内のデータアドレス</td>
+            <td>64ビットの最終メモリアドレスを書き込む</td>
+        </tr>
+    </table>
+    
+    <p>
+        相対変位が指定したビット幅に収まらない場合はリンクエラーとします。
+        基本実装では十分に広い52ビットまたは56ビット変位を使用するため、
+        通常のプログラムで範囲外になることはありません。
+    </p>
+    
+
+    <h3>符号化後の実行可能形式</h3>
+    
+    <pre><code>type executable = {
+        magic : int64;
+        version : int;
+        code : int64 array;
+        data : int64 array;
+        entry : int;
+    }</code></pre>
+    
+    <table>
+        <tr>
+            <th>フィールド</th>
+            <td>内容</td>
+        </tr>
+        <tr>
+            <th><code>magic</code></th>
+            <td>subcaml実行可能形式であることを示す識別値</td>
+        </tr>
+        <tr>
+            <th><code>version</code></th>
+            <td>命令符号化と実行可能形式のバージョン</td>
+        </tr>
+        <tr>
+            <th><code>code</code></th>
+            <td>64ビット固定長命令語の配列</td>
+        </tr>
+        <tr>
+            <th><code>data</code></th>
+            <td>64ビットワードからなる静的データ</td>
+        </tr>
+        <tr>
+            <th><code>entry</code></th>
+            <td>最初に実行する命令語の配列番号</td>
+        </tr>
+    </table>
+    
+
+    <h3>符号化の検査</h3>
+    
     <ul>
-        <li>すべての疑似命令が基本命令へ展開されている</li>
-        <li>命令配列にラベル定義、ディレクティブ、コメントが残っていない</li>
-        <li>すべてのコードラベル参照が命令配列内の位置へ解決されている</li>
-        <li>すべてのデータラベル参照が静的データ内の位置または再配置情報へ変換されている</li>
-        <li>各命令のオペランド数と種類が命令仕様に一致している</li>
-        <li>すべてのレジスタ番号が0以上15以下である</li>
-        <li>すべての整数即値が許容範囲内にある</li>
-        <li>静的データがワード配列として配置されている</li>
-        <li>文字列がランタイムの静的文字列表現へ変換されている</li>
-        <li>エントリポイントが一つの有効なコード位置へ解決されている</li>
-        <li>実行可能形式がVMの事前検査を通過できる</li>
-        <li class="advanced">発展　外部シンボルがリンカによって解決されている</li>
-        <li class="advanced">発展　すべてのリンク時再配置が適用されている</li>
+        <li>すべての基本命令が正確に1個の64ビット命令語へ符号化されていること</li>
+        <li>すべての疑似命令が符号化前に基本命令列へ展開されていること</li>
+        <li>命令コードが定義済みの範囲にあること</li>
+        <li>レジスタ番号が<code>0</code>から<code>15</code>の範囲にあること</li>
+        <li>予約ビットがすべて<code>0</code>であること</li>
+        <li>即値とオフセットが対応するビット幅に収まること</li>
+        <li>直接分岐の相対変位が対応するビット幅に収まること</li>
+        <li>すべての再配置が適用され、未解決シンボルが残っていないこと</li>
+        <li><code>entry</code>が<code>code</code>配列の範囲内にあること</li>
+        <li>デコードした命令を再符号化すると同じ64ビット命令語になること</li>
     </ul>
-
     <h2>次の段階との関係</h2>
 
     <p>
