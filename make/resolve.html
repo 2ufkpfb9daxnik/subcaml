@@ -1,0 +1,2243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>名前解決</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="site-header">
+        <button class="theme-toggle" type="button"></button>
+    </div>
+
+    <h1>名前解決</h1>
+
+    <p>
+        名前解決は、構文解析後の抽象構文木に含まれる名前について、
+        それぞれがどの定義を参照するかを決定する処理です。
+        同じ文字列の名前でも、定義された位置とスコープが異なれば、
+        別の識別子として扱います。
+    </p>
+
+    <ul>
+        <li>ソースコード</li>
+        <li>↓ 字句解析・構文解析</li>
+        <li>名前付き抽象構文木</li>
+        <li>↓ 名前解決</li>
+        <li>解決済み抽象構文木</li>
+        <li>↓ 型推論</li>
+        <li>型付き抽象構文木</li>
+    </ul>
+
+    <p>
+        名前解決では型の正しさを判定しません。
+        変数、型、コンストラクタ、レコードフィールド、モジュールなどの
+        参照先を確定し、未定義名、重複定義、不正なスコープ、
+        ORパターンの束縛不一致などを検出します。
+    </p>
+
+    <h2>名前解決の入力と出力</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>段階</th>
+                <th>名前の表現</th>
+                <th>例</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>名前解決前</th>
+                <td>ソースコードに書かれた文字列</td>
+                <td><code>x</code>、<code>map</code>、<code>Some</code>、<code>M.t</code></td>
+            </tr>
+            <tr>
+                <th>名前解決後</th>
+                <td>宣言ごとに一意な識別子</td>
+                <td>
+                    <code>ValueId(17)</code>、
+                    <code>TypeId(4)</code>、
+                    <code>ConstructorId(9)</code>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        解決済み識別子には、表示用の元の名前と、
+        コンパイラ内部で一意な番号の両方を保持します。
+    </p>
+
+    <pre><code>type value_id = {
+    id : int;
+    name : string;
+}
+
+type type_id = {
+    id : int;
+    name : string;
+}
+
+type constructor_id = {
+    id : int;
+    name : string;
+}</code></pre>
+
+    <h2>名前空間</h2>
+
+    <p>
+        名前の種類ごとに独立した名前空間を使用します。
+        同じ文字列でも、異なる名前空間に属する名前は共存できます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>名前空間</th>
+                <th>定義する構文</th>
+                <th>参照する構文</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>値</th>
+                <td>
+                    <code>let</code>、
+                    関数の仮引数、
+                    パターン変数、
+                    <code>external</code>
+                </td>
+                <td>変数式、関数適用、値として使用する演算子</td>
+            </tr>
+            <tr>
+                <th>型</th>
+                <td><code>type t = ...</code></td>
+                <td><code>t</code>、<code>M.t</code>、型注釈</td>
+            </tr>
+            <tr>
+                <th>型変数</th>
+                <td>型宣言の型引数、明示的な型変数の束縛</td>
+                <td><code>'a</code>、<code>'b</code>などの型変数</td>
+            </tr>
+            <tr>
+                <th>コンストラクタ</th>
+                <td>ヴァリアント型、例外型の定義</td>
+                <td>コンストラクタ式、コンストラクタパターン</td>
+            </tr>
+            <tr>
+                <th>レコードフィールド</th>
+                <td>レコード型定義</td>
+                <td>
+                    レコード作成、フィールド参照、
+                    レコード更新、レコードパターン
+                </td>
+            </tr>
+            <tr>
+                <th>モジュール</th>
+                <td><code>module M = ...</code></td>
+                <td>
+                    <code>M.x</code>、<code>M.t</code>、
+                    <code>open M</code>、<code>include M</code>
+                </td>
+            </tr>
+            <tr class="advanced">
+                <th>発展　モジュール型</th>
+                <td><code>module type S = ...</code></td>
+                <td>モジュール型注釈、ファンクタの引数型</td>
+            </tr>
+            <tr class="advanced">
+                <th>発展　エフェクトコンストラクタ</th>
+                <td><code>type _ Effect.t += C : ...</code></td>
+                <td><code>perform C</code>、エフェクトパターン</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        値名
+        <code>t</code>と型名
+        <code>t</code>は共存できます。
+        一方、同じスコープの同じ名前空間に同じ名前を二重に定義した場合は、
+        その宣言形式が明示的に再定義を許可しない限りエラーとします。
+    </p>
+
+    <h2>解決環境</h2>
+
+    <p>
+        名前解決中の環境を
+        <span class="math">Γ</span>と表します。
+        環境は名前空間ごとの対応表と、現在開かれているモジュールを保持します。
+    </p>
+
+    <pre><code>type environment = {
+    values : value_id NameMap.t;
+    types : type_id NameMap.t;
+    type_variables : type_variable_id NameMap.t;
+    constructors : constructor_id NameMap.t;
+    fields : field_id list NameMap.t;
+    modules : module_id NameMap.t;
+    module_types : module_type_id NameMap.t;
+    opened_modules : module_id list;
+}</code></pre>
+
+    <table>
+        <thead>
+            <tr>
+                <th>環境の要素</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>values</code></th>
+                <td>非修飾の値名から値識別子への対応</td>
+            </tr>
+            <tr>
+                <th><code>types</code></th>
+                <td>非修飾の型名から型識別子への対応</td>
+            </tr>
+            <tr>
+                <th><code>type_variables</code></th>
+                <td>現在の型宣言または型注釈内で束縛された型変数</td>
+            </tr>
+            <tr>
+                <th><code>constructors</code></th>
+                <td>非修飾のコンストラクタ名からコンストラクタ識別子への対応</td>
+            </tr>
+            <tr>
+                <th><code>fields</code></th>
+                <td>
+                    フィールド名から候補となるフィールド識別子の一覧への対応
+                </td>
+            </tr>
+            <tr>
+                <th><code>modules</code></th>
+                <td>非修飾のモジュール名からモジュール識別子への対応</td>
+            </tr>
+            <tr>
+                <th><code>module_types</code></th>
+                <td>モジュール型名からモジュール型識別子への対応</td>
+            </tr>
+            <tr>
+                <th><code>opened_modules</code></th>
+                <td>現在のスコープで開かれているモジュールを新しい順に保持する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>モジュール環境</h2>
+
+    <p>
+        各モジュールは、外部から参照できる名前をまとめたモジュール環境を持ちます。
+    </p>
+
+    <pre><code>type module_environment = {
+    values : value_id NameMap.t;
+    types : type_id NameMap.t;
+    constructors : constructor_id NameMap.t;
+    fields : field_id list NameMap.t;
+    modules : module_id NameMap.t;
+    module_types : module_type_id NameMap.t;
+}</code></pre>
+
+    <p>
+        モジュールの型検査より前の名前解決では、
+        モジュール環境は主に構造上存在する宣言を表します。
+        値の型、型別名の展開結果、モジュール型との適合性は、
+        後続の型検査で決定します。
+    </p>
+
+    <h2>組込み環境</h2>
+
+    <p>
+        プログラムの名前解決は、組込みの型、値、コンストラクタ、
+        モジュールを登録した初期環境から開始します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>分類</th>
+                <th>主な組込み名</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>プリミティブ型</th>
+                <td>
+                    <code>int</code>、
+                    <code>bool</code>、
+                    <code>float</code>、
+                    <code>char</code>、
+                    <code>string</code>、
+                    <code>unit</code>
+                </td>
+            </tr>
+            <tr>
+                <th>型構築子</th>
+                <td><code>list</code>、<code>ref</code></td>
+            </tr>
+            <tr>
+                <th>定数コンストラクタ</th>
+                <td><code>[]</code>、<code>()</code>、<code>true</code>、<code>false</code></td>
+            </tr>
+            <tr>
+                <th>組込み値</th>
+                <td>
+                    プリミティブ演算、
+                    <code>ref</code>、
+                    必要なランタイム関数
+                </td>
+            </tr>
+            <tr>
+                <th>組込みモジュール</th>
+                <td><code>String</code></td>
+            </tr>
+            <tr class="advanced">
+                <th>発展　型構築子</th>
+                <td><code>array</code>、<code>exn</code></td>
+            </tr>
+            <tr class="advanced">
+                <th>発展　組込みモジュール</th>
+                <td><code>Array</code>、<code>Effect</code></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>解決済み抽象構文木</h2>
+
+    <p>
+        名前解決後の抽象構文木では、宣言と参照に一意な識別子を格納します。
+        ソース位置と元の名前も、エラー表示のために保持します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>名前解決前</th>
+                <th>名前解決後</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>Variable "x"</code></th>
+                <td><code>Variable ValueId(17, "x")</code></td>
+            </tr>
+            <tr>
+                <th><code>TypeName "tree"</code></th>
+                <td><code>TypeName TypeId(4, "tree")</code></td>
+            </tr>
+            <tr>
+                <th><code>Constructor "Node"</code></th>
+                <td><code>Constructor ConstructorId(9, "Node")</code></td>
+            </tr>
+            <tr>
+                <th><code>Field "value"</code></th>
+                <td>
+                    一意なら
+                    <code>Field FieldId(3, "value")</code>、
+                    型情報が必要なら候補集合を保持する
+                </td>
+            </tr>
+            <tr>
+                <th><code>ModulePath ["A"; "B"]</code></th>
+                <td>
+                    <code>ModulePath [ModuleId(2, "A"); ModuleId(8, "B")]</code>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>名前解決の記法</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>記法</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">R</span><sub>e</sub><code>⟦</code>
+                    <span class="math">Γ</span><code>;</code>
+                    <span class="math">e</span><code>⟧</code>
+                </th>
+                <td>
+                    環境
+                    <span class="math">Γ</span>で式
+                    <span class="math">e</span>を解決する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">R</span><sub>p</sub><code>⟦</code>
+                    <span class="math">Γ</span><code>;</code>
+                    <span class="math">p</span><code>⟧</code>
+                </th>
+                <td>
+                    パターン
+                    <span class="math">p</span>を解決し、
+                    解決済みパターンと新しい束縛の集合を返す
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">R</span><sub>T</sub><code>⟦</code>
+                    <span class="math">Γ</span><code>;</code>
+                    <span class="math">T</span><code>⟧</code>
+                </th>
+                <td>
+                    型式
+                    <span class="math">T</span>に含まれる型名と型変数を解決する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">R</span><sub>d</sub><code>⟦</code>
+                    <span class="math">Γ</span><code>;</code>
+                    <span class="math">d</span><code>⟧</code>
+                </th>
+                <td>
+                    宣言
+                    <span class="math">d</span>を解決し、
+                    解決済み宣言と後続宣言用の環境を返す
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">R</span><sub>m</sub><code>⟦</code>
+                    <span class="math">Γ</span><code>;</code>
+                    <span class="math">m</span><code>⟧</code>
+                </th>
+                <td>モジュール式を解決する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>名前の探索順序</h2>
+
+    <p>
+        非修飾名
+        <span class="math">x</span>は、次の順序で探索します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>優先順位</th>
+                <th>探索先</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>1</th>
+                <td>現在の最も内側の局所スコープ</td>
+            </tr>
+            <tr>
+                <th>2</th>
+                <td>外側の局所スコープを内側から外側へ順番に探索する</td>
+            </tr>
+            <tr>
+                <th>3</th>
+                <td>現在のストラクチャでそれ以前に定義された名前</td>
+            </tr>
+            <tr>
+                <th>4</th>
+                <td>
+                    <code>open</code>されたモジュールを、
+                    最後に開いたものから逆順に探索する
+                </td>
+            </tr>
+            <tr>
+                <th>5</th>
+                <td>組込み環境</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        修飾名
+        <code>M.x</code>は、まずモジュール名
+        <code>M</code>をモジュール名前空間で解決し、
+        そのモジュール環境から
+        <code>x</code>を探索します。
+        修飾名の探索には
+        <code>open</code>による非修飾候補を使用しません。
+    </p>
+
+    <h2>シャドーイング</h2>
+
+    <p>
+        内側のスコープで同じ名前を定義した場合、
+        そのスコープ内では外側の定義を隠します。
+        隠された定義自体は削除されません。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ソース</th>
+                <th>解決結果</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <pre><code>let x = 1 in
+let x = 2 in
+x</code></pre>
+                </th>
+                <td>
+                    最初の
+                    <code>x</code>を
+                    <code>x#1</code>、
+                    二番目の
+                    <code>x</code>を
+                    <code>x#2</code>とすると、
+                    最後の参照は
+                    <code>x#2</code>を指す
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        シャドーイングはエラーにしません。
+        必要なら未使用定義や意図しないシャドーイングとして警告できます。
+    </p>
+
+    <h2>式の名前解決</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>名前解決前</th>
+                <th>名前解決後</th>
+                <th>環境の扱い</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><span class="math">c</span></th>
+                <td>同じ定数<span class="math">c</span></td>
+                <td>環境を参照しない</td>
+            </tr>
+            <tr>
+                <th><span class="math">x</span></th>
+                <td>
+                    <span class="math">Γ</span>の値名前空間から得た
+                    <span class="math">ValueId</span>
+                </td>
+                <td>見つからなければ未定義値エラー</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">M</span><code>.</code><span class="math">x</span>
+                </th>
+                <td>
+                    モジュール
+                    <span class="math">M</span>の環境から得た
+                    <span class="math">ValueId</span>
+                </td>
+                <td>モジュールと値を順番に解決する</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">op</span><code>(</code>
+                    <span class="math">e</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">e</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    演算子の組込み識別子と
+                    <span class="math">R</span><sub>e</sub><code>⟦Γ;</code>
+                    <span class="math">e</span><sub>1</sub><code>⟧</code> ...
+                </td>
+                <td>各部分式を同じ環境で解決する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>if</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>then</code>
+                    <span class="math">e</span><sub>2</sub>
+                    <code>else</code>
+                    <span class="math">e</span><sub>3</sub>
+                </th>
+                <td>各部分式を解決した条件式</td>
+                <td>三つの部分式を同じ環境で解決する</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span><sub>1</sub>
+                    <span class="math">e</span><sub>2</sub> ...
+                    <span class="math">e</span><sub>n</sub>
+                </th>
+                <td>関数位置と各実引数を解決した関数適用</td>
+                <td>すべて同じ環境で解決する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>fun</code>
+                    <span class="math">p</span><sub>1</sub> ...
+                    <span class="math">p</span><sub>n</sub>
+                    <code>-&gt;</code>
+                    <span class="math">e</span>
+                </th>
+                <td>解決済みパターンと本体</td>
+                <td>
+                    各引数パターンの束縛を順番に環境へ追加してから
+                    本体を解決する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>match</code>
+                    <span class="math">e</span>
+                    <code>with</code> ...
+                </th>
+                <td>対象式、各パターン、ガード、分岐本体を解決した式</td>
+                <td>
+                    各分岐は外側の環境から独立に開始し、
+                    その分岐のパターン束縛だけを追加する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>for</code>
+                    <span class="math">x</span>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>to</code>
+                    <span class="math">e</span><sub>2</sub>
+                    <code>do</code>
+                    <span class="math">e</span><sub>3</sub>
+                    <code>done</code>
+                </th>
+                <td>
+                    ループ変数へ新しい
+                    <span class="math">ValueId</span>を割り当てたループ
+                </td>
+                <td>
+                    境界式は外側の環境で解決し、
+                    本体だけをループ変数を追加した環境で解決する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>(</code><span class="math">e</span>
+                    <code>:</code>
+                    <span class="math">T</span><code>)</code>
+                </th>
+                <td>解決済み式と解決済み型注釈</td>
+                <td>式と型を対応する名前空間で解決する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>非再帰局所定義の解決</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>名前解決前</th>
+                <th>解決手順</th>
+                <th>重要な規則</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">p</span>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>in</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>
+                    <ol>
+                        <li>
+                            <span class="math">e</span><sub>1</sub>を
+                            元の環境
+                            <span class="math">Γ</span>で解決する
+                        </li>
+                        <li>
+                            <span class="math">p</span>を解決して新しい束縛
+                            <span class="math">Δ</span>を得る
+                        </li>
+                        <li>
+                            <span class="math">Γ + Δ</span>で
+                            <span class="math">e</span><sub>2</sub>を解決する
+                        </li>
+                    </ol>
+                </td>
+                <td>
+                    パターンで定義される名前は、
+                    <span class="math">e</span><sub>1</sub>の中では使用できない
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>非再帰関数定義の解決</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>名前解決前</th>
+                <th>解決手順</th>
+                <th>スコープ</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">f p</span><sub>1</sub> ...
+                    <span class="math">p</span><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>in</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>
+                    <ol>
+                        <li>
+                            関数名
+                            <span class="math">f</span>へ新しい
+                            <span class="math">ValueId</span>を作る
+                        </li>
+                        <li>
+                            仮引数パターンを解決して束縛
+                            <span class="math">Δ</span>を得る
+                        </li>
+                        <li>
+                            <span class="math">Γ + Δ</span>で
+                            関数本体
+                            <span class="math">e</span><sub>1</sub>を解決する
+                        </li>
+                        <li>
+                            <span class="math">Γ + {f}</span>で
+                            後続式
+                            <span class="math">e</span><sub>2</sub>を解決する
+                        </li>
+                    </ol>
+                </td>
+                <td>
+                    非再帰定義なので
+                    <span class="math">f</span>は自身の本体から参照できない
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>再帰関数定義の解決</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>名前解決前</th>
+                <th>解決手順</th>
+                <th>スコープ</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>let rec</code>
+                    <span class="math">f p</span><sub>1</sub> ...
+                    <span class="math">p</span><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>in</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>
+                    <ol>
+                        <li>
+                            関数名
+                            <span class="math">f</span>へ新しい
+                            <span class="math">ValueId</span>を作る
+                        </li>
+                        <li>
+                            <span class="math">f</span>を環境へ追加する
+                        </li>
+                        <li>仮引数パターンを解決する</li>
+                        <li>
+                            <span class="math">Γ + {f} + Δ</span>で
+                            関数本体
+                            <span class="math">e</span><sub>1</sub>を解決する
+                        </li>
+                        <li>
+                            <span class="math">Γ + {f}</span>で
+                            後続式
+                            <span class="math">e</span><sub>2</sub>を解決する
+                        </li>
+                    </ol>
+                </td>
+                <td>
+                    <span class="math">f</span>は自身の本体と後続式から参照できる
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>相互再帰関数定義の解決</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>名前解決前</th>
+                <th>解決手順</th>
+                <th>スコープ</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>let rec</code>
+                    <span class="math">f</span><sub>1</sub> ...
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>and</code> ...
+                    <code>and</code>
+                    <span class="math">f</span><sub>n</sub> ...
+                    <code>=</code>
+                    <span class="math">e</span><sub>n</sub>
+                    <code>in</code>
+                    <span class="math">e</span>
+                </th>
+                <td>
+                    <ol>
+                        <li>
+                            すべての関数名
+                            <span class="math">f</span><sub>1</sub>から
+                            <span class="math">f</span><sub>n</sub>へ
+                            一意な識別子を先に割り当てる
+                        </li>
+                        <li>すべての関数名を共通環境へ追加する</li>
+                        <li>
+                            各関数について、その関数固有の仮引数を追加して
+                            本体を解決する
+                        </li>
+                        <li>後続式を共通環境で解決する</li>
+                    </ol>
+                </td>
+                <td>
+                    同じ相互再帰グループのすべての関数が、
+                    すべての関数本体から参照できる
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>複数の非再帰定義</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>名前解決前</th>
+                <th>解決順序</th>
+                <th>規則</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">p</span><sub>1</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>and</code> ...
+                    <code>and</code>
+                    <span class="math">p</span><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>n</sub>
+                </th>
+                <td>
+                    すべての右辺を元の環境
+                    <span class="math">Γ</span>で独立に解決し、
+                    すべてのパターン束縛を右辺の解決後に環境へ追加する
+                </td>
+                <td>
+                    同じ非再帰グループの右辺から、
+                    そのグループで新しく定義される名前を参照できない
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>パターンの名前解決</h2>
+
+    <p>
+        パターンの名前解決は、
+        パターン内で新しく定義される値識別子の集合も返します。
+        パターンに現れる変数は参照ではなく定義です。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>パターン</th>
+                <th>解決結果</th>
+                <th>新しい束縛</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>_</code></th>
+                <td>ワイルドカード</td>
+                <td>なし</td>
+            </tr>
+            <tr>
+                <th><span class="math">x</span></th>
+                <td>
+                    新しい
+                    <span class="math">ValueId</span>を持つ変数パターン
+                </td>
+                <td>{<span class="math">x</span>}</td>
+            </tr>
+            <tr>
+                <th><span class="math">c</span></th>
+                <td>同じ定数パターン</td>
+                <td>なし</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>(</code>
+                    <span class="math">p</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">p</span><sub>n</sub><code>)</code>
+                </th>
+                <td>各要素を解決したタプルパターン</td>
+                <td>各要素の束縛の互いに素な和集合</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>{</code>
+                    <span class="math">l</span><sub>1</sub>
+                    <code>=</code>
+                    <span class="math">p</span><sub>1</sub><code>;</code> ...
+                    <code>}</code>
+                </th>
+                <td>フィールド候補と各部分パターンを解決したパターン</td>
+                <td>各部分パターンの束縛の和集合</td>
+            </tr>
+            <tr>
+                <th><span class="math">C</span></th>
+                <td>解決済みコンストラクタ識別子</td>
+                <td>なし</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">C p</span>
+                </th>
+                <td>解決済みコンストラクタと解決済み引数パターン</td>
+                <td>引数パターンの束縛</td>
+            </tr>
+            <tr>
+                <th><code>[]</code></th>
+                <td>組込みの空リストコンストラクタ</td>
+                <td>なし</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">p</span><sub>1</sub>
+                    <code>::</code>
+                    <span class="math">p</span><sub>2</sub>
+                </th>
+                <td>組込みのconsコンストラクタを使用するパターン</td>
+                <td>両方の部分パターンの束縛の和集合</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">p</span>
+                    <code>as</code>
+                    <span class="math">x</span>
+                </th>
+                <td>
+                    部分パターンを解決し、
+                    <span class="math">x</span>へ新しい識別子を割り当てる
+                </td>
+                <td>
+                    部分パターンの束縛と
+                    <span class="math">x</span>
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>(</code>
+                    <span class="math">p</span>
+                    <code>:</code>
+                    <span class="math">T</span><code>)</code>
+                </th>
+                <td>解決済みパターンと解決済み型注釈</td>
+                <td>部分パターンの束縛</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>パターン内の重複束縛</h2>
+
+    <p>
+        一つのパターン内で同じ名前を複数回束縛することはできません。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>パターン</th>
+                <th>結果</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>(x, y)</code></th>
+                <td>有効。<code>x</code>と<code>y</code>を別々に束縛する</td>
+            </tr>
+            <tr>
+                <th><code>(x, x)</code></th>
+                <td>エラー。同じパターン内で<code>x</code>を二重に束縛している</td>
+            </tr>
+            <tr>
+                <th><code>Some x as y</code></th>
+                <td>有効。<code>x</code>と<code>y</code>を束縛する</td>
+            </tr>
+            <tr>
+                <th><code>Some x as x</code></th>
+                <td>エラー。別名が既存のパターン変数と重複している</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>ORパターン</h2>
+
+    <p>
+        ORパターンの両側は、同じ名前の集合を束縛しなければなりません。
+        対応する名前には、両側で共通の解決済み識別子を割り当てます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>パターン</th>
+                <th>結果</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>Some x | Error x</code></th>
+                <td>
+                    有効。両側の
+                    <code>x</code>を同じ
+                    <span class="math">ValueId</span>へ解決する
+                </td>
+            </tr>
+            <tr>
+                <th><code>Some x | None</code></th>
+                <td>
+                    エラー。左側だけが
+                    <code>x</code>を束縛している
+                </td>
+            </tr>
+            <tr>
+                <th><code>(x, y) | (y, x)</code></th>
+                <td>
+                    有効。両側が
+                    <code>x</code>と
+                    <code>y</code>を束縛する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>パターンマッチ分岐のスコープ</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>部分</th>
+                <th>使用する環境</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>マッチ対象式</th>
+                <td>外側の環境<span class="math">Γ</span></td>
+            </tr>
+            <tr>
+                <th>各分岐のパターン</th>
+                <td>外側の環境<span class="math">Γ</span></td>
+            </tr>
+            <tr>
+                <th>各分岐のガード</th>
+                <td>
+                    外側の環境に、その分岐のパターン束縛を追加した環境
+                </td>
+            </tr>
+            <tr>
+                <th>各分岐の本体</th>
+                <td>
+                    外側の環境に、その分岐のパターン束縛を追加した環境
+                </td>
+            </tr>
+            <tr>
+                <th>別の分岐</th>
+                <td>
+                    前の分岐のパターン束縛を引き継がず、
+                    外側の環境から開始する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>型式の名前解決</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>型式</th>
+                <th>解決結果</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>プリミティブ型<span class="math">π</span></th>
+                <td>組込みの型識別子</td>
+            </tr>
+            <tr>
+                <th>型変数<span class="math">α</span></th>
+                <td>現在の型変数環境にある型変数識別子</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">T</span><sub>1</sub>
+                    <code>-&gt;</code>
+                    <span class="math">T</span><sub>2</sub>
+                </th>
+                <td>両方の型を再帰的に解決した関数型</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">T</span><sub>1</sub>
+                    <code>*</code> ...
+                    <code>*</code>
+                    <span class="math">T</span><sub>n</sub>
+                </th>
+                <td>各要素型を解決したタプル型</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">T</span>
+                    <code>list</code>
+                </th>
+                <td>組込みの<code>list</code>型識別子と解決済み引数型</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">T</span>
+                    <code>ref</code>
+                </th>
+                <td>組込みの<code>ref</code>型識別子と解決済み引数型</td>
+            </tr>
+            <tr>
+                <th><span class="math">t</span></th>
+                <td>型名前空間から得た型識別子</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">M</span><code>.</code><span class="math">t</span>
+                </th>
+                <td>モジュール<span class="math">M</span>内の型識別子</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>(</code>
+                    <span class="math">T</span><code>)</code>
+                </th>
+                <td>内部の型を解決した結果</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <span class="math">T</span>
+                    <code>array</code>
+                </th>
+                <td>発展　組込みの<code>array</code>型識別子と解決済み引数型</td>
+            </tr>
+            <tr class="advanced">
+                <th><code>(module S)</code></th>
+                <td>発展　解決済みモジュール型識別子</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>型変数の解決</h2>
+
+    <p>
+        型宣言の左辺に書かれた型変数は、
+        その型宣言の右辺だけで有効です。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>宣言</th>
+                <th>解決規則</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">α t</span>
+                    <code>=</code>
+                    <span class="math">T</span>
+                </th>
+                <td>
+                    <span class="math">α</span>へ新しい型変数識別子を割り当て、
+                    その識別子を使用して
+                    <span class="math">T</span>を解決する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type (</code>
+                    <span class="math">α</span><code>,</code>
+                    <span class="math">β</span><code>) t =</code>
+                    <span class="math">T</span>
+                </th>
+                <td>
+                    <span class="math">α</span>と
+                    <span class="math">β</span>へ異なる型変数識別子を割り当てる
+                </td>
+            </tr>
+            <tr>
+                <th>型引数にない型変数が右辺へ現れる</th>
+                <td>束縛されていない型変数としてエラーにする</td>
+            </tr>
+            <tr>
+                <th>同じ型引数名を複数回書く</th>
+                <td>重複型引数としてエラーにする</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>型宣言の解決</h2>
+
+    <p>
+        型宣言では、型名、コンストラクタ、レコードフィールドを
+        それぞれ対応する名前空間へ登録します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>宣言</th>
+                <th>登録する名前</th>
+                <th>解決順序</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>type t =</code>
+                    <span class="math">T</span>
+                </th>
+                <td>型名<span class="math">t</span></td>
+                <td>
+                    型名を先に登録し、
+                    その型名を参照できる環境で右辺を解決する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type t = C</code><sub>1</sub>
+                    <code> of </code><span class="math">T</span><sub>1</sub>
+                    <code> | ...</code>
+                </th>
+                <td>
+                    型名
+                    <span class="math">t</span>と各コンストラクタ
+                </td>
+                <td>
+                    型名を登録し、各引数型を解決してから
+                    コンストラクタを後続環境へ公開する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type t = {</code>
+                    <span class="math">l</span><sub>1</sub>
+                    <code>:</code>
+                    <span class="math">T</span><sub>1</sub><code>; ... }</code>
+                </th>
+                <td>
+                    型名
+                    <span class="math">t</span>と各フィールド名
+                </td>
+                <td>
+                    型名を登録し、各フィールド型を解決してから
+                    フィールドを後続環境へ公開する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type t</code><sub>1</sub>
+                    <code>=</code>
+                    <span class="math">T</span><sub>1</sub>
+                    <code> and ... and t</code><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">T</span><sub>n</sub>
+                </th>
+                <td>
+                    すべての型名と、
+                    すべてのコンストラクタおよびフィールド
+                </td>
+                <td>
+                    すべての型名を先に登録し、
+                    共通環境で各右辺を解決する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>コンストラクタの解決</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>解決規則</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><span class="math">C</span></th>
+                <td>
+                    コンストラクタ名前空間から
+                    <span class="math">ConstructorId</span>を取得する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">C e</span>
+                </th>
+                <td>
+                    <span class="math">C</span>をコンストラクタとして解決し、
+                    引数式
+                    <span class="math">e</span>を値環境で解決する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">M</span><code>.</code><span class="math">C</span>
+                </th>
+                <td>
+                    モジュール
+                    <span class="math">M</span>のコンストラクタ環境から解決する
+                </td>
+            </tr>
+            <tr>
+                <th>同名コンストラクタが複数の開いたモジュールに存在する</th>
+                <td>
+                    最後に開いたモジュールの定義を使用する。
+                    必要なら曖昧な非修飾参照として警告する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>レコードフィールドの解決</h2>
+
+    <p>
+        異なるレコード型が同じフィールド名を持つことを許可する場合、
+        名前解決だけではフィールドを一意に決められないことがあります。
+        その場合は候補集合を解決済み抽象構文木へ保持し、
+        型推論がレコード型を決定した時点で一つへ絞ります。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名前解決の結果</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>{ x =</code>
+                    <span class="math">e</span><sub>1</sub><code>;</code>
+                    <code> y =</code>
+                    <span class="math">e</span><sub>2</sub>
+                    <code> }</code>
+                </th>
+                <td>
+                    <code>x</code>と
+                    <code>y</code>の候補レコード型の共通部分を求める。
+                    一意なら各
+                    <span class="math">FieldId</span>を確定し、
+                    複数なら候補を型推論へ渡す
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span><code>.x</code>
+                </th>
+                <td>
+                    フィールド名
+                    <code>x</code>の候補一覧を保持する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>{</code>
+                    <span class="math">e</span>
+                    <code> with x =</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>}</code>
+                </th>
+                <td>
+                    フィールド候補を保持し、
+                    基礎レコードの型によって型推論時に確定する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span><code>.x &lt;-</code>
+                    <span class="math">e</span><sub>1</sub>
+                </th>
+                <td>
+                    フィールド候補を保持する。
+                    可変フィールドであるかは型検査で判定する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">M</span><code>.x</code>
+                </th>
+                <td>
+                    モジュール
+                    <span class="math">M</span>内のフィールド候補だけを使用する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        基本実装を単純にする場合は、
+        プログラム全体でレコードフィールド名を一意にする制限を採用できます。
+        ただし、モジュールと複数のレコード型を扱う仕様では、
+        候補集合を型推論で絞る方式のほうが拡張しやすくなります。
+    </p>
+
+    <h2>トップレベル宣言の解決</h2>
+
+    <p>
+        ストラクチャ内の宣言は上から順番に解決します。
+        原則として、後で定義される名前を前の宣言から参照することはできません。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>宣言</th>
+                <th>右辺を解決する環境</th>
+                <th>後続宣言へ追加する名前</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>let p = e</code>
+                </th>
+                <td>宣言前の環境</td>
+                <td>パターン<span class="math">p</span>が束縛する値</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let f p</code><sub>1</sub> ...
+                    <code>= e</code>
+                </th>
+                <td>宣言前の環境と仮引数の束縛</td>
+                <td>関数名<span class="math">f</span></td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let rec f p</code><sub>1</sub> ...
+                    <code>= e</code>
+                </th>
+                <td>関数名<span class="math">f</span>と仮引数を追加した環境</td>
+                <td>関数名<span class="math">f</span></td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let rec f</code><sub>1</sub>
+                    <code>= ... and ...</code>
+                </th>
+                <td>すべての再帰関数名を追加した共通環境</td>
+                <td>すべての関数名</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type t = T</code>
+                </th>
+                <td>型名<span class="math">t</span>を追加した型環境</td>
+                <td>型名、コンストラクタ、フィールド</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>external x : T = s</code>
+                </th>
+                <td>型注釈<span class="math">T</span>を現在の型環境で解決する</td>
+                <td>値名<span class="math">x</span></td>
+            </tr>
+            <tr>
+                <th>
+                    <code>module M = m</code>
+                </th>
+                <td>モジュール式<span class="math">m</span>を現在の環境で解決する</td>
+                <td>モジュール名<span class="math">M</span></td>
+            </tr>
+            <tr>
+                <th>
+                    <code>open M</code>
+                </th>
+                <td>現在のモジュール環境で<span class="math">M</span>を解決する</td>
+                <td>新しい定義は作らず、非修飾名の探索対象を追加する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>include m</code>
+                </th>
+                <td>モジュール式<span class="math">m</span>を現在の環境で解決する</td>
+                <td>モジュール<span class="math">m</span>が公開する各名前</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>モジュール定義の解決</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>モジュール式</th>
+                <th>解決規則</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><span class="math">M</span></th>
+                <td>現在のモジュール環境からモジュール識別子を取得する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>struct</code>
+                    <span class="math">d</span><sub>1</sub> ...
+                    <span class="math">d</span><sub>n</sub>
+                    <code>end</code>
+                </th>
+                <td>
+                    新しい内側の環境を作り、
+                    宣言を上から順番に解決する。
+                    解決後の公開名からモジュール環境を作る
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>(</code>
+                    <span class="math">m</span>
+                    <code>:</code>
+                    <span class="math">S</span><code>)</code>
+                </th>
+                <td>
+                    モジュール式とモジュール型内の名前を解決する。
+                    適合性は型検査で判定する
+                </td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>functor (X : S) -&gt;</code>
+                    <span class="math">m</span>
+                </th>
+                <td>
+                    発展　モジュール型
+                    <span class="math">S</span>を解決し、
+                    モジュール引数
+                    <span class="math">X</span>を追加した環境で本体を解決する
+                </td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <span class="math">m</span><sub>1</sub>
+                    <code>(</code>
+                    <span class="math">m</span><sub>2</sub><code>)</code>
+                </th>
+                <td>
+                    発展　両方のモジュール式を解決する。
+                    ファンクタ型との適合性は型検査で判定する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2><code>open</code>の解決</h2>
+
+    <p>
+        <code>open M</code>は、モジュール
+        <span class="math">M</span>の公開名を
+        非修飾名の探索候補へ追加します。
+        元のモジュール環境や識別子を複製しません。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>状況</th>
+                <th>解決規則</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>局所定義と開いたモジュールの名前が同じ</th>
+                <td>局所定義を優先する</td>
+            </tr>
+            <tr>
+                <th>複数の開いたモジュールに同じ名前がある</th>
+                <td>最後に開いたモジュールの名前を優先する</td>
+            </tr>
+            <tr>
+                <th>修飾名<code>M.x</code></th>
+                <td><code>open</code>の順序に関係なく、指定された<code>M</code>だけを探索する</td>
+            </tr>
+            <tr>
+                <th>開いたモジュールに名前がない</th>
+                <td>次の候補または組込み環境を探索する</td>
+            </tr>
+            <tr>
+                <th>存在しないモジュールを開く</th>
+                <td>未定義モジュールエラー</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2><code>include</code>の解決</h2>
+
+    <p>
+        <code>include m</code>は、
+        モジュール式
+        <span class="math">m</span>の公開内容を
+        現在のストラクチャの定義として取り込みます。
+        <code>open</code>とは異なり、取り込んだ名前は現在のモジュールの公開内容にも含まれます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>宣言</th>
+                <th>非修飾参照に追加</th>
+                <th>現在のモジュールから再公開</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>open M</code></th>
+                <td>はい</td>
+                <td>いいえ</td>
+            </tr>
+            <tr>
+                <th><code>include M</code></th>
+                <td>はい</td>
+                <td>はい</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        <code>include</code>によって現在のスコープにすでに存在する名前と
+        同じ名前が取り込まれる場合は、重複定義としてエラーにするか、
+        言語仕様で明示した上書き規則を適用する必要があります。
+        基本仕様では重複定義エラーとします。
+    </p>
+
+    <h2>外部関数宣言の解決</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>名前解決前</th>
+                <th>名前解決後</th>
+                <th>処理</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>external</code>
+                    <span class="math">x</span>
+                    <code>:</code>
+                    <span class="math">T</span>
+                    <code>=</code>
+                    <span class="math">s</span>
+                </th>
+                <td>
+                    新しい
+                    <span class="math">ValueId</span>、
+                    解決済み型
+                    <span class="math">T</span>、
+                    外部名
+                    <span class="math">s</span>
+                </td>
+                <td>
+                    型注釈に含まれる型名を解決し、
+                    値名
+                    <span class="math">x</span>を後続環境へ追加する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>プリミティブ演算の解決</h2>
+
+    <p>
+        構文解析器が演算子を専用のプリミティブ演算ノードとして生成する場合、
+        名前解決では各演算子を組込みのプリミティブ識別子へ変換します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ソース上の名前</th>
+                <th>解決結果</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>+</code></th>
+                <td><code>Primitive.IntAdd</code></td>
+            </tr>
+            <tr>
+                <th><code>+.</code></th>
+                <td><code>Primitive.FloatAdd</code></td>
+            </tr>
+            <tr>
+                <th><code>=</code></th>
+                <td><code>Primitive.Equal</code></td>
+            </tr>
+            <tr>
+                <th><code>&amp;&amp;</code></th>
+                <td><code>Primitive.BooleanAnd</code></td>
+            </tr>
+            <tr>
+                <th><code>||</code></th>
+                <td><code>Primitive.BooleanOr</code></td>
+            </tr>
+            <tr>
+                <th><code>ref</code></th>
+                <td><code>Primitive.ReferenceCreate</code></td>
+            </tr>
+            <tr>
+                <th><code>!</code></th>
+                <td><code>Primitive.ReferenceGet</code></td>
+            </tr>
+            <tr>
+                <th><code>:=</code></th>
+                <td><code>Primitive.ReferenceSet</code></td>
+            </tr>
+            <tr>
+                <th><code>String.length</code></th>
+                <td>
+                    モジュール
+                    <code>String</code>内の組込み値
+                    <code>length</code>
+                </td>
+            </tr>
+            <tr>
+                <th><code>String.get</code></th>
+                <td>
+                    モジュール
+                    <code>String</code>内の組込み値
+                    <code>get</code>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        演算子を通常の値として再定義できる仕様を採用する場合は、
+        専用プリミティブノードへ直ちに変換せず、
+        通常の値名前空間で解決します。
+        基本仕様では、言語仕様に列挙された演算子を予約済みプリミティブとして扱います。
+    </p>
+
+    <h2>型推論で    解決</h2>
+
+    <p>
+        名前だけでは一意に決められず、型情報が必要なものは、
+        候補を保持して型推論へ渡します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名前解決で行う処理</th>
+                <th>型推論で行う処理</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>レコードフィールド参照</th>
+                <td>同名フィールドの候補集合を収集する</td>
+                <td>対象式の型から一つのフィールドへ決定する</td>
+            </tr>
+            <tr>
+                <th>レコード作成</th>
+                <td>すべてのフィールド名に共通するレコード型候補を求める</td>
+                <td>各フィールド式の型と注釈からレコード型を決定する</td>
+            </tr>
+            <tr>
+                <th>多相的なコンストラクタ</th>
+                <td>コンストラクタ識別子を決定する</td>
+                <td>型引数を新しい型変数で具体化する</td>
+            </tr>
+            <tr>
+                <th>型別名</th>
+                <td>型名を型識別子へ解決する</td>
+                <td>必要に応じて型別名の本体を展開する</td>
+            </tr>
+            <tr>
+                <th>モジュール型制約</th>
+                <td>モジュール名とモジュール型名を解決する</td>
+                <td>モジュールがモジュール型へ適合するか検査する</td>
+            </tr>
+            <tr>
+                <th>可変レコードフィールドへの代入</th>
+                <td>フィールド候補を求める</td>
+                <td>フィールドを確定し、可変であることを検査する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>名前解決で行わない処理</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>処理</th>
+                <th>実行する段階</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>式の型を推論する</th>
+                <td>型推論</td>
+            </tr>
+            <tr>
+                <th>関数の引数型と戻り値型を一致させる</th>
+                <td>型推論</td>
+            </tr>
+            <tr>
+                <th>型変数を一般化する</th>
+                <td>型推論の<code>let</code>一般化</td>
+            </tr>
+            <tr>
+                <th>値制限を適用する</th>
+                <td>型推論</td>
+            </tr>
+            <tr>
+                <th>パターンの網羅性を検査する</th>
+                <td>型検査後のパターン解析</td>
+            </tr>
+            <tr>
+                <th>冗長なパターンを検査する</th>
+                <td>型検査後のパターン解析</td>
+            </tr>
+            <tr>
+                <th>レコードフィールドの型を検査する</th>
+                <td>型推論</td>
+            </tr>
+            <tr>
+                <th>関数適用をカリー化された適用へ変換する</th>
+                <td>脱糖またはCore変換</td>
+            </tr>
+            <tr>
+                <th>リスト構文をコンストラクタへ変換する</th>
+                <td>脱糖またはCore変換</td>
+            </tr>
+            <tr>
+                <th>パターンマッチを条件分岐へ変換する</th>
+                <td>パターンマッチコンパイル</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>エラー</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>エラー</th>
+                <th>発生条件</th>
+                <th>報告する情報</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>未定義の値</th>
+                <td>値式の名前が値環境に存在しない</td>
+                <td>名前、使用位置、近い候補</td>
+            </tr>
+            <tr>
+                <th>未定義の型</th>
+                <td>型名が型環境に存在しない</td>
+                <td>型名、使用位置、近い候補</td>
+            </tr>
+            <tr>
+                <th>未定義のコンストラクタ</th>
+                <td>コンストラクタ名が存在しない</td>
+                <td>名前、使用位置、近い候補</td>
+            </tr>
+            <tr>
+                <th>未定義のフィールド</th>
+                <td>レコードフィールド名の候補が存在しない</td>
+                <td>フィールド名と使用位置</td>
+            </tr>
+            <tr>
+                <th>未定義のモジュール</th>
+                <td>モジュール名がモジュール環境に存在しない</td>
+                <td>モジュールパスと未解決になった部分</td>
+            </tr>
+            <tr>
+                <th>未定義のモジュール要素</th>
+                <td>修飾先モジュールに指定された名前が存在しない</td>
+                <td>モジュール名、要素名、公開されている候補</td>
+            </tr>
+            <tr>
+                <th>重複定義</th>
+                <td>同じ宣言グループの同じ名前空間に同じ名前を定義した</td>
+                <td>名前、最初の定義位置、重複した定義位置</td>
+            </tr>
+            <tr>
+                <th>パターン変数の重複</th>
+                <td>一つのパターン内で同じ値名を複数回束縛した</td>
+                <td>名前と各束縛位置</td>
+            </tr>
+            <tr>
+                <th>ORパターンの束縛不一致</th>
+                <td>左右が異なる名前集合を束縛する</td>
+                <td>左だけの名前と右だけの名前</td>
+            </tr>
+            <tr>
+                <th>束縛されていない型変数</th>
+                <td>型宣言の右辺に未宣言の型変数が現れた</td>
+                <td>型変数名と使用位置</td>
+            </tr>
+            <tr>
+                <th>重複型引数</th>
+                <td>一つの型宣言で同じ型引数を複数回宣言した</td>
+                <td>型変数名と各宣言位置</td>
+            </tr>
+            <tr>
+                <th>不正な再帰定義</th>
+                <td>
+                    <code>let rec</code>の左辺が関数名として扱えない形式である
+                </td>
+                <td>宣言位置と許可される形式</td>
+            </tr>
+            <tr>
+                <th><code>include</code>による重複</th>
+                <td>取り込む名前が現在のストラクチャの名前と衝突する</td>
+                <td>名前、既存定義、取り込まれる定義</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>警告</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>警告</th>
+                <th>条件</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>未使用の値</th>
+                <td>定義された値識別子が有効範囲内で参照されていない</td>
+            </tr>
+            <tr>
+                <th>未使用の型</th>
+                <td>非公開の型定義が使用されていない</td>
+            </tr>
+            <tr>
+                <th>未使用の<code>open</code></th>
+                <td>開いたモジュールから一つも名前を解決していない</td>
+            </tr>
+            <tr>
+                <th>シャドーイング</th>
+                <td>新しい定義が外側の同名定義を隠す</td>
+            </tr>
+            <tr>
+                <th>曖昧な開放名</th>
+                <td>複数の開いたモジュールが同じ非修飾名を提供する</td>
+            </tr>
+            <tr>
+                <th>不要な修飾</th>
+                <td>修飾しなくても同じ宣言へ一意に解決できる</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>名前解決の処理順序</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>段階</th>
+                <th>処理</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>1</th>
+                <td>組込み型、組込み値、組込みモジュールを初期環境へ登録する</td>
+            </tr>
+            <tr>
+                <th>2</th>
+                <td>ソースファイルのトップレベル宣言を上から順番に処理する</td>
+            </tr>
+            <tr>
+                <th>3</th>
+                <td>各宣言が新しく定義する識別子を必要な時点で作成する</td>
+            </tr>
+            <tr>
+                <th>4</th>
+                <td>宣言の右辺、型注釈、パターン、モジュール式を解決する</td>
+            </tr>
+            <tr>
+                <th>5</th>
+                <td>宣言によって後続から見える名前を環境へ追加する</td>
+            </tr>
+            <tr>
+                <th>6</th>
+                <td>未定義名、重複定義、不正なパターン束縛を報告する</td>
+            </tr>
+            <tr>
+                <th>7</th>
+                <td>解決済み抽象構文木と宣言情報を型推論へ渡す</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>変換例</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>名前解決前</th>
+                <th>名前解決後</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <pre><code>let x = 1 in
+let f x = x + 1 in
+f x</code></pre>
+                </th>
+                <td>
+                    <pre><code>let x#1 = 1 in
+let f#2 x#3 = Primitive.IntAdd(x#3, 1) in
+f#2 x#1</code></pre>
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <pre><code>let rec even n =
+    if n = 0 then true
+    else odd (n - 1)
+and odd n =
+    if n = 0 then false
+    else even (n - 1)</code></pre>
+                </th>
+                <td>
+                    <pre><code>let rec even#1 n#3 =
+    if Primitive.Equal(n#3, 0) then true
+    else odd#2 (Primitive.IntSub(n#3, 1))
+and odd#2 n#4 =
+    if Primitive.Equal(n#4, 0) then false
+    else even#1 (Primitive.IntSub(n#4, 1))</code></pre>
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <pre><code>module A = struct
+    let x = 1
+end
+
+open A
+
+let y = x
+let z = A.x</code></pre>
+                </th>
+                <td>
+                    <pre><code>module A#1 = struct
+    let x#2 = 1
+end
+
+open A#1
+
+let y#3 = A#1.x#2
+let z#4 = A#1.x#2</code></pre>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>解決済み宣言情報</h2>
+
+    <p>
+        型推論と後続変換で必要になる宣言情報を、
+        解決済み抽象構文木とは別の表として保持できます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>情報</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>値宣言情報</th>
+                <td>値識別子、元の名前、定義位置、所属モジュール</td>
+            </tr>
+            <tr>
+                <th>型宣言情報</th>
+                <td>型識別子、型引数、型宣言の種類、所属モジュール</td>
+            </tr>
+            <tr>
+                <th>コンストラクタ情報</th>
+                <td>
+                    コンストラクタ識別子、所有する型識別子、
+                    引数型構文、宣言順
+                </td>
+            </tr>
+            <tr>
+                <th>フィールド情報</th>
+                <td>
+                    フィールド識別子、所有するレコード型、
+                    フィールド型構文、可変性、宣言順
+                </td>
+            </tr>
+            <tr>
+                <th>モジュール情報</th>
+                <td>モジュール識別子、公開する名前、定義位置</td>
+            </tr>
+            <tr>
+                <th>外部関数情報</th>
+                <td>値識別子、外部名、解決済み型注釈</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>名前解決後に成立する条件</h2>
+
+    <ul>
+        <li>すべての値参照が一つの値識別子を指している</li>
+        <li>すべての型名が一つの型識別子を指している</li>
+        <li>すべての型変数参照が有効な型変数識別子を指している</li>
+        <li>すべてのコンストラクタ参照が一つのコンストラクタ識別子を指している</li>
+        <li>レコードフィールド参照が一つのフィールド識別子または型推論用の候補集合を持つ</li>
+        <li>すべてのモジュール参照が一つのモジュール識別子を指している</li>
+        <li>すべての修飾名について、モジュールパスの各要素が解決されている</li>
+        <li>未定義の名前が解決済み抽象構文木に残っていない</li>
+        <li>同じ宣言によって束縛された名前が同じ識別子を使用している</li>
+        <li>シャドーイングされた同名の定義が異なる識別子を持っている</li>
+        <li>非再帰定義の右辺から、その定義自身の名前を参照していない</li>
+        <li>再帰定義の本体から、同じ再帰グループの名前を参照できる</li>
+        <li>一つのパターン内に重複した変数束縛が存在しない</li>
+        <li>ORパターンの各選択肢が同じ名前集合を束縛している</li>
+        <li>パターン変数が、そのパターンに対応するガードと分岐本体だけで有効になっている</li>
+        <li>型宣言の右辺に現れる型変数が、その型宣言の型引数として束縛されている</li>
+        <li>相互再帰型定義の各右辺から、同じ宣言グループのすべての型を参照できる</li>
+        <li><code>open</code>による名前探索の優先順位が確定している</li>
+        <li><code>include</code>によって取り込まれた名前が現在の環境とモジュールの公開内容へ追加されている</li>
+        <li>外部関数宣言の値名、型注釈、外部名が対応付けられている</li>
+        <li>組込みの型、値、演算子、コンストラクタ、モジュールが組込み識別子へ解決されている</li>
+        <li>レコードフィールドを一意に決定できない場合、型推論で絞り込める候補集合が保持されている</li>
+        <li>各解決済み識別子に元の名前とソース位置が保持されている</li>
+        <li>型推論が文字列による名前探索を行わず、解決済み識別子を直接使用できる</li>
+    </ul>
+
+    <h2>次の段階との関係</h2>
+
+    <p>
+        次の型推論では、名前解決済み抽象構文木を入力として使用します。
+        型推論器は、変数名や型名を文字列で探索し直さず、
+        各ノードに格納された一意な識別子をキーとして型環境を参照します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>名前解決から渡す情報</th>
+                <th>型推論での用途</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>値識別子</th>
+                <td>値識別子ごとの型スキームの登録と参照</td>
+            </tr>
+            <tr>
+                <th>型識別子</th>
+                <td>ユーザー定義型、型別名、型構築子の参照</td>
+            </tr>
+            <tr>
+                <th>型変数識別子</th>
+                <td>型注釈と型宣言内の型変数の同一性を保持する</td>
+            </tr>
+            <tr>
+                <th>コンストラクタ識別子</th>
+                <td>コンストラクタの引数型と結果型を具体化する</td>
+            </tr>
+            <tr>
+                <th>フィールド識別子または候補集合</th>
+                <td>レコード型を決定し、フィールドの型と可変性を検査する</td>
+            </tr>
+            <tr>
+                <th>モジュール識別子</th>
+                <td>モジュールが提供する値、型、コンストラクタの型情報を参照する</td>
+            </tr>
+            <tr>
+                <th>外部関数情報</th>
+                <td>明示された型注釈を外部関数の型スキームとして登録する</td>
+            </tr>
+            <tr>
+                <th>ソース位置</th>
+                <td>型エラーの発生位置と関連する宣言位置を報告する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        型推論が完了すると、各式、パターン、宣言へ型が付与された
+        型付き抽象構文木を生成します。
+        その後、パターンマッチの網羅性検査、脱糖、Core中間表現への変換を行います。
+    </p>
+
+    <footer>
+        <a href="index.html">トップページ</a>
+    </footer>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OCamlと言語処理系入門</title>
+    <title>仮想マシン仕様</title>
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
 </head>
@@ -11,47 +11,173 @@
     <div class="site-header">
         <button class="theme-toggle" type="button"></button>
     </div>
-    <h1>仮想マシンなどの仕様</h1>
-        <h2>値表現</h2>
 
-        <p>
-            仮想CPUのレジスタとメモリは、64ビットの値を扱います。
-            この64ビットの値を1ワードと呼びます。
-        </p>
+    <h1>仮想マシン仕様</h1>
 
-        <table>
+    <p>
+        仮想マシンは、アセンブラが生成した実行可能形式を読み込み、
+        命令配列、レジスタ、メモリ、プログラムカウンタを使用して
+        プログラムを実行します。
+    </p>
+
+    <p>
+        このページでは、実行時の値表現、呼出し規約、仮想CPUの状態、
+        基本命令の意味、実行可能形式の読込み、ランタイムAPIを定義します。
+        アセンブリの文法、疑似命令の展開、ラベル解決、
+        実行可能形式の生成方法は
+        <code>assembly.html</code>で定義します。
+    </p>
+
+    <h2>仕様の構成</h2>
+
+    <table>
+        <thead>
             <tr>
-                <th><span class="math">v</span> ::=</th>
-                <td>値</td>
+                <th>項目</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>値表現</th>
+                <td>64ビットワード、タグ付き即値、ヒープブロック</td>
             </tr>
             <tr>
+                <th>呼出し規約</th>
+                <td>引数、戻り値、保存レジスタ、クロージャ、スタックフレーム</td>
+            </tr>
+            <tr>
+                <th>仮想CPUの状態</th>
+                <td>命令配列、レジスタ、メモリ、プログラムカウンタ、停止状態</td>
+            </tr>
+            <tr>
+                <th>命令の意味</th>
+                <td>各基本命令がCPU状態をどのように更新するか</td>
+            </tr>
+            <tr>
+                <th>実行可能形式の読込み</th>
+                <td>命令列と静的データの配置、初期状態の構築</td>
+            </tr>
+            <tr>
+                <th>ランタイムAPI</th>
+                <td>入出力、メモリ確保、文字列、比較などの実行時処理</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>ワード</h2>
+
+    <p>
+        仮想CPUのレジスタとメモリは、64ビットの値を扱います。
+        この64ビット値を1ワードと呼びます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>項目</th>
+                <th>仕様</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>ワード幅</th>
+                <td>64ビット</td>
+            </tr>
+            <tr>
+                <th>算術演算</th>
+                <td>2の補数による符号付き64ビット整数演算</td>
+            </tr>
+            <tr>
+                <th>メモリアドレス</th>
+                <td>ワード単位の非負整数</td>
+            </tr>
+            <tr>
+                <th>メモリオフセット</th>
+                <td>ワード単位の符号付き整数</td>
+            </tr>
+            <tr>
+                <th>コードアドレス</th>
+                <td>命令配列内の位置</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>実行時の値</h2>
+
+    <p>
+        通常の言語値は、タグ付き即値またはブロックへのポインタとして
+        1ワードに格納します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>値の分類</th>
+                <th>低水準表現</th>
+                <th>主な値</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
                 <th>タグ付き整数</th>
-                <td><code>int</code></td>
+                <td>最下位ビットが1のワード</td>
+                <td><code>int</code>、<code>char</code></td>
             </tr>
             <tr>
                 <th>定数値</th>
-                <td><code>bool</code>、<code>unit</code>、引数を持たないコンストラクタ</td>
+                <td>タグ付き整数と同じ即値表現</td>
+                <td>
+                    <code>bool</code>、<code>unit</code>、
+                    引数を持たないコンストラクタ
+                </td>
             </tr>
             <tr>
-                <th>ヒープポインタ</th>
-                <td>ヒープ上のブロックを指す値</td>
+                <th>ブロックポインタ</th>
+                <td>最下位ビットが0の有効なメモリアドレス</td>
+                <td>
+                    タプル、レコード、リスト、参照、文字列、クロージャ、
+                    引数を持つコンストラクタ
+                </td>
             </tr>
-        </table>
+            <tr class="advanced">
+                <th>発展　配列ポインタ</th>
+                <td>可変長ヒープブロックへのポインタ</td>
+                <td>配列</td>
+            </tr>
+            <tr class="advanced">
+                <th>発展　浮動小数点値</th>
+                <td>IEEE 754 binary64を格納した専用ブロックへのポインタ</td>
+                <td><code>float</code></td>
+            </tr>
+        </tbody>
+    </table>
 
-        <h3>整数</h3>
+    <h2>タグ付き整数</h2>
 
-        <p>
-            整数<code>n</code>は、最下位ビットをタグとして使用し、
-            次のように表現します。
-        </p>
+    <p>
+        ソース言語の整数
+        <span class="math">n</span>は、次の式でタグ付き整数へ変換します。
+    </p>
 
-        <pre><code>(n &lt;&lt; 1) | 1</code></pre>
+    <pre><code>tag_int(n) = (n &lt;&lt; 1) | 1
+untag_int(w) = w &gt;&gt; 1</code></pre>
 
-        <table>
+    <p>
+        <code>untag_int</code>では算術右シフトを使用します。
+        表現可能な通常の整数は
+        <code>-2^62</code>以上
+        <code>2^62 - 1</code>以下です。
+    </p>
+
+    <table>
+        <thead>
             <tr>
-                <th>整数</th>
-                <td>内部表現</td>
+                <th>ソース値</th>
+                <th>内部表現</th>
             </tr>
+        </thead>
+        <tbody>
             <tr>
                 <th><code>0</code></th>
                 <td><code>1</code></td>
@@ -68,642 +194,1376 @@
                 <th><code>-1</code></th>
                 <td><code>-1</code></td>
             </tr>
-        </table>
-
-        <p>
-            最下位ビットが<code>1</code>なら即値、
-            <code>0</code>ならヒープポインタとして扱います。
-        </p>
-
-        <h3>真偽値と単位値</h3>
-
-        <table>
-            <tr>
-                <th>値</th>
-                <td>内部表現</td>
-            </tr>
             <tr>
                 <th><code>false</code></th>
-                <td>整数<code>0</code>と同じ表現</td>
+                <td><code>1</code></td>
             </tr>
             <tr>
                 <th><code>true</code></th>
-                <td>整数<code>1</code>と同じ表現</td>
+                <td><code>3</code></td>
             </tr>
             <tr>
                 <th><code>()</code></th>
-                <td>整数<code>0</code>と同じ表現</td>
+                <td><code>1</code></td>
             </tr>
-        </table>
+        </tbody>
+    </table>
 
-        <h3>文字</h3>
+    <p>
+        静的型検査が完了しているため、
+        整数0、偽、単位値が同じビット表現を使用しても、
+        型の異なる操作へ混同されることはありません。
+    </p>
 
-        <p>
-            文字は、その文字コードをタグ付き整数として表現します。
-        </p>
+    <h2>文字</h2>
 
-        <h3>ヒープブロック</h3>
+    <p>
+        文字は、Unicodeコードポイントを格納したタグ付き整数として表します。
+        有効な文字値はUnicodeスカラー値の範囲に限ります。
+    </p>
 
-        <p>
-            組、レコード、ヴァリアント、リスト、文字列、クロージャ、
-            参照、配列は、ヒープ上のブロックとして表現します。
-            レジスタにはブロックそのものではなく、その先頭を指すポインタを格納します。
-        </p>
-
-        <pre><code>+--------+---------+---------+-----+
-        | header | field 0 | field 1 | ... |
-        +--------+---------+---------+-----+
-                    ^
-                    |
-                ポインタ</code></pre>
-
-        <p>
-            ヘッダには、ブロックのフィールド数と種類を表すタグを格納します。
-        </p>
-
-        <table>
+    <table>
+        <thead>
             <tr>
-                <th>ブロック</th>
-                <td>主なフィールド</td>
+                <th>操作</th>
+                <th>規則</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>文字からコードポイント</th>
+                <td>タグ付き整数として格納された値を使用する</td>
             </tr>
             <tr>
-                <th>組</th>
+                <th>コードポイントから文字</th>
+                <td>Unicodeスカラー値であることを検査する</td>
+            </tr>
+            <tr>
+                <th>文字の比較</th>
+                <td>コードポイントのタグ付き整数を比較する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>ヒープブロック</h2>
+
+    <p>
+        複合値は、1ワードのヘッダと0個以上のフィールドからなる
+        ブロックとして表します。
+        値として使用するポインタはフィールド0を指し、
+        ヘッダはオフセット
+        <code>-1</code>に置きます。
+    </p>
+
+    <pre><code>+--------+---------+---------+-----+
+| header | field 0 | field 1 | ... |
++--------+---------+---------+-----+
+             ^
+             |
+        値として使うポインタ</code></pre>
+
+    <table>
+        <thead>
+            <tr>
+                <th>位置</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>オフセット<code>-1</code></th>
+                <td>ブロックヘッダ</td>
+            </tr>
+            <tr>
+                <th>オフセット<code>0</code></th>
+                <td>フィールド0</td>
+            </tr>
+            <tr>
+                <th>オフセット<code>i</code></th>
+                <td>フィールド<span class="math">i</span></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>ブロックヘッダ</h2>
+
+    <p>
+        ブロックヘッダは、少なくともブロックタグとフィールド数を保持します。
+        正確なビット配置は実装時に一つへ固定します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>情報</th>
+                <th>用途</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>タグ</th>
+                <td>コンストラクタ番号またはブロックの種類を識別する</td>
+            </tr>
+            <tr>
+                <th>サイズ</th>
+                <td>フィールド数を表す</td>
+            </tr>
+            <tr class="advanced">
+                <th>発展　GC情報</th>
+                <td>世代、色、マーク状態などを保持する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        基本配置では、下位8ビットをタグ、
+        上位ビットをフィールド数として使用できます。
+    </p>
+
+    <pre><code>make_header(tag, size) =
+    (size &lt;&lt; 8) | tag
+
+header_tag(header) =
+    header &amp; 0xff
+
+header_size(header) =
+    header &gt;&gt; 8</code></pre>
+
+    <h2>ブロックの種類</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>値</th>
+                <th>タグ</th>
+                <th>フィールド</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>タプル</th>
+                <td><code>tuple_tag</code></td>
                 <td>各要素</td>
             </tr>
             <tr>
                 <th>レコード</th>
-                <td>各フィールド</td>
+                <td><code>record_tag</code></td>
+                <td>宣言順に並べた各フィールド</td>
             </tr>
             <tr>
-                <th>ヴァリアント</th>
-                <td>コンストラクタのタグと引数</td>
+                <th>引数を持つコンストラクタ</th>
+                <td>コンストラクタ固有のタグ</td>
+                <td>コンストラクタの各引数</td>
             </tr>
             <tr>
-                <th>リスト</th>
-                <td>先頭要素と残りのリスト</td>
+                <th>consセル</th>
+                <td><code>cons_tag</code></td>
+                <td>フィールド0に先頭要素、フィールド1に残りのリスト</td>
+            </tr>
+            <tr>
+                <th>参照セル</th>
+                <td><code>reference_tag</code></td>
+                <td>フィールド0に現在の値</td>
             </tr>
             <tr>
                 <th>クロージャ</th>
-                <td>コードアドレスと自由変数</td>
-            </tr>
-            <tr>
-                <th>参照</th>
-                <td>現在格納されている値</td>
+                <td><code>closure_tag</code></td>
+                <td>フィールド0にコードアドレス、フィールド1以降に自由変数</td>
             </tr>
             <tr>
                 <th>文字列</th>
-                <td>長さと文字データ</td>
+                <td><code>string_tag</code></td>
+                <td>バイト長とUTF-8データ</td>
             </tr>
             <tr class="advanced">
-                <th>配列</th>
-                <td>発展　長さと各要素</td>
+                <th>発展　配列</th>
+                <td><code>array_tag</code></td>
+                <td>各要素。ヘッダのサイズ欄を配列長として使用する</td>
             </tr>
-        </table>
+            <tr class="advanced">
+                <th>発展　浮動小数点数</th>
+                <td><code>float_tag</code></td>
+                <td>IEEE 754 binary64のビット列</td>
+            </tr>
+        </tbody>
+    </table>
 
-        <h3>浮動小数点数</h3>
+    <h2>文字列ブロック</h2>
 
-        <p>
-            浮動小数点数は、基本仕様ではヒープ上にボックス化して格納します。
-            ヒープブロックには64ビット浮動小数点数のビット列を保存します。
-        </p>
+    <p>
+        文字列はUTF-8で格納します。
+        文字列の長さには、バイト長と文字数の二種類があるため、
+        ランタイムAPIの各操作がどちらを返すかを区別します。
+    </p>
 
-        <h3>静的な値</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>位置</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>ヘッダ</th>
+                <td>文字列タグとデータ部分のワード数</td>
+            </tr>
+            <tr>
+                <th>フィールド0</th>
+                <td>UTF-8バイト長を表すタグ付き整数</td>
+            </tr>
+            <tr>
+                <th>フィールド1以降</th>
+                <td>UTF-8バイト列をワード単位で格納したデータ</td>
+            </tr>
+            <tr>
+                <th>未使用バイト</th>
+                <td>最後のワードの残りを0で埋める</td>
+            </tr>
+        </tbody>
+    </table>
 
-        <p>
-            文字列リテラルやコンパイル時に決定できる定数ブロックは、
-            実行開始前に静的データ領域へ配置します。
-            プログラム中では、通常のヒープブロックと同様にポインタで参照します。
-        </p>
-        <h2>呼出し規約</h2>
-            <p>
-                関数の引数、戻り値、クロージャ、戻り先は、以下の規約に従って受け渡します。
-            </p>
+    <p>
+        <code>runtime_string_length</code>は文字数を返します。
+        文字列内部のバイト長は、UTF-8走査と境界検査に使用します。
+    </p>
 
-            <h3>レジスタの用途</h3>
+    <h2>クロージャブロック</h2>
 
-            <table>
-                <tr>
-                    <th>レジスタ</th>
-                    <td>用途</td>
-                </tr>
-                <tr>
-                    <th><code>r0</code></th>
-                    <td>常に<code>0</code></td>
-                </tr>
-                <tr>
-                    <th><code>r1</code>～<code>r4</code></th>
-                    <td>関数の引数</td>
-                </tr>
-                <tr>
-                    <th><code>r1</code></th>
-                    <td>戻り値</td>
-                </tr>
-                <tr>
-                    <th><code>r5</code>～<code>r9</code></th>
-                    <td>呼出し側が保存する汎用レジスタ</td>
-                </tr>
-                <tr>
-                    <th><code>r10</code>～<code>r12</code></th>
-                    <td>呼出される側が保存する汎用レジスタ</td>
-                </tr>
-                <tr>
-                    <th><code>r13</code></th>
-                    <td>クロージャポインタ</td>
-                </tr>
-                <tr>
-                    <th><code>r14</code></th>
-                    <td>スタックポインタ</td>
-                </tr>
-                <tr>
-                    <th><code>r15</code></th>
-                    <td>戻りアドレス</td>
-                </tr>
-            </table>
+    <pre><code>+------------------+
+| header           |  offset -1
++------------------+
+| code address     |  offset 0
++------------------+
+| free variable 1  |  offset 1
++------------------+
+| ...              |
++------------------+
+| free variable n  |  offset n
++------------------+
+        ^
+        |
+  クロージャポインタ</code></pre>
 
-            <h3>引数と戻り値</h3>
+    <p>
+        コードアドレスは命令配列内の位置を表します。
+        クロージャ呼出しでは、
+        クロージャポインタを
+        <code>r13</code>へ設定してから、
+        フィールド0のコードアドレスを使用して間接呼出しを行います。
+    </p>
 
-            <p>
-                第1引数から第4引数までは、<code>r1</code>から<code>r4</code>へ順番に格納します。
-                第5引数以降はスタックへ格納します。
-            </p>
+    <h2>静的ブロック</h2>
 
-            <pre><code>f x1 x2 x3 x4 x5
+    <p>
+        コンパイル時に内容が確定する文字列や定数ブロックは、
+        実行開始前に静的データ領域へ配置します。
+        静的ブロックもヒープブロックと同じヘッダ配置を使用します。
+    </p>
 
-            r1 = x1
-            r2 = x2
-            r3 = x3
-            r4 = x4
-            stack[0] = x5</code></pre>
+    <table>
+        <thead>
+            <tr>
+                <th>性質</th>
+                <th>規則</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>アドレス</th>
+                <td>VMのロード時に静的データ領域内のメモリアドレスへ変換する</td>
+            </tr>
+            <tr>
+                <th>参照方法</th>
+                <td>通常のブロックポインタと同じ方法で参照する</td>
+            </tr>
+            <tr>
+                <th>書込み</th>
+                <td>基本仕様では静的ブロックへの書込みを実行時エラーとする</td>
+            </tr>
+            <tr>
+                <th>寿命</th>
+                <td>プログラムの実行開始から終了まで存在する</td>
+            </tr>
+        </tbody>
+    </table>
 
-            <p>
-                関数の戻り値は<code>r1</code>へ格納します。
-                <code>unit</code>を返す関数も、<code>r1</code>へ単位値を格納します。
-            </p>
+    <h2>呼出し規約</h2>
 
-            <h3>レジスタの保存</h3>
+    <p>
+        関数の引数、戻り値、クロージャ環境、戻り先、
+        保存レジスタは次の規約に従って受け渡します。
+    </p>
 
-            <p>
-                <code>r1</code>から<code>r9</code>、<code>r13</code>、<code>r15</code>は、
-                関数呼出しによって書き換えられる可能性があります。
-                呼出し後にも必要な値は、呼出し側が事前に保存します。
-            </p>
+    <h3>レジスタの用途</h3>
 
-            <p>
-                <code>r10</code>から<code>r12</code>は、呼出された関数が元の値を保存します。
-                これらのレジスタを使用する関数は、関数入口で値を保存し、
-                関数出口で復元します。
-            </p>
+    <table>
+        <thead>
+            <tr>
+                <th>レジスタ</th>
+                <th>用途</th>
+                <th>保存規則</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>r0</code></th>
+                <td>常に0を保持する</td>
+                <td>書込みは破棄される</td>
+            </tr>
+            <tr>
+                <th><code>r1</code>から<code>r4</code></th>
+                <td>第1引数から第4引数</td>
+                <td>caller-save</td>
+            </tr>
+            <tr>
+                <th><code>r1</code></th>
+                <td>戻り値</td>
+                <td>呼出しによって必ず変更され得る</td>
+            </tr>
+            <tr>
+                <th><code>r5</code>から<code>r9</code></th>
+                <td>汎用レジスタ</td>
+                <td>caller-save</td>
+            </tr>
+            <tr>
+                <th><code>r10</code>から<code>r12</code></th>
+                <td>汎用レジスタ</td>
+                <td>callee-save</td>
+            </tr>
+            <tr>
+                <th><code>r13</code></th>
+                <td>クロージャ環境ポインタ</td>
+                <td>caller-save</td>
+            </tr>
+            <tr>
+                <th><code>r14</code></th>
+                <td>スタックポインタ</td>
+                <td>関数復帰時に呼出し前の値へ戻す</td>
+            </tr>
+            <tr>
+                <th><code>r15</code></th>
+                <td>戻りアドレス</td>
+                <td>非leaf関数は必要に応じて保存する</td>
+            </tr>
+        </tbody>
+    </table>
 
-            <h3>直接呼出し</h3>
+    <h3>引数と戻り値</h3>
 
-            <p>
-                呼出す関数がコンパイル時に分かっている場合は、関数ラベルを直接指定します。
-            </p>
+    <table>
+        <thead>
+            <tr>
+                <th>値</th>
+                <th>受渡し位置</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>第1引数</th>
+                <td><code>r1</code></td>
+            </tr>
+            <tr>
+                <th>第2引数</th>
+                <td><code>r2</code></td>
+            </tr>
+            <tr>
+                <th>第3引数</th>
+                <td><code>r3</code></td>
+            </tr>
+            <tr>
+                <th>第4引数</th>
+                <td><code>r4</code></td>
+            </tr>
+            <tr>
+                <th>第5引数以降</th>
+                <td>呼出し元が用意したスタック引数領域</td>
+            </tr>
+            <tr>
+                <th>戻り値</th>
+                <td><code>r1</code></td>
+            </tr>
+            <tr>
+                <th>クロージャ環境</th>
+                <td><code>r13</code></td>
+            </tr>
+        </tbody>
+    </table>
 
-            <pre><code>mov  r1, argument1
-            mov  r2, argument2
-            call function_label</code></pre>
+    <p>
+        <code>unit</code>を返す関数も、
+        <code>r1</code>へ単位値
+        <code>1</code>を格納します。
+    </p>
 
-            <p>
-                <code>call</code>は次の命令に戻るためのアドレスを<code>r15</code>へ保存し、
-                指定された関数へ移動します。
-            </p>
+    <h3>スタック引数</h3>
 
-            <h3>クロージャ呼出し</h3>
+    <p>
+        第5引数以降は、呼出し元のフレーム内に確保した
+        outgoing argument領域へ格納します。
+        呼出し直前の
+        <code>r14</code>を基準として、次の位置を使用します。
+    </p>
 
-            <p>
-                関数値をクロージャとして呼び出す場合は、
-                クロージャポインタを<code>r13</code>へ格納します。
-            </p>
+    <table>
+        <thead>
+            <tr>
+                <th>引数</th>
+                <th>位置</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>第5引数</th>
+                <td><code>0(r14)</code></td>
+            </tr>
+            <tr>
+                <th>第6引数</th>
+                <td><code>1(r14)</code></td>
+            </tr>
+            <tr>
+                <th>第<span class="math">n</span>引数</th>
+                <td>
+                    <span class="math">n - 5</span><code>(r14)</code>
+                </td>
+            </tr>
+        </tbody>
+    </table>
 
-            <pre><code>mov   r13, closure
-            load  r5, code_offset(r13)
-            mov   r1, argument1
-            callr r5</code></pre>
+    <p>
+        呼出された関数が自身のスタックフレームを確保した後は、
+        呼出し元の引数領域が
+        <code>frame_size</code>ワード高い位置に移動します。
+        コンパイラは、関数入口で必要な引数を割当て先へ読み込みます。
+    </p>
 
-            <p>
-                呼出された関数は、<code>r13</code>を通して自由変数を読み出します。
-            </p>
+    <h3>直接呼出し</h3>
 
-            <pre><code>load r5, free_variable_offset(r13)</code></pre>
+    <pre><code>mov  r1, argument1
+mov  r2, argument2
+call function_label</code></pre>
 
-            <h3>スタックフレーム</h3>
+    <p>
+        <code>call</code>は
+        <code>jal r15, function_label</code>の疑似命令です。
+        次の命令位置を
+        <code>r15</code>へ保存して呼出し先へ移動します。
+    </p>
 
-            <p>
-                各関数は、必要に応じてスタック上にフレームを確保します。
-                スタックは大きいアドレスから小さいアドレスへ伸びます。
-            </p>
+    <h3>クロージャ呼出し</h3>
 
-            <p>スタックフレームには、主に次の値を置きます。</p>
+    <pre><code>mov   r13, closure
+load  r5, 0(r13)
+mov   r1, argument1
+callr r5</code></pre>
 
-            <ul>
-                <li>保存した戻りアドレス</li>
-                <li>保存したレジスタ</li>
-                <li>レジスタに収まらなかった値</li>
-                <li>第5引数以降の関数引数</li>
-            </ul>
+    <p>
+        呼出された関数は、
+        <code>r13</code>のフィールド1以降から自由変数を読み出します。
+    </p>
 
-            <pre><code>高位アドレス
-            +--------------------+
-            | 第5引数以降        |
-            +--------------------+
-            | 戻りアドレス       |
-            +--------------------+
-            | 保存レジスタ       |
-            +--------------------+
-            | spill領域          |
-            +--------------------+  &lt;- r14
-            低位アドレス</code></pre>
+    <h3>レジスタの保存</h3>
 
-            <h3>関数入口と関数出口</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>分類</th>
+                <th>対象</th>
+                <th>保存する側</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>caller-save</th>
+                <td>
+                    <code>r1</code>から<code>r9</code>、
+                    <code>r13</code>、<code>r15</code>
+                </td>
+                <td>呼出し後にも値が必要な場合に呼出し側が保存する</td>
+            </tr>
+            <tr>
+                <th>callee-save</th>
+                <td><code>r10</code>から<code>r12</code></td>
+                <td>使用する場合に呼出される側が保存して復元する</td>
+            </tr>
+            <tr>
+                <th>スタックポインタ</th>
+                <td><code>r14</code></td>
+                <td>呼出された関数が復帰前に元の値へ戻す</td>
+            </tr>
+        </tbody>
+    </table>
 
-            <p>
-                関数入口では、必要な大きさだけスタックポインタを移動し、
-                保存が必要なレジスタをスタックへ退避します。
-            </p>
+    <h3>スタックフレーム</h3>
 
-            <pre><code>function_label:
-                addi  r14, r14, -4
-                store r15, 3(r14)
-                store r10, 2(r14)
-                store r11, 1(r14)
-                store r12, 0(r14)</code></pre>
+    <p>
+        スタックは高位アドレスから低位アドレスへ伸びます。
+        関数は入口で
+        <code>r14</code>を減らしてフレームを確保します。
+    </p>
 
-            <p>
-                関数出口では、保存した値を復元し、スタックポインタを元へ戻してから
-                呼出し元へ戻ります。
-            </p>
+    <pre><code>高位アドレス
++----------------------------+
+| 呼出し元のフレーム         |
++----------------------------+
+| 第5引数以降                |
++----------------------------+
+| 保存した戻りアドレス       |
++----------------------------+
+| 保存したcallee-save値      |
++----------------------------+
+| spill領域                  |
++----------------------------+
+| caller-save保存領域        |
++----------------------------+
+| outgoing argument領域      |
++----------------------------+  &lt;- r14
+低位アドレス</code></pre>
 
-            <pre><code>    load  r12, 0(r14)
-                load  r11, 1(r14)
-                load  r10, 2(r14)
-                load  r15, 3(r14)
-                addi  r14, r14, 4
-                ret</code></pre>
+    <h3>関数入口</h3>
 
-            <h3>末尾呼出し</h3>
+    <pre><code>function_label:
+    addi  r14, r14, -frame_size
+    store r15, saved_r15_offset(r14)
+    store r10, saved_r10_offset(r14)
+    store r11, saved_r11_offset(r14)</code></pre>
 
-            <p>
-                関数の最後に別の関数を呼び出す場合は、新しい戻り先を保存しません。
-                現在のスタックフレームを破棄し、引数を配置してから呼出し先へジャンプします。
-            </p>
+    <p>
+        使用しないcallee-saveレジスタは保存しません。
+        呼出しを行わないleaf関数では、
+        戻りアドレスとスタックフレームの保存を省略できる場合があります。
+    </p>
 
-            <pre><code>mov   r1, next_argument1
-            mov   r2, next_argument2
-            addi  r14, r14, frame_size
-            jump  next_function</code></pre>
+    <h3>関数出口</h3>
 
-            <p>
-                クロージャへの末尾呼出しでは、クロージャポインタを<code>r13</code>へ設定し、
-                クロージャから読み出したコードアドレスへ間接ジャンプします。
-            </p>
+    <pre><code>function_exit:
+    load  r11, saved_r11_offset(r14)
+    load  r10, saved_r10_offset(r14)
+    load  r15, saved_r15_offset(r14)
+    addi  r14, r14, frame_size
+    ret</code></pre>
 
-            <h3>部分適用</h3>
+    <p>
+        戻り値は、関数出口へ移動する前に
+        <code>r1</code>へ配置します。
+    </p>
 
-            <p>
-                関数へ必要な数より少ない引数を渡した場合は、
-                与えられた引数を保存した新しいクロージャを返します。
-                この処理は仮想CPUではなく、コンパイラが生成する補助関数またはランタイムが行います。
-            </p>
+    <h3>末尾呼出し</h3>
 
-            <p>
-                必要な数より多い引数を渡した場合は、最初の呼出し結果として得られた関数へ、
-                残りの引数を続けて適用します。
-            </p>
-        <h2>仮想CPUの状態</h2>
+    <p>
+        末尾呼出しでは、新しい戻りアドレスを作りません。
+        呼出し先の引数を安全な位置へ配置し、
+        現在のフレームを破棄してから呼出し先へジャンプします。
+    </p>
 
-        <p>
-            仮想CPUは、命令列、静的データ、レジスタ、メモリ、
-            プログラムカウンタ、停止状態を持ちます。
-        </p>
+    <table>
+        <thead>
+            <tr>
+                <th>処理順序</th>
+                <th>処理</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>1</th>
+                <td>呼出し先の引数値とコードアドレスを求める</td>
+            </tr>
+            <tr>
+                <th>2</th>
+                <td>フレーム破棄で失われる値を一時位置へ保存する</td>
+            </tr>
+            <tr>
+                <th>3</th>
+                <td>callee-saveレジスタと<code>r15</code>を復元する</td>
+            </tr>
+            <tr>
+                <th>4</th>
+                <td>現在のスタックフレームを破棄する</td>
+            </tr>
+            <tr>
+                <th>5</th>
+                <td>引数を規定のレジスタとスタック位置へ配置する</td>
+            </tr>
+            <tr>
+                <th>6</th>
+                <td><code>jump</code>または<code>jumpr</code>で呼出し先へ移動する</td>
+            </tr>
+        </tbody>
+    </table>
 
-        <table>
+    <h3>部分適用</h3>
+
+    <p>
+        部分適用は仮想CPUの機能ではありません。
+        コンパイラが生成した補助関数とクロージャ、
+        またはランタイム関数によって実装します。
+        仮想CPUは通常のクロージャ呼出しとして実行します。
+    </p>
+
+    <h2>仮想CPUの状態</h2>
+
+    <p>
+        仮想CPUの状態を
+        <span class="math">S</span>とし、
+        次の要素から構成します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>状態</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
             <tr>
                 <th><span class="math">code</span></th>
-                <td>実行する命令列</td>
-            </tr>
-            <tr>
-                <th><span class="math">data</span></th>
-                <td>文字列や定数ブロックを格納する静的データ</td>
+                <td>ラベル解決済みの基本命令配列</td>
             </tr>
             <tr>
                 <th><span class="math">registers</span></th>
-                <td><code>r0</code>から<code>r15</code>までのレジスタ</td>
+                <td><code>r0</code>から<code>r15</code>までの64ビットレジスタ</td>
             </tr>
             <tr>
                 <th><span class="math">memory</span></th>
-                <td>ヒープとスタックを格納するメモリ</td>
+                <td>静的データ、ヒープ、スタックを格納するワード配列</td>
             </tr>
             <tr>
                 <th><span class="math">pc</span></th>
-                <td>次に実行する命令の位置</td>
+                <td>次に実行する命令配列内の位置</td>
+            </tr>
+            <tr>
+                <th><span class="math">heap_next</span></th>
+                <td>次のヒープ確保で使用するメモリアドレス</td>
+            </tr>
+            <tr>
+                <th><span class="math">static_end</span></th>
+                <td>静的データ領域の直後のアドレス</td>
             </tr>
             <tr>
                 <th><span class="math">halted</span></th>
-                <td>仮想CPUが停止しているかを表す値</td>
+                <td>仮想CPUが停止しているかを表す真偽値</td>
             </tr>
-        </table>
+            <tr>
+                <th><span class="math">exit_code</span></th>
+                <td>プログラムの終了コード</td>
+            </tr>
+            <tr>
+                <th><span class="math">error</span></th>
+                <td>実行時エラーが発生した場合の詳細</td>
+            </tr>
+        </tbody>
+    </table>
 
-        <h3>レジスタ</h3>
+    <h2>レジスタの規則</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>操作</th>
+                <th>規則</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>read_register(0)</code></th>
+                <td>常に0を返す</td>
+            </tr>
+            <tr>
+                <th><code>write_register(0, value)</code></th>
+                <td>書込みを破棄する</td>
+            </tr>
+            <tr>
+                <th><code>read_register(i)</code></th>
+                <td>1以上15以下なら<code>registers[i]</code>を返す</td>
+            </tr>
+            <tr>
+                <th><code>write_register(i, value)</code></th>
+                <td>1以上15以下なら<code>registers[i]</code>を更新する</td>
+            </tr>
+            <tr>
+                <th>範囲外の番号</th>
+                <td>実行可能形式の検査エラーとする</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>メモリ</h2>
+
+    <p>
+        メモリは64ビットワードの配列です。
+        静的データ、ヒープ、未使用領域、スタックを一つのアドレス空間へ配置します。
+    </p>
+
+    <pre><code>低位アドレス
++----------------------------+
+| 静的データ                 |
++----------------------------+  &lt;- static_end
+| ヒープ                     |
+|             ↓              |
+|                            |
+|             ↑              |
+| スタック                   |
++----------------------------+  &lt;- 初期 r14
+高位アドレス</code></pre>
+
+    <table>
+        <thead>
+            <tr>
+                <th>領域</th>
+                <th>成長方向</th>
+                <th>書込み</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>静的データ</th>
+                <td>ロード時に低位アドレスから配置する</td>
+                <td>基本仕様では読取り専用</td>
+            </tr>
+            <tr>
+                <th>ヒープ</th>
+                <td>低位アドレスから高位アドレスへ成長する</td>
+                <td>許可する</td>
+            </tr>
+            <tr>
+                <th>スタック</th>
+                <td>高位アドレスから低位アドレスへ成長する</td>
+                <td>許可する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>有効なメモリアドレス</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>条件</th>
+                <th>結果</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>0 &lt;= address &lt; memory_length</code>
+                </th>
+                <td>メモリ範囲内</td>
+            </tr>
+            <tr>
+                <th>静的データ領域への<code>load</code></th>
+                <td>許可する</td>
+            </tr>
+            <tr>
+                <th>静的データ領域への<code>store</code></th>
+                <td>実行時エラー</td>
+            </tr>
+            <tr>
+                <th>未確保ヒープ領域へのアクセス</th>
+                <td>実行時エラー</td>
+            </tr>
+            <tr>
+                <th>現在のスタック領域外へのアクセス</th>
+                <td>実行時エラー</td>
+            </tr>
+            <tr>
+                <th>メモリ配列の範囲外</th>
+                <td>実行時エラー</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>ヒープ確保</h2>
+
+    <p>
+        基本仕様では、ヒープ確保はbump allocationで実装します。
+        要求されたワード数だけ
+        <span class="math">heap_next</span>を進めます。
+    </p>
+
+    <pre><code>allocate(size):
+    if size &lt; 0:
+        runtime error
+
+    base = heap_next
+    next = heap_next + size
+
+    if next &gt; r14:
+        out of memory
+
+    heap_next = next
+    return base</code></pre>
+
+    <p>
+        ヒープとスタックが衝突する場合は、
+        基本仕様ではメモリ不足として停止します。
+    </p>
+
+    <section class="advanced">
+        <h2>発展　ガベージコレクション</h2>
 
         <p>
-            仮想CPUは、64ビット幅のレジスタを16本持ちます。
-            <code>r0</code>の値は常に<code>0</code>です。
-            <code>r0</code>への書き込みは破棄されます。
-        </p>
-
-        <pre><code>registers[0]  = r0
-        registers[1]  = r1
-        ...
-        registers[15] = r15</code></pre>
-
-        <h3>プログラムカウンタ</h3>
-
-        <p>
-            プログラムカウンタ<code>pc</code>は、
-            次に実行する命令の配列番号を表します。
-        </p>
-
-        <p>
-            通常の命令を実行した後は、<code>pc</code>を1増やします。
-            ジャンプ、分岐、関数呼出し、復帰では、
-            命令が指定する位置へ<code>pc</code>を変更します。
-        </p>
-
-        <h3>メモリ</h3>
-
-        <p>
-            メモリは64ビットワードの配列です。
-            メモリアドレスはワード単位で表します。
-        </p>
-
-        <pre><code>memory[0]
-        memory[1]
-        memory[2]
-        ...</code></pre>
-
-        <p>
-            メモリの低位側をヒープ、高位側をスタックとして使用します。
-            ヒープは低位側から高位側へ、スタックは高位側から低位側へ伸びます。
-        </p>
-
-        <pre><code>低位アドレス
-        +--------------------+
-        | 静的データ         |
-        +--------------------+
-        | ヒープ             |
-        |        ↓           |
-        |                    |
-        |        ↑           |
-        | スタック           |
-        +--------------------+
-        高位アドレス</code></pre>
-
-        <p>
-            ヒープとスタックが衝突した場合は、メモリ不足として実行を停止します。
-        </p>
-
-        <h3>初期状態</h3>
-
-        <p>
-            プログラムを開始するとき、仮想CPUを次のように初期化します。
+            ガベージコレクションを導入する場合は、
+            メモリ不足を報告する前に
+            <code>runtime_gc</code>を実行します。
+            GCはレジスタ、スタック、静的データ、大域値から
+            到達可能なヒープブロックを追跡します。
         </p>
 
         <table>
+            <thead>
+                <tr>
+                    <th>ルート</th>
+                    <th>追跡方法</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th>レジスタ</th>
+                    <td>GCマップまたは値タグでポインタを判定する</td>
+                </tr>
+                <tr>
+                    <th>スタックスロット</th>
+                    <td>GCマップまたは値タグでポインタを判定する</td>
+                </tr>
+                <tr>
+                    <th>静的データ</th>
+                    <td>静的ブロック内のポインタフィールドを走査する</td>
+                </tr>
+                <tr>
+                    <th>大域値</th>
+                    <td>大域値領域に格納された値を走査する</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <h2>実行可能形式</h2>
+
+    <p>
+        仮想CPUはアセンブラが生成した実行可能形式を受け取ります。
+        アセンブリテキストの解析やラベル解決は行いません。
+    </p>
+
+    <table>
+        <thead>
             <tr>
-                <th><span class="math">pc</span></th>
-                <td>実行可能形式で指定されたエントリポイント</td>
+                <th>フィールド</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>code</code></th>
+                <td>ラベル解決済みの基本命令配列</td>
             </tr>
             <tr>
-                <th><code>r0</code>～<code>r13</code></th>
+                <th><code>data</code></th>
+                <td>静的データのワード配列</td>
+            </tr>
+            <tr>
+                <th><code>data_relocations</code></th>
+                <td>静的データ内のコードアドレスとデータアドレスの位置</td>
+            </tr>
+            <tr>
+                <th><code>entry</code></th>
+                <td>最初に実行する命令の位置</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <pre><code>type executable = {
+    code : instruction array;
+    data : int64 array;
+    data_relocations : relocation array;
+    entry : int;
+}</code></pre>
+
+    <h2>実行可能形式の検査</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>検査項目</th>
+                <th>条件</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>エントリポイント</th>
+                <td><code>0 &lt;= entry &lt; Array.length code</code></td>
+            </tr>
+            <tr>
+                <th>レジスタ番号</th>
+                <td>すべて0以上15以下</td>
+            </tr>
+            <tr>
+                <th>直接ジャンプ先</th>
+                <td>命令配列の範囲内</td>
+            </tr>
+            <tr>
+                <th>直接呼出し先</th>
+                <td>命令配列の範囲内</td>
+            </tr>
+            <tr>
+                <th>静的データ</th>
+                <td>VMメモリへ収まる</td>
+            </tr>
+            <tr>
+                <th>再配置位置</th>
+                <td>静的データ配列の範囲内</td>
+            </tr>
+            <tr>
+                <th>命令</th>
+                <td>基本命令だけで構成され、疑似命令を含まない</td>
+            </tr>
+            <tr>
+                <th>trap番号</th>
+                <td>VMが実装する番号である</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>ロード</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>段階</th>
+                <th>処理</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>1</th>
+                <td>実行可能形式を検査する</td>
+            </tr>
+            <tr>
+                <th>2</th>
+                <td><code>code</code>を仮想CPUの命令配列へ設定する</td>
+            </tr>
+            <tr>
+                <th>3</th>
+                <td>静的データをメモリの低位側へコピーする</td>
+            </tr>
+            <tr>
+                <th>4</th>
+                <td>静的データ内のデータアドレス再配置へデータ基底アドレスを加える</td>
+            </tr>
+            <tr>
+                <th>5</th>
+                <td>コードアドレス再配置を命令配列内の位置として設定する</td>
+            </tr>
+            <tr>
+                <th>6</th>
+                <td><code>static_end</code>を静的データ直後へ設定する</td>
+            </tr>
+            <tr>
+                <th>7</th>
+                <td><code>heap_next</code>を<code>static_end</code>へ設定する</td>
+            </tr>
+            <tr>
+                <th>8</th>
+                <td><code>pc</code>を<code>entry</code>へ設定する</td>
+            </tr>
+            <tr>
+                <th>9</th>
+                <td>レジスタ、スタック、停止状態を初期化する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>初期状態</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>状態</th>
+                <th>初期値</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><span class="math">pc</span></th>
+                <td>実行可能形式の<code>entry</code></td>
+            </tr>
+            <tr>
+                <th><code>r0</code>から<code>r13</code></th>
                 <td><code>0</code></td>
             </tr>
             <tr>
                 <th><code>r14</code></th>
-                <td>スタック領域の終端アドレス</td>
+                <td>メモリ配列の長さ</td>
             </tr>
             <tr>
                 <th><code>r15</code></th>
                 <td><code>0</code></td>
             </tr>
             <tr>
+                <th><span class="math">heap_next</span></th>
+                <td>静的データ領域の直後</td>
+            </tr>
+            <tr>
                 <th><span class="math">halted</span></th>
                 <td><code>false</code></td>
             </tr>
-        </table>
-
-        <h3>命令の実行</h3>
-
-        <p>
-            仮想CPUは、停止するまで次の処理を繰り返します。
-        </p>
-
-        <ol>
-            <li><code>code[pc]</code>から命令を取得する</li>
-            <li>命令に従ってレジスタ、メモリ、<code>pc</code>を更新する</li>
-            <li><code>halted</code>が<code>true</code>でなければ次の命令を実行する</li>
-        </ol>
-
-        <h3>停止</h3>
-
-        <p>
-            <code>halt</code>命令を実行すると、
-            <code>halted</code>を<code>true</code>にして実行を終了します。
-        </p>
-
-        <p>
-            実行時エラーが発生した場合も仮想CPUを停止し、
-            エラーの種類、命令位置、実行中の命令を報告します。
-        </p>
-     <h2>仮想命令セット</h2>
-
-        <p>
-            仮想CPUは16本の汎用レジスタ、プログラムカウンタ、メモリを持ちます。
-            各命令は、特に記載がない限り実行後に次の命令へ進みます。
-        </p>
-
-        <h3>オペランド</h3>
-
-        <table>
             <tr>
-                <th><span class="math">r</span></th>
-                <td>レジスタ</td>
+                <th><span class="math">exit_code</span></th>
+                <td><code>0</code></td>
             </tr>
             <tr>
-                <th><span class="math">i</span></th>
-                <td>整数即値</td>
+                <th><span class="math">error</span></th>
+                <td>なし</td>
             </tr>
-            <tr>
-                <th><span class="math">o</span></th>
-                <td>メモリオフセット</td>
-            </tr>
-            <tr>
-                <th><span class="math">L</span></th>
-                <td>コードまたは静的データのラベル</td>
-            </tr>
-            <tr>
-                <th><span class="math">n</span></th>
-                <td>ランタイム処理の番号</td>
-            </tr>
-        </table>
+        </tbody>
+    </table>
 
-        <h3>定数と転送</h3>
+    <h2>命令実行ループ</h2>
 
-        <table>
+    <pre><code>while not state.halted do
+    if state.pc is outside state.code then
+        runtime_error invalid_program_counter
+    else
+        instruction = state.code[state.pc]
+        execute instruction state
+done</code></pre>
+
+    <p>
+        通常の命令は、命令の効果を適用した後に
+        <code>pc</code>を1増やします。
+        ジャンプ、分岐、関数呼出し、復帰は
+        命令自身が次の
+        <code>pc</code>を設定します。
+    </p>
+
+    <h2>基本命令</h2>
+
+    <p>
+        次の命令だけを仮想CPUが直接実行します。
+        <code>call</code>、
+        <code>callr</code>、
+        <code>ret</code>、
+        <code>neg</code>、
+        <code>subi</code>などの疑似命令は、
+        アセンブラによって基本命令へ展開済みです。
+    </p>
+
+    <h3>定数と転送</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>命令</th>
+                <th>状態更新</th>
+                <th>次の<code>pc</code></th>
+            </tr>
+        </thead>
+        <tbody>
             <tr>
                 <th><code>li rd, i</code></th>
-                <td>即値を<code>rd</code>へ格納する</td>
+                <td><code>registers[rd] = i</code></td>
+                <td><code>pc + 1</code></td>
             </tr>
             <tr>
-                <th><code>la rd, L</code></th>
-                <td>ラベルのアドレスを<code>rd</code>へ格納する</td>
+                <th><code>la_code rd, p</code></th>
+                <td><code>registers[rd] = p</code></td>
+                <td><code>pc + 1</code></td>
+            </tr>
+            <tr>
+                <th><code>la_data rd, a</code></th>
+                <td><code>registers[rd] = a</code></td>
+                <td><code>pc + 1</code></td>
             </tr>
             <tr>
                 <th><code>mov rd, rs</code></th>
-                <td><code>rs</code>の値を<code>rd</code>へコピーする</td>
+                <td><code>registers[rd] = registers[rs]</code></td>
+                <td><code>pc + 1</code></td>
             </tr>
-        </table>
+        </tbody>
+    </table>
 
-        <h3>整数演算</h3>
+    <p>
+        アセンブリ上の
+        <code>la</code>は、ラベルの種類に応じて
+        <code>la_code</code>または
+        <code>la_data</code>に解決されます。
+    </p>
 
-        <table>
+    <h3>算術命令</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>命令</th>
+                <th>状態更新</th>
+                <th>エラー条件</th>
+            </tr>
+        </thead>
+        <tbody>
             <tr>
                 <th><code>add rd, rs1, rs2</code></th>
-                <td>加算</td>
+                <td><code>rd = rs1 + rs2</code></td>
+                <td>なし。64ビットでラップアラウンドする</td>
             </tr>
             <tr>
                 <th><code>sub rd, rs1, rs2</code></th>
-                <td>減算</td>
+                <td><code>rd = rs1 - rs2</code></td>
+                <td>なし。64ビットでラップアラウンドする</td>
             </tr>
             <tr>
                 <th><code>mul rd, rs1, rs2</code></th>
-                <td>乗算</td>
+                <td><code>rd = rs1 * rs2</code></td>
+                <td>なし。下位64ビットを保持する</td>
             </tr>
             <tr>
                 <th><code>div rd, rs1, rs2</code></th>
-                <td>除算</td>
+                <td><code>rd = signed_div(rs1, rs2)</code></td>
+                <td>除数が0、または最小値を<code>-1</code>で除算した場合</td>
             </tr>
             <tr>
                 <th><code>rem rd, rs1, rs2</code></th>
-                <td>剰余</td>
+                <td><code>rd = signed_rem(rs1, rs2)</code></td>
+                <td>除数が0</td>
             </tr>
             <tr>
                 <th><code>addi rd, rs, i</code></th>
-                <td>即値加算</td>
+                <td><code>rd = rs + i</code></td>
+                <td>なし。64ビットでラップアラウンドする</td>
             </tr>
-        </table>
+        </tbody>
+    </table>
 
-        <p>
-            これらの命令は、生の64ビット整数を演算します。
-            タグ付き整数のタグ付けとタグ解除は、コンパイラがビット演算を使って行います。
-        </p>
+    <p>
+        算術命令は生の64ビット整数を処理します。
+        タグ付き整数のタグ補正は生成コードが明示的に行います。
+    </p>
 
-        <h3>ビット演算</h3>
+    <h3>ビット命令</h3>
 
-        <table>
+    <table>
+        <thead>
+            <tr>
+                <th>命令</th>
+                <th>状態更新</th>
+            </tr>
+        </thead>
+        <tbody>
             <tr>
                 <th><code>and rd, rs1, rs2</code></th>
-                <td>ビット論理積</td>
+                <td><code>rd = rs1 &amp; rs2</code></td>
             </tr>
             <tr>
                 <th><code>or rd, rs1, rs2</code></th>
-                <td>ビット論理和</td>
+                <td><code>rd = rs1 | rs2</code></td>
             </tr>
             <tr>
                 <th><code>xor rd, rs1, rs2</code></th>
-                <td>ビット排他的論理和</td>
+                <td><code>rd = rs1 ^ rs2</code></td>
             </tr>
             <tr>
                 <th><code>not rd, rs</code></th>
-                <td>ビット反転</td>
+                <td><code>rd = bitwise_not(rs)</code></td>
             </tr>
             <tr>
                 <th><code>shl rd, rs1, rs2</code></th>
-                <td>左シフト</td>
+                <td><code>rd = rs1 &lt;&lt; (rs2 &amp; 63)</code></td>
             </tr>
             <tr>
                 <th><code>shr rd, rs1, rs2</code></th>
-                <td>論理右シフト</td>
+                <td><code>rd = logical_shift_right(rs1, rs2 &amp; 63)</code></td>
             </tr>
             <tr>
                 <th><code>sar rd, rs1, rs2</code></th>
-                <td>算術右シフト</td>
+                <td><code>rd = arithmetic_shift_right(rs1, rs2 &amp; 63)</code></td>
             </tr>
-        </table>
+        </tbody>
+    </table>
 
-        <h3>比較</h3>
+    <h3>比較命令</h3>
 
-        <table>
+    <table>
+        <thead>
+            <tr>
+                <th>命令</th>
+                <th>状態更新</th>
+            </tr>
+        </thead>
+        <tbody>
             <tr>
                 <th><code>seq rd, rs1, rs2</code></th>
-                <td>等しければ<code>1</code>、それ以外なら<code>0</code>を格納する</td>
+                <td>
+                    値が等しければ
+                    <code>rd = 1</code>、
+                    それ以外なら
+                    <code>rd = 0</code>
+                </td>
             </tr>
             <tr>
                 <th><code>slt rd, rs1, rs2</code></th>
-                <td><code>rs1 &lt; rs2</code>なら<code>1</code>、それ以外なら<code>0</code>を格納する</td>
+                <td>
+                    符号付き比較で
+                    <code>rs1 &lt; rs2</code>なら
+                    <code>rd = 1</code>、
+                    それ以外なら
+                    <code>rd = 0</code>
+                </td>
             </tr>
-        </table>
+        </tbody>
+    </table>
 
-        <p>
-            <code>sne</code>、<code>sle</code>、<code>sgt</code>、
-            <code>sge</code>は、アセンブラが基本命令へ展開する疑似命令とします。
-        </p>
+    <p>
+        比較命令の結果は生の0または1です。
+        ソース言語の真偽値として使用する場合は、
+        生成コードが
+        <code>tag_int</code>を適用します。
+    </p>
 
-        <h3>メモリアクセス</h3>
+    <h3>メモリ命令</h3>
 
-        <table>
+    <table>
+        <thead>
+            <tr>
+                <th>命令</th>
+                <th>実効アドレス</th>
+                <th>状態更新</th>
+            </tr>
+        </thead>
+        <tbody>
             <tr>
                 <th><code>load rd, o(rs)</code></th>
-                <td><code>rs + o</code>番地の1ワードを<code>rd</code>へ読み出す</td>
+                <td><code>registers[rs] + o</code></td>
+                <td>検査後、対象ワードを<code>rd</code>へ格納する</td>
             </tr>
             <tr>
                 <th><code>store rs, o(rd)</code></th>
-                <td><code>rs</code>の1ワードを<code>rd + o</code>番地へ書き込む</td>
+                <td><code>registers[rd] + o</code></td>
+                <td>検査後、<code>rs</code>の値を対象ワードへ格納する</td>
             </tr>
-        </table>
+        </tbody>
+    </table>
 
-        <p>
-            メモリアドレスとオフセットはワード単位とします。
-            不正なアドレスへのアクセスは実行時エラーになります。
-        </p>
+    <p>
+        実効アドレスの計算で64ビット範囲を超えた場合、
+        メモリ範囲外の場合、書込み禁止領域の場合は実行時エラーとします。
+    </p>
 
-        <h3>ジャンプと分岐</h3>
+    <h3>ジャンプと分岐</h3>
 
-        <table>
+    <table>
+        <thead>
             <tr>
-                <th><code>jump L</code></th>
-                <td>ラベル<code>L</code>へ移動する</td>
+                <th>命令</th>
+                <th>条件</th>
+                <th>次の<code>pc</code></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>jump p</code></th>
+                <td>なし</td>
+                <td><span class="math">p</span></td>
             </tr>
             <tr>
                 <th><code>jumpr rs</code></th>
-                <td><code>rs</code>が示す命令位置へ移動する</td>
+                <td>なし</td>
+                <td><code>registers[rs]</code></td>
             </tr>
             <tr>
-                <th><code>brz rs, L</code></th>
-                <td><code>rs</code>が<code>0</code>ならラベル<code>L</code>へ移動する</td>
+                <th><code>brz rs, p</code></th>
+                <td><code>registers[rs] = 0</code></td>
+                <td>成立時は<span class="math">p</span>、不成立時は<code>pc + 1</code></td>
             </tr>
             <tr>
-                <th><code>brnz rs, L</code></th>
-                <td><code>rs</code>が<code>0</code>でなければラベル<code>L</code>へ移動する</td>
+                <th><code>brnz rs, p</code></th>
+                <td><code>registers[rs] != 0</code></td>
+                <td>成立時は<span class="math">p</span>、不成立時は<code>pc + 1</code></td>
             </tr>
-        </table>
+        </tbody>
+    </table>
 
-        <h3>関数呼出し</h3>
+    <p>
+        移動先は命令配列の範囲内でなければなりません。
+        間接ジャンプでは、レジスタの値をコードアドレスとして検査します。
+    </p>
 
-        <table>
+    <h3>関数呼出し命令</h3>
+
+    <table>
+        <thead>
             <tr>
-                <th><code>jal rd, L</code></th>
-                <td>次の命令位置を<code>rd</code>へ保存し、ラベル<code>L</code>へ移動する</td>
+                <th>命令</th>
+                <th>リンク値</th>
+                <th>次の<code>pc</code></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>jal rd, p</code></th>
+                <td><code>registers[rd] = pc + 1</code></td>
+                <td><span class="math">p</span></td>
             </tr>
             <tr>
                 <th><code>jalr rd, rs</code></th>
-                <td>次の命令位置を<code>rd</code>へ保存し、<code>rs</code>が示す命令位置へ移動する</td>
+                <td><code>registers[rd] = pc + 1</code></td>
+                <td>命令実行前の<code>registers[rs]</code></td>
             </tr>
-        </table>
+        </tbody>
+    </table>
 
-        <p>次の表記は疑似命令とします。</p>
+    <p>
+        <code>jalr</code>では、リンク値を書き込む前に
+        移動先アドレスを読み取ります。
+        そのため
+        <code>rd</code>と
+        <code>rs</code>が同じ場合でも正しく実行できます。
+    </p>
 
-        <table>
+    <h3>trapと停止</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>命令</th>
+                <th>処理</th>
+                <th>次の<code>pc</code></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>trap n</code></th>
+                <td>番号<span class="math">n</span>に対応するホスト側処理を実行する</td>
+                <td>通常は<code>pc + 1</code>。終了処理では停止する</td>
+            </tr>
+            <tr>
+                <th><code>halt</code></th>
+                <td><code>halted = true</code></td>
+                <td>更新しなくてよい</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>仮想CPUが直接実行しない命令</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>疑似命令</th>
+                <th>基本命令</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>nop</code></th>
+                <td><code>mov r0, r0</code></td>
+            </tr>
+            <tr>
+                <th><code>neg rd, rs</code></th>
+                <td><code>sub rd, r0, rs</code></td>
+            </tr>
+            <tr>
+                <th><code>subi rd, rs, i</code></th>
+                <td><code>addi rd, rs, -i</code></td>
+            </tr>
             <tr>
                 <th><code>call L</code></th>
                 <td><code>jal r15, L</code></td>
@@ -716,950 +1576,597 @@
                 <th><code>ret</code></th>
                 <td><code>jalr r0, r15</code></td>
             </tr>
-        </table>
-
-        <h3>ランタイム呼出しと停止</h3>
-
-        <table>
-            <tr>
-                <th><code>trap n</code></th>
-                <td>番号<code>n</code>のランタイム処理を呼び出す</td>
-            </tr>
-            <tr>
-                <th><code>halt</code></th>
-                <td>仮想CPUを停止する</td>
-            </tr>
-        </table>
-
-        <p>
-            入出力、ヒープ確保、文字列操作、構造的比較などは、
-            通常の関数または<code>trap</code>を通してランタイムが処理します。
-        </p>
-
-        <h3>疑似命令</h3>
-
-        <table>
-            <tr>
-                <th><code>nop</code></th>
-                <td>何も行わない</td>
-            </tr>
-            <tr>
-                <th><code>neg rd, rs</code></th>
-                <td>符号反転</td>
-            </tr>
-            <tr>
-                <th><code>subi rd, rs, i</code></th>
-                <td>即値減算</td>
-            </tr>
             <tr>
                 <th><code>push rs</code></th>
-                <td>スタックへ1ワード保存する</td>
+                <td>
+                    <code>addi r14, r14, -1</code>の後に
+                    <code>store rs, 0(r14)</code>
+                </td>
             </tr>
             <tr>
                 <th><code>pop rd</code></th>
-                <td>スタックから1ワード読み出す</td>
+                <td>
+                    <code>load rd, 0(r14)</code>の後に
+                    <code>addi r14, r14, 1</code>
+                </td>
             </tr>
-        </table>
+        </tbody>
+    </table>
 
-        <p>
-            疑似命令は仮想CPUが直接実行しません。
-            アセンブラが一つ以上の基本命令へ展開します。
-        </p>
+    <h2>trap番号</h2>
 
-        <h3>浮動小数点演算</h3>
-
-        <p>
-            基本仕様では浮動小数点数をヒープ上にボックス化するため、
-            浮動小数点演算はランタイム関数として実装します。
-        </p>
-
-        <pre><code>runtime_float_add
-        runtime_float_sub
-        runtime_float_mul
-        runtime_float_div</code></pre>
-
-        <p>
-            発展仕様では、浮動小数点レジスタと次の命令を追加できます。
-        </p>
-
-        <table>
-            <tr class="advanced">
-                <th><code>fadd fd, fs1, fs2</code></th>
-                <td>発展　浮動小数点加算</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>fsub fd, fs1, fs2</code></th>
-                <td>発展　浮動小数点減算</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>fmul fd, fs1, fs2</code></th>
-                <td>発展　浮動小数点乗算</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>fdiv fd, fs1, fs2</code></th>
-                <td>発展　浮動小数点除算</td>
-            </tr>
-        </table>
-
-        <h3>実行時エラー</h3>
-
-        <p>仮想CPUは、少なくとも次の場合に実行時エラーを報告します。</p>
-
-        <ul>
-            <li>ゼロによる除算または剰余</li>
-            <li>メモリ範囲外へのアクセス</li>
-            <li>存在しない命令位置へのジャンプ</li>
-            <li>未知の<code>trap</code>番号の呼出し</li>
-            <li>スタックとヒープの衝突</li>
-        </ul>
-        <h2>アセンブリ文法</h2>
-
-            <p>
-                アセンブリプログラムは、命令、ラベル、ディレクティブ、コメントから構成されます。
-                空行と改行は、命令の区切りとして使用できます。
-            </p>
-
-            <h3>字句要素</h3>
-
-            <table>
-                <tr>
-                    <th><span class="math">x</span></th>
-                    <td>識別子</td>
-                </tr>
-                <tr>
-                    <th><span class="math">L</span></th>
-                    <td>ラベル</td>
-                </tr>
-                <tr>
-                    <th><span class="math">r</span></th>
-                    <td>レジスタ</td>
-                </tr>
-                <tr>
-                    <th><span class="math">i</span></th>
-                    <td>整数即値</td>
-                </tr>
-                <tr>
-                    <th><span class="math">s</span></th>
-                    <td>文字列リテラル</td>
-                </tr>
-            </table>
-
-            <h3>プログラム</h3>
-
-            <table>
-                <tr>
-                    <th><span class="math">P</span> ::=</th>
-                    <td>アセンブリプログラム</td>
-                </tr>
-                <tr>
-                    <th>
-                        <span class="math">u</span><sub>1</sub> ...
-                        <span class="math">u</span><sub>n</sub>
-                    </th>
-                    <td>アセンブリ項目の列</td>
-                </tr>
-            </table>
-
-            <h3>アセンブリ項目</h3>
-
-            <table>
-                <tr>
-                    <th><span class="math">u</span> ::=</th>
-                    <td>アセンブリ項目</td>
-                </tr>
-                <tr>
-                    <th><span class="math">I</span></th>
-                    <td>命令</td>
-                </tr>
-                <tr>
-                    <th>
-                        <span class="math">L</span><code>:</code>
-                    </th>
-                    <td>ラベル定義</td>
-                </tr>
-                <tr>
-                    <th><span class="math">D</span></th>
-                    <td>ディレクティブ</td>
-                </tr>
-            </table>
-
-            <h3>レジスタ</h3>
-
-            <table>
-                <tr>
-                    <th><span class="math">r</span> ::=</th>
-                    <td>レジスタ</td>
-                </tr>
-                <tr>
-                    <th>
-                        <code>r0</code> | <code>r1</code> | ... | <code>r15</code>
-                    </th>
-                    <td>汎用レジスタ</td>
-                </tr>
-            </table>
-
-            <h3>整数即値</h3>
-
-            <table>
-                <tr>
-                    <th><span class="math">i</span> ::=</th>
-                    <td>整数即値</td>
-                </tr>
-                <tr>
-                    <th><code>42</code></th>
-                    <td>10進整数</td>
-                </tr>
-                <tr>
-                    <th><code>-42</code></th>
-                    <td>負の10進整数</td>
-                </tr>
-                <tr>
-                    <th><code>0x2a</code></th>
-                    <td>16進整数</td>
-                </tr>
-                <tr>
-                    <th><code>0b101010</code></th>
-                    <td>2進整数</td>
-                </tr>
-            </table>
-
-            <p>
-                整数即値は符号付き64ビット整数の範囲に収まらなければなりません。
-                アセンブリ中の整数即値は原則として生の機械整数であり、
-                ソース言語のタグ付き整数とは区別します。
-            </p>
-
-            <h3>命令</h3>
-
-            <table>
-                <tr>
-                    <th><span class="math">I</span> ::=</th>
-                    <td>命令</td>
-                </tr>
-                <tr>
-                    <th>
-                        <span class="math">op</span>
-                    </th>
-                    <td>オペランドを持たない命令</td>
-                </tr>
-                <tr>
-                    <th>
-                        <span class="math">op a</span><sub>1</sub>
-                    </th>
-                    <td>1個のオペランドを持つ命令</td>
-                </tr>
-                <tr>
-                    <th>
-                        <span class="math">op a</span><sub>1</sub><code>,</code>
-                        <span class="math">a</span><sub>2</sub>
-                    </th>
-                    <td>2個のオペランドを持つ命令</td>
-                </tr>
-                <tr>
-                    <th>
-                        <span class="math">op a</span><sub>1</sub><code>,</code>
-                        <span class="math">a</span><sub>2</sub><code>,</code>
-                        <span class="math">a</span><sub>3</sub>
-                    </th>
-                    <td>3個のオペランドを持つ命令</td>
-                </tr>
-            </table>
-
-            <p>
-                <span class="math">op</span>には、
-                <code>add</code>、<code>load</code>、<code>jump</code>などの命令名を指定します。
-                使用できる命令とオペランドの組合せは、仮想命令セットの仕様に従います。
-            </p>
-
-            <h3>オペランド</h3>
-
-            <table>
-                <tr>
-                    <th><span class="math">a</span> ::=</th>
-                    <td>オペランド</td>
-                </tr>
-                <tr>
-                    <th><span class="math">r</span></th>
-                    <td>レジスタ</td>
-                </tr>
-                <tr>
-                    <th><span class="math">i</span></th>
-                    <td>整数即値</td>
-                </tr>
-                <tr>
-                    <th><span class="math">L</span></th>
-                    <td>ラベル</td>
-                </tr>
-                <tr>
-                    <th>
-                        <span class="math">i</span><code>(</code><span class="math">r</span><code>)</code>
-                    </th>
-                    <td>ベースレジスタとオフセットによるメモリアドレス</td>
-                </tr>
-            </table>
-
-            <h3>メモリアドレス</h3>
-
-            <p>
-                メモリアクセスには、ベースレジスタとワード単位のオフセットを使用します。
-            </p>
-
-            <pre><code>load  r1, 0(r2)
-            load  r3, 2(r2)
-            store r4, -1(r14)</code></pre>
-
-            <p>
-                例えば<code>2(r2)</code>は、
-                <code>r2</code>の値に2ワードを加えたアドレスを表します。
-            </p>
-
-            <h3>ラベル</h3>
-
-            <p>
-                ラベルは、命令または静的データの位置に名前を付けます。
-            </p>
-
-            <pre><code>main:
-                li    r1, 42
-                jump  finish
-
-            finish:
-                halt</code></pre>
-
-            <p>
-                ラベル名は、英字またはアンダースコアで始まり、
-                以降に英数字、アンダースコア、ピリオドを使用できます。
-            </p>
-
-            <pre><code>main
-            loop_1
-            runtime.print_int
-            .L_internal</code></pre>
-
-            <p>
-                同じアセンブリ単位内で、同じラベルを複数回定義することはできません。
-            </p>
-
-            <h3>セクション</h3>
-
-            <table>
-                <tr>
-                    <th><span class="math">D</span> ::=</th>
-                    <td>ディレクティブ</td>
-                </tr>
-                <tr>
-                    <th><code>.text</code></th>
-                    <td>以降をコード領域へ配置する</td>
-                </tr>
-                <tr>
-                    <th><code>.data</code></th>
-                    <td>以降を静的データ領域へ配置する</td>
-                </tr>
-            </table>
-
-            <p>
-                プログラムは通常、コードを置く<code>.text</code>セクションと、
-                静的な値を置く<code>.data</code>セクションから構成されます。
-            </p>
-
-            <h3>静的データ</h3>
-
-            <table>
-                <tr>
-                    <th><code>.word</code> <span class="math">i</span></th>
-                    <td>1ワードの整数を配置する</td>
-                </tr>
-                <tr>
-                    <th><code>.word</code> <span class="math">L</span></th>
-                    <td>ラベルのアドレスを1ワード配置する</td>
-                </tr>
-                <tr>
-                    <th><code>.string</code> <span class="math">s</span></th>
-                    <td>文字列を配置する</td>
-                </tr>
-                <tr>
-                    <th><code>.zero</code> <span class="math">i</span></th>
-                    <td>指定したワード数を0で初期化する</td>
-                </tr>
-                <tr>
-                    <th><code>.align</code> <span class="math">i</span></th>
-                    <td>以降のデータ位置を指定した境界へ揃える</td>
-                </tr>
-            </table>
-
-            <p>
-                文字列リテラルには、ダブルクォートを使用します。
-            </p>
-
-            <pre><code>.data
-
-            message:
-                .string "hello\n"</code></pre>
-
-            <h3>シンボル</h3>
-
-            <table>
-                <tr>
-                    <th><code>.global</code> <span class="math">L</span></th>
-                    <td>ラベルを他のアセンブリ単位へ公開する</td>
-                </tr>
-                <tr>
-                    <th><code>.extern</code> <span class="math">L</span></th>
-                    <td>別のアセンブリ単位で定義されるラベルを参照する</td>
-                </tr>
-                <tr>
-                    <th><code>.entry</code> <span class="math">L</span></th>
-                    <td>プログラムの開始位置を指定する</td>
-                </tr>
-            </table>
-
-            <p>
-                単一ファイルだけを扱う段階では、
-                <code>.global</code>と<code>.extern</code>を省略できます。
-                分割コンパイルとリンクを導入した段階で使用します。
-            </p>
-
-            <h3>コメント</h3>
-
-            <p>
-                セミコロンから行末まではコメントとして無視します。
-            </p>
-
-            <pre><code>li   r1, 42      ; r1へ42を格納する
-            halt             ; 実行を終了する</code></pre>
-
-            <h3>疑似命令</h3>
-
-            <p>
-                疑似命令は、アセンブラによって一つ以上の基本命令へ展開されます。
-            </p>
-
-            <table>
-                <tr>
-                    <th><code>nop</code></th>
-                    <td><code>mov r0, r0</code></td>
-                </tr>
-                <tr>
-                    <th><code>neg rd, rs</code></th>
-                    <td><code>sub rd, r0, rs</code></td>
-                </tr>
-                <tr>
-                    <th><code>subi rd, rs, i</code></th>
-                    <td><code>addi rd, rs, -i</code></td>
-                </tr>
-                <tr>
-                    <th><code>call L</code></th>
-                    <td><code>jal r15, L</code></td>
-                </tr>
-                <tr>
-                    <th><code>callr rs</code></th>
-                    <td><code>jalr r15, rs</code></td>
-                </tr>
-                <tr>
-                    <th><code>ret</code></th>
-                    <td><code>jalr r0, r15</code></td>
-                </tr>
-                <tr>
-                    <th><code>push rs</code></th>
-                    <td>スタックポインタを減らして値を書き込む</td>
-                </tr>
-                <tr>
-                    <th><code>pop rd</code></th>
-                    <td>値を読み出してスタックポインタを増やす</td>
-                </tr>
-            </table>
-
-            <h3>アセンブリプログラムの例</h3>
-
-            <pre><code>.text
-            .global main
-            .entry main
-
-            main:
-                li    r1, 40
-                li    r2, 2
-                add   r1, r1, r2
-                call  runtime_print_int
-
-                li    r1, 0
-                trap  0
-
-            .data
-
-            message:
-                .string "result\n"</code></pre>
-
-            <h3>アセンブラの処理</h3>
-
-            <p>アセンブラは、概ね次の順序でアセンブリを処理します。</p>
-
-            <ol>
-                <li>アセンブリテキストを字句解析する</li>
-                <li>命令、ラベル、ディレクティブを構文解析する</li>
-                <li>疑似命令を基本命令へ展開する</li>
-                <li>コードラベルとデータラベルの位置を計算する</li>
-                <li>ラベル参照を具体的なアドレスへ置き換える</li>
-                <li>実行可能命令列と静的データを生成する</li>
-            </ol>
-
-            <h3>エラー</h3>
-
-            <p>アセンブラは、少なくとも次の場合にエラーを報告します。</p>
-
-            <ul>
-                <li>存在しない命令名を使用した場合</li>
-                <li>オペランドの個数または種類が正しくない場合</li>
-                <li>存在しないレジスタを指定した場合</li>
-                <li>同じラベルを複数回定義した場合</li>
-                <li>未定義のラベルを参照した場合</li>
-                <li>整数即値が64ビットの範囲を超えた場合</li>
-                <li>コード領域にデータを配置した場合</li>
-                <li>データ領域に命令を配置した場合</li>
-            </ul>
-            <h2>実行可能形式</h2>
-
-            <p>
-                アセンブラは、アセンブリテキストから仮想CPUが読み込める実行可能形式を生成します。
-                実行可能形式には、命令列、静的データ、エントリポイントを格納します。
-            </p>
-
-            <table>
-                <tr>
-                    <th><span class="math">executable</span></th>
-                    <td>実行可能形式</td>
-                </tr>
-                <tr>
-                    <th><span class="math">code</span></th>
-                    <td>実行する命令列</td>
-                </tr>
-                <tr>
-                    <th><span class="math">data</span></th>
-                    <td>静的データ</td>
-                </tr>
-                <tr>
-                    <th><span class="math">entry</span></th>
-                    <td>実行開始位置</td>
-                </tr>
-            </table>
-
-            <h3>命令列</h3>
-
-            <p>
-                命令列は、アセンブラによってラベルが解決された基本命令の配列です。
-                疑似命令、ラベル定義、コメントは残りません。
-            </p>
-
-            <pre><code>code[0] = Li (1, 40)
-            code[1] = Li (2, 2)
-            code[2] = Add (1, 1, 2)
-            code[3] = Trap 1
-            code[4] = Halt</code></pre>
-
-            <p>
-                ジャンプ先や関数のコードアドレスは、命令列中の位置で表します。
-            </p>
-
-            <pre><code>loop:
-                addi  r1, r1, -1
-                brnz  r1, loop</code></pre>
-
-            <p>上のコードは、概念的に次の命令列になります。</p>
-
-            <pre><code>code[0] = AddI (1, 1, -1)
-            code[1] = BranchNonZero (1, 0)</code></pre>
-
-            <h3>静的データ</h3>
-
-            <p>
-                静的データには、文字列リテラル、定数ブロック、
-                関数コードへの参照などを格納します。
-            </p>
-
-            <pre><code>.data
-
-            message:
-                .string "hello"
-
-            pair:
-                .word 3
-                .word 5</code></pre>
-
-            <p>
-                データラベルは、静的データ領域内の位置へ解決されます。
-                コード中では<code>la</code>命令を使って、そのアドレスを取得します。
-            </p>
-
-            <pre><code>la r1, message</code></pre>
-
-            <h3>エントリポイント</h3>
-
-            <p>
-                エントリポイントは、仮想CPUが最初に実行する命令の位置です。
-                アセンブリでは<code>.entry</code>ディレクティブによって指定します。
-            </p>
-
-            <pre><code>.entry main
-
-            main:
-                li    r1, 0
-                halt</code></pre>
-
-            <p>
-                <code>.entry</code>がない場合は、<code>main</code>ラベルを使用します。
-                <code>main</code>も存在しない場合は、アセンブル時にエラーとします。
-            </p>
-
-            <h3>OCamlでの表現</h3>
-
-            <p>
-                基本仕様では、命令をビット列へ符号化せず、
-                OCamlのデータ型として保持します。
-            </p>
-
-            <pre><code>type executable = {
-            code : instruction array;
-            data : int64 array;
-            entry : int;
-            }</code></pre>
-
-            <p>
-                仮想CPUは、この値を直接受け取って実行します。
-                固定長のバイトコードや機械語への符号化は発展仕様とします。
-            </p>
-
-            <h3>ロード</h3>
-
-            <p>
-                仮想CPUは、実行開始時に実行可能形式を次のように読み込みます。
-            </p>
-
-            <ol>
-                <li><span class="math">code</span>を命令領域へ設定する</li>
-                <li><span class="math">data</span>をメモリの静的データ領域へ配置する</li>
-                <li><span class="math">pc</span>を<span class="math">entry</span>へ設定する</li>
-                <li>レジスタ、ヒープ、スタックを初期化する</li>
-                <li>命令の実行を開始する</li>
-            </ol>
-
-            <h3>分割コンパイル</h3>
-
-            <p>
-                単一ファイルを扱う基本仕様では、
-                すべてのラベルをアセンブラが解決してから実行可能形式を生成します。
-            </p>
-
-            <p>
-                分割コンパイルでは、各ファイルからオブジェクト形式を生成し、
-                リンカが複数のオブジェクトを一つの実行可能形式へ結合します。
-            </p>
-
-            <table>
-                <tr class="advanced">
-                    <th><span class="math">symbols</span></th>
-                    <td>発展　定義されたシンボル</td>
-                </tr>
-                <tr class="advanced">
-                    <th><span class="math">imports</span></th>
-                    <td>発展　外部から参照するシンボル</td>
-                </tr>
-                <tr class="advanced">
-                    <th><span class="math">exports</span></th>
-                    <td>発展　外部へ公開するシンボル</td>
-                </tr>
-                <tr class="advanced">
-                    <th><span class="math">relocations</span></th>
-                    <td>発展　リンク時に修正するアドレス</td>
-                </tr>
-            </table>
-
-            <h3>形式の検査</h3>
-
-            <p>
-                仮想CPUは実行前に、少なくとも次の条件を検査します。
-            </p>
-
-            <ul>
-                <li>エントリポイントが命令列の範囲内にあること</li>
-                <li>命令中のレジスタ番号が<code>r0</code>から<code>r15</code>の範囲内にあること</li>
-                <li>直接ジャンプ先が命令列の範囲内にあること</li>
-                <li>静的データがメモリに収まること</li>
-                <li>命令とオペランドの組合せが正しいこと</li>
-            </ul>
-
-            <h3>発展：命令の符号化</h3>
-
-            <p class="advanced">
-                発展仕様では、各命令を整数やバイト列へ符号化できます。
-                この場合も、命令の意味とアセンブリ構文は基本仕様と共通です。
-            </p>
-
-            <p class="advanced">
-                命令の符号化を導入する場合は、命令コード、レジスタ番号、
-                即値、アドレスのビット配置を別途定義します。
-            </p>
-        <h2>ランタイムAPI</h2>
-
-        <p>
-            ランタイムAPIは、生成コードから利用する処理を定義します。
-            引数は<code>r1</code>から順に渡し、戻り値は<code>r1</code>で受け取ります。
-        </p>
-
-        <h3>プログラムの終了</h3>
-
-        <table>
+    <table>
+        <thead>
             <tr>
-                <th><code>runtime_exit</code></th>
-                <td><code>r1</code>の終了コードでプログラムを終了する</td>
+                <th>trap</th>
+                <th>処理</th>
+                <th>入力</th>
+                <th>出力</th>
             </tr>
-            <tr>
-                <th><code>runtime_abort</code></th>
-                <td>実行時エラーとしてプログラムを終了する</td>
-            </tr>
-        </table>
-
-        <h3>メモリ管理</h3>
-
-        <table>
-            <tr>
-                <th><code>runtime_alloc</code></th>
-                <td><code>r1</code>ワードのブロックを確保し、そのポインタを返す</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>runtime_gc</code></th>
-                <td>発展　ガベージコレクションを実行する</td>
-            </tr>
-        </table>
-
-        <h3>整数</h3>
-
-        <table>
-            <tr>
-                <th><code>runtime_print_int</code></th>
-                <td><code>r1</code>の整数を出力する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_int_to_string</code></th>
-                <td><code>r1</code>の整数を文字列へ変換する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_string_to_int</code></th>
-                <td><code>r1</code>の文字列を整数へ変換する</td>
-            </tr>
-        </table>
-
-        <h3>浮動小数点数</h3>
-
-        <table>
-            <tr>
-                <th><code>runtime_float_add</code></th>
-                <td><code>r1</code>と<code>r2</code>の浮動小数点数を加算する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_float_sub</code></th>
-                <td><code>r1</code>から<code>r2</code>を減算する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_float_mul</code></th>
-                <td><code>r1</code>と<code>r2</code>の浮動小数点数を乗算する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_float_div</code></th>
-                <td><code>r1</code>を<code>r2</code>で除算する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_print_float</code></th>
-                <td><code>r1</code>の浮動小数点数を出力する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_float_to_string</code></th>
-                <td><code>r1</code>の浮動小数点数を文字列へ変換する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_string_to_float</code></th>
-                <td><code>r1</code>の文字列を浮動小数点数へ変換する</td>
-            </tr>
-        </table>
-
-        <h3>文字と文字列</h3>
-
-        <table>
-            <tr>
-                <th><code>runtime_print_char</code></th>
-                <td><code>r1</code>の文字を出力する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_read_char</code></th>
-                <td>1文字を読み込んで返す</td>
-            </tr>
-            <tr>
-                <th><code>runtime_print_string</code></th>
-                <td><code>r1</code>の文字列を出力する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_read_line</code></th>
-                <td>1行を読み込んで文字列として返す</td>
-            </tr>
-            <tr>
-                <th><code>runtime_string_length</code></th>
-                <td><code>r1</code>の文字列の長さを返す</td>
-            </tr>
-            <tr>
-                <th><code>runtime_string_get</code></th>
-                <td><code>r1</code>の文字列から<code>r2</code>番目の文字を返す</td>
-            </tr>
-            <tr>
-                <th><code>runtime_string_concat</code></th>
-                <td><code>r1</code>と<code>r2</code>の文字列を連結する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_string_equal</code></th>
-                <td><code>r1</code>と<code>r2</code>の文字列を比較する</td>
-            </tr>
-        </table>
-
-        <h3>構造的比較</h3>
-
-        <table>
-            <tr>
-                <th><code>runtime_equal</code></th>
-                <td><code>r1</code>と<code>r2</code>を構造的に比較する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_compare</code></th>
-                <td><code>r1</code>と<code>r2</code>の順序を比較する</td>
-            </tr>
-        </table>
-
-        <p>
-            関数値を含む値に構造的比較を適用した場合は、
-            <code>Invalid_argument</code>例外を送出します。
-        </p>
-
-        <h3>実行時エラー</h3>
-
-        <table>
-            <tr>
-                <th><code>runtime_division_by_zero</code></th>
-                <td>ゼロ除算を報告する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_index_out_of_bounds</code></th>
-                <td>文字列または配列の範囲外アクセスを報告する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_match_failure</code></th>
-                <td>どのパターンにも一致しなかったことを報告する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_out_of_memory</code></th>
-                <td>メモリ不足を報告する</td>
-            </tr>
-            <tr>
-                <th><code>runtime_invalid_argument</code></th>
-                <td>不正な引数を報告する</td>
-            </tr>
-        </table>
-
-        <h3>配列</h3>
-
-        <table>
-            <tr class="advanced">
-                <th><code>runtime_array_make</code></th>
-                <td>発展　長さ<code>r1</code>、初期値<code>r2</code>の配列を作成する</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>runtime_array_length</code></th>
-                <td>発展　<code>r1</code>の配列の長さを返す</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>runtime_array_get</code></th>
-                <td>発展　<code>r1</code>の配列から<code>r2</code>番目の要素を返す</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>runtime_array_set</code></th>
-                <td>発展　<code>r1</code>の配列の<code>r2</code>番目へ<code>r3</code>を書き込む</td>
-            </tr>
-        </table>
-
-        <h3>例外</h3>
-
-        <table>
-            <tr class="advanced">
-                <th><code>runtime_raise</code></th>
-                <td>発展　<code>r1</code>の例外を送出する</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>runtime_push_handler</code></th>
-                <td>発展　例外ハンドラを登録する</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>runtime_pop_handler</code></th>
-                <td>発展　現在の例外ハンドラを解除する</td>
-            </tr>
-        </table>
-
-        <h3>継続とエフェクト</h3>
-
-        <table>
-            <tr class="advanced">
-                <th><code>runtime_perform</code></th>
-                <td>発展　<code>r1</code>のエフェクトを実行する</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>runtime_continue</code></th>
-                <td>発展　<code>r1</code>の継続を<code>r2</code>の値で再開する</td>
-            </tr>
-            <tr class="advanced">
-                <th><code>runtime_discontinue</code></th>
-                <td>発展　<code>r1</code>の継続へ<code>r2</code>の例外を送出する</td>
-            </tr>
-        </table>
-
-        <h3>trapとの対応</h3>
-
-        <p>
-            OCamlで実装されたホスト処理が必要なランタイム関数は、
-            内部で<code>trap</code>命令を使用します。
-        </p>
-
-        <table>
+        </thead>
+        <tbody>
             <tr>
                 <th><code>trap 0</code></th>
                 <td>プログラムの終了</td>
+                <td><code>r1</code>の終了コード</td>
+                <td>停止する</td>
             </tr>
             <tr>
                 <th><code>trap 1</code></th>
                 <td>整数の出力</td>
+                <td><code>r1</code>のタグ付き整数</td>
+                <td><code>r1</code>に単位値</td>
             </tr>
             <tr>
                 <th><code>trap 2</code></th>
                 <td>文字の出力</td>
+                <td><code>r1</code>のタグ付き文字</td>
+                <td><code>r1</code>に単位値</td>
             </tr>
             <tr>
                 <th><code>trap 3</code></th>
                 <td>文字の入力</td>
+                <td>なし</td>
+                <td><code>r1</code>にタグ付き文字</td>
             </tr>
             <tr>
                 <th><code>trap 4</code></th>
                 <td>文字列の出力</td>
+                <td><code>r1</code>の文字列ポインタ</td>
+                <td><code>r1</code>に単位値</td>
             </tr>
             <tr>
                 <th><code>trap 5</code></th>
                 <td>1行の入力</td>
+                <td>なし</td>
+                <td><code>r1</code>に文字列ポインタ</td>
             </tr>
             <tr>
                 <th><code>trap 6</code></th>
-                <td>メモリの確保</td>
+                <td>ヒープ領域の確保</td>
+                <td><code>r1</code>の生のワード数</td>
+                <td><code>r1</code>に先頭アドレス</td>
             </tr>
             <tr>
                 <th><code>trap 7</code></th>
                 <td>実行時エラーの報告</td>
+                <td><code>r1</code>のエラー番号または値</td>
+                <td>停止する</td>
             </tr>
-        </table>
+        </tbody>
+    </table>
 
-        <p>
-            コンパイラは通常、<code>trap</code>を直接生成せず、
-            対応するランタイム関数を呼び出します。
-        </p>
+    <h2>ランタイムAPI</h2>
+
+    <p>
+        ランタイムAPIは、生成コードから通常の呼出し規約で利用する関数です。
+        引数は
+        <code>r1</code>から順に渡し、
+        戻り値は
+        <code>r1</code>で返します。
+    </p>
+
+    <p>
+        ホスト環境の処理が必要なランタイム関数は、
+        内部で
+        <code>trap</code>を使用します。
+        コンパイラは原則として
+        <code>trap</code>を直接生成せず、
+        ランタイム関数を呼び出します。
+    </p>
+
+    <h3>終了とエラー</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>関数</th>
+                <th>引数</th>
+                <th>結果</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>runtime_exit</code></th>
+                <td><code>r1</code>に終了コード</td>
+                <td>プログラムを正常終了する</td>
+            </tr>
+            <tr>
+                <th><code>runtime_abort</code></th>
+                <td><code>r1</code>にエラー値</td>
+                <td>実行時エラーとして停止する</td>
+            </tr>
+            <tr>
+                <th><code>runtime_division_by_zero</code></th>
+                <td>なし</td>
+                <td>ゼロ除算を報告して停止する</td>
+            </tr>
+            <tr>
+                <th><code>runtime_match_failure</code></th>
+                <td>失敗位置を表す値</td>
+                <td>パターンマッチ失敗を報告して停止する</td>
+            </tr>
+            <tr>
+                <th><code>runtime_out_of_memory</code></th>
+                <td>要求サイズ</td>
+                <td>メモリ不足を報告して停止する</td>
+            </tr>
+            <tr>
+                <th><code>runtime_invalid_argument</code></th>
+                <td>不正な引数または説明文字列</td>
+                <td>不正引数を報告する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>メモリ管理</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>関数</th>
+                <th>引数</th>
+                <th>戻り値</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>runtime_alloc</code></th>
+                <td><code>r1</code>に生のワード数</td>
+                <td><code>r1</code>に確保領域の先頭アドレス</td>
+            </tr>
+            <tr class="advanced">
+                <th><code>runtime_gc</code></th>
+                <td>なし</td>
+                <td>発展　GCを実行して単位値を返す</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>整数</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>関数</th>
+                <th>引数</th>
+                <th>戻り値</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>runtime_print_int</code></th>
+                <td><code>r1</code>にタグ付き整数</td>
+                <td>単位値</td>
+            </tr>
+            <tr>
+                <th><code>runtime_int_to_string</code></th>
+                <td><code>r1</code>にタグ付き整数</td>
+                <td>文字列ポインタ</td>
+            </tr>
+            <tr>
+                <th><code>runtime_string_to_int</code></th>
+                <td><code>r1</code>に文字列ポインタ</td>
+                <td>タグ付き整数</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>文字と文字列</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>関数</th>
+                <th>引数</th>
+                <th>戻り値</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>runtime_print_char</code></th>
+                <td><code>r1</code>にタグ付き文字</td>
+                <td>単位値</td>
+            </tr>
+            <tr>
+                <th><code>runtime_read_char</code></th>
+                <td>なし</td>
+                <td>タグ付き文字</td>
+            </tr>
+            <tr>
+                <th><code>runtime_print_string</code></th>
+                <td><code>r1</code>に文字列ポインタ</td>
+                <td>単位値</td>
+            </tr>
+            <tr>
+                <th><code>runtime_read_line</code></th>
+                <td>なし</td>
+                <td>文字列ポインタ</td>
+            </tr>
+            <tr>
+                <th><code>runtime_string_length</code></th>
+                <td><code>r1</code>に文字列ポインタ</td>
+                <td>文字数を表すタグ付き整数</td>
+            </tr>
+            <tr>
+                <th><code>runtime_string_get</code></th>
+                <td>
+                    <code>r1</code>に文字列ポインタ、
+                    <code>r2</code>にタグ付き添字
+                </td>
+                <td>タグ付き文字</td>
+            </tr>
+            <tr>
+                <th><code>runtime_string_concat</code></th>
+                <td>
+                    <code>r1</code>と
+                    <code>r2</code>に文字列ポインタ
+                </td>
+                <td>新しい文字列ポインタ</td>
+            </tr>
+            <tr>
+                <th><code>runtime_string_equal</code></th>
+                <td>
+                    <code>r1</code>と
+                    <code>r2</code>に文字列ポインタ
+                </td>
+                <td>タグ付き真偽値</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>構造的比較</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>関数</th>
+                <th>引数</th>
+                <th>戻り値</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>runtime_equal</code></th>
+                <td><code>r1</code>と<code>r2</code>に比較する値</td>
+                <td>タグ付き真偽値</td>
+            </tr>
+            <tr>
+                <th><code>runtime_compare</code></th>
+                <td><code>r1</code>と<code>r2</code>に比較する値</td>
+                <td>
+                    負、0、正のいずれかを表すタグ付き整数
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        関数値を構造的比較の対象にした場合は、
+        <code>runtime_invalid_argument</code>を呼び出します。
+    </p>
+
+    <section class="advanced">
+        <h3>発展　浮動小数点数</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>関数</th>
+                    <th>引数</th>
+                    <th>戻り値</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th><code>runtime_float_add</code></th>
+                    <td><code>r1</code>と<code>r2</code>に浮動小数点ブロック</td>
+                    <td>加算結果の浮動小数点ブロック</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_float_sub</code></th>
+                    <td><code>r1</code>と<code>r2</code>に浮動小数点ブロック</td>
+                    <td>減算結果の浮動小数点ブロック</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_float_mul</code></th>
+                    <td><code>r1</code>と<code>r2</code>に浮動小数点ブロック</td>
+                    <td>乗算結果の浮動小数点ブロック</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_float_div</code></th>
+                    <td><code>r1</code>と<code>r2</code>に浮動小数点ブロック</td>
+                    <td>除算結果の浮動小数点ブロック</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_print_float</code></th>
+                    <td><code>r1</code>に浮動小数点ブロック</td>
+                    <td>単位値</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_float_to_string</code></th>
+                    <td><code>r1</code>に浮動小数点ブロック</td>
+                    <td>文字列ポインタ</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_string_to_float</code></th>
+                    <td><code>r1</code>に文字列ポインタ</td>
+                    <td>浮動小数点ブロック</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section class="advanced">
+        <h3>発展　配列</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>関数</th>
+                    <th>引数</th>
+                    <th>戻り値</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th><code>runtime_array_make</code></th>
+                    <td>
+                        <code>r1</code>にタグ付き長さ、
+                        <code>r2</code>に初期値
+                    </td>
+                    <td>配列ポインタ</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_array_length</code></th>
+                    <td><code>r1</code>に配列ポインタ</td>
+                    <td>タグ付き長さ</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_array_get</code></th>
+                    <td>
+                        <code>r1</code>に配列ポインタ、
+                        <code>r2</code>にタグ付き添字
+                    </td>
+                    <td>配列要素</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_array_set</code></th>
+                    <td>
+                        <code>r1</code>に配列ポインタ、
+                        <code>r2</code>にタグ付き添字、
+                        <code>r3</code>に書込み値
+                    </td>
+                    <td>単位値</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section class="advanced">
+        <h3>発展　例外</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>関数</th>
+                    <th>引数</th>
+                    <th>結果</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th><code>runtime_raise</code></th>
+                    <td><code>r1</code>に例外値</td>
+                    <td>現在のハンドラへ制御を移す</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_push_handler</code></th>
+                    <td>ハンドラ情報</td>
+                    <td>例外ハンドラを登録する</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_pop_handler</code></th>
+                    <td>なし</td>
+                    <td>現在の例外ハンドラを解除する</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section class="advanced">
+        <h3>発展　継続とエフェクト</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>関数</th>
+                    <th>引数</th>
+                    <th>結果</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th><code>runtime_perform</code></th>
+                    <td><code>r1</code>にエフェクト値</td>
+                    <td>現在のエフェクトハンドラへ制御を移す</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_continue</code></th>
+                    <td>
+                        <code>r1</code>に継続、
+                        <code>r2</code>に再開値
+                    </td>
+                    <td>継続を値で再開する</td>
+                </tr>
+                <tr>
+                    <th><code>runtime_discontinue</code></th>
+                    <td>
+                        <code>r1</code>に継続、
+                        <code>r2</code>に例外値
+                    </td>
+                    <td>継続へ例外を送出する</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <h2>実行時エラー</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>エラー</th>
+                <th>発生条件</th>
+                <th>報告内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>ゼロ除算</th>
+                <td><code>div</code>または<code>rem</code>の除数が0</td>
+                <td>命令位置、命令、被除数、除数</td>
+            </tr>
+            <tr>
+                <th>算術除算オーバーフロー</th>
+                <td>最小の符号付き64ビット整数を<code>-1</code>で除算した</td>
+                <td>命令位置とオペランド</td>
+            </tr>
+            <tr>
+                <th>不正なメモリアドレス</th>
+                <td>メモリ範囲外または未割当て領域へアクセスした</td>
+                <td>命令位置、実効アドレス、操作</td>
+            </tr>
+            <tr>
+                <th>静的データへの書込み</th>
+                <td>読取り専用の静的領域へ<code>store</code>した</td>
+                <td>命令位置と実効アドレス</td>
+            </tr>
+            <tr>
+                <th>不正なコードアドレス</th>
+                <td>命令配列外へジャンプまたは呼出しを行った</td>
+                <td>命令位置と移動先</td>
+            </tr>
+            <tr>
+                <th>メモリ不足</th>
+                <td>ヒープとスタックが衝突した</td>
+                <td>要求サイズ、ヒープ位置、スタック位置</td>
+            </tr>
+            <tr>
+                <th>スタック不足</th>
+                <td>スタックフレーム確保によってヒープ領域へ侵入した</td>
+                <td>命令位置、フレームサイズ、スタック位置</td>
+            </tr>
+            <tr>
+                <th>未知のtrap</th>
+                <td>実装されていないtrap番号を実行した</td>
+                <td>命令位置とtrap番号</td>
+            </tr>
+            <tr>
+                <th>不正な値表現</th>
+                <td>ランタイムAPIへ期待と異なる種類の値を渡した</td>
+                <td>API名、引数位置、実際の値</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        実行時エラーが発生した場合は、
+        <code>halted</code>を真にし、
+        エラー情報を
+        <code>error</code>へ設定します。
+        エラー処理自体でさらに例外を発生させてはなりません。
+    </p>
+
+    <h2>停止</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>停止方法</th>
+                <th>終了状態</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>halt</code></th>
+                <td>
+                    <code>halted = true</code>。
+                    終了コードは現在の
+                    <code>exit_code</code>
+                </td>
+            </tr>
+            <tr>
+                <th><code>trap 0</code></th>
+                <td>
+                    <code>r1</code>を終了コードとして保存し、
+                    <code>halted = true</code>
+                </td>
+            </tr>
+            <tr>
+                <th>実行時エラー</th>
+                <td>
+                    <code>error</code>を設定し、
+                    非正常終了コードで停止する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>仮想マシンの検査条件</h2>
+
+    <ul>
+        <li><code>r0</code>の読出し結果が常に0である</li>
+        <li><code>r0</code>への書込みがCPU状態へ影響しない</li>
+        <li><code>pc</code>が停止時を除いて命令配列の範囲内にある</li>
+        <li><code>r14</code>がメモリ範囲内のスタック位置を表している</li>
+        <li><code>heap_next</code>が静的データ領域の終端以上である</li>
+        <li><code>heap_next</code>が<code>r14</code>を超えていない</li>
+        <li>静的データ領域への書込みが発生していない</li>
+        <li>直接ジャンプ先と直接呼出し先が有効なコード位置である</li>
+        <li>間接ジャンプ先と間接呼出し先が有効なコードアドレスである</li>
+        <li>メモリアクセスの実効アドレスが有効な割当て済み領域にある</li>
+        <li>ランタイムAPIが呼出し規約に従って引数と戻り値を扱う</li>
+        <li class="advanced">発展　配列操作が配列ブロックだけを対象にする</li>
+        <li class="advanced">発展　GC後もすべての生存ポインタが有効なブロックを指す</li>
+    </ul>
+
+    <h2>実装後に成立する条件</h2>
+
+    <ul>
+        <li>実行可能形式を検査してから実行を開始する</li>
+        <li>静的データがヒープより前のメモリ領域へ配置される</li>
+        <li>データアドレスの再配置がロード時に適用される</li>
+        <li>コードアドレスが命令配列内の位置として扱われる</li>
+        <li>通常命令の実行後に<code>pc</code>が1増える</li>
+        <li>制御移動命令が指定したコード位置へ<code>pc</code>を変更する</li>
+        <li>関数呼出しが次の命令位置をリンクレジスタへ保存する</li>
+        <li>メモリアクセスがワード単位のアドレスとオフセットを使用する</li>
+        <li>ヒープが低位側から高位側へ成長する</li>
+        <li>スタックが高位側から低位側へ成長する</li>
+        <li>ヒープとスタックの衝突が実行時エラーになる</li>
+        <li>ランタイム処理が通常の呼出し規約またはtrap規約に従う</li>
+        <li>停止後に追加の命令を実行しない</li>
+    </ul>
 </body>
 </html>

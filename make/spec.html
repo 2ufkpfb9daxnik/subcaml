@@ -12,6 +12,275 @@
         <button class="theme-toggle" type="button"></button>
     </div>
     <h1>subcaml言語仕様</h1>
+    <h2>宣言</h2>
+        <table>
+            <tr>
+                <th><span class="math">d</span> ::=</th>
+                <td>宣言</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">p</span>
+                    <code>=</code>
+                    <span class="math">e</span>
+                </th>
+                <td>値定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">f p</span><sub>1</sub> ...
+                    <span class="math">p</span><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">e</span>
+                </th>
+                <td>非再帰関数定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let rec</code>
+                    <span class="math">f p</span><sub>1</sub> ...
+                    <span class="math">p</span><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">e</span>
+                </th>
+                <td>再帰関数定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">p</span><sub>1</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>and</code> ...
+                    <code>and</code>
+                    <span class="math">p</span><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>n</sub>
+                </th>
+                <td>複数の非再帰定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let rec</code>
+                    <span class="math">f</span><sub>1</sub>
+                    <span class="math">p</span><sub>11</sub> ...
+                    <span class="math">p</span><sub>1m₁</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>and</code> ...
+                    <code>and</code>
+                    <span class="math">f</span><sub>n</sub>
+                    <span class="math">p</span><sub>n1</sub> ...
+                    <span class="math">p</span><sub>nmₙ</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>n</sub>
+                </th>
+                <td>相互再帰関数定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">t</span>
+                    <code>=</code>
+                    <span class="math">T</span>
+                </th>
+                <td>型別名の定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">α t</span>
+                    <code>=</code>
+                    <span class="math">T</span>
+                </th>
+                <td>型引数を持つ型別名の定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">t</span>
+                    <code>= {</code>
+                    <span class="math">l</span><sub>1</sub>
+                    <code>:</code>
+                    <span class="math">T</span><sub>1</sub><code>;</code> ...
+                    <code>;</code>
+                    <span class="math">l</span><sub>n</sub>
+                    <code>:</code>
+                    <span class="math">T</span><sub>n</sub>
+                    <code>}</code>
+                </th>
+                <td>レコード型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">α t</span>
+                    <code>= {</code>
+                    <span class="math">l</span><sub>1</sub>
+                    <code>:</code>
+                    <span class="math">T</span><sub>1</sub><code>;</code> ...
+                    <code>;</code>
+                    <span class="math">l</span><sub>n</sub>
+                    <code>:</code>
+                    <span class="math">T</span><sub>n</sub>
+                    <code>}</code>
+                </th>
+                <td>型引数を持つレコード型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code> <span class="math">t</span>
+                    <code>= { mutable</code>
+                    <span class="math">l</span>
+                    <code>:</code> <span class="math">T</span>
+                    <code>; ... }</code>
+                </th>
+                <td>可変フィールドを持つレコード型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">t</span>
+                    <code>=</code>
+                    <span class="math">C</span><sub>1</sub>
+                    <code>of</code>
+                    <span class="math">T</span><sub>1</sub>
+                    <code>|</code> ...
+                    <code>|</code>
+                    <span class="math">C</span><sub>n</sub>
+                    <code>of</code>
+                    <span class="math">T</span><sub>n</sub>
+                </th>
+                <td>ヴァリアント型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">α t</span>
+                    <code>=</code>
+                    <span class="math">C</span><sub>1</sub>
+                    <code>of</code>
+                    <span class="math">T</span><sub>1</sub>
+                    <code>|</code> ...
+                    <code>|</code>
+                    <span class="math">C</span><sub>n</sub>
+                    <code>of</code>
+                    <span class="math">T</span><sub>n</sub>
+                </th>
+                <td>型引数を持つヴァリアント型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>type</code>
+                    <span class="math">t</span><sub>1</sub>
+                    <code>=</code>
+                    <span class="math">T</span><sub>1</sub>
+                    <code>and</code> ...
+                    <code>and</code>
+                    <span class="math">t</span><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">T</span><sub>n</sub>
+                </th>
+                <td>相互再帰型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>module</code>
+                    <span class="math">M</span>
+                    <code>= struct</code>
+                    <span class="math">d</span><sub>1</sub> ...
+                    <span class="math">d</span><sub>n</sub>
+                    <code>end</code>
+                </th>
+                <td>モジュール定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>open</code>
+                    <span class="math">M</span>
+                </th>
+                <td>モジュールを開く宣言</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>external</code>
+                    <span class="math">x</span>
+                    <code>:</code>
+                    <span class="math">T</span>
+                    <code>=</code>
+                    <span class="math">s</span>
+                </th>
+                <td>外部関数宣言</td>
+            </tr>
+            <!-- 発展：例外 -->
+
+            <tr class="advanced">
+                <th>
+                    <code>exception</code>
+                    <span class="math">C</span>
+                </th>
+                <td>セルフホスト後　引数を持たない例外の定義</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>exception</code>
+                    <span class="math">C</span>
+                    <code>of</code>
+                    <span class="math">T</span>
+                </th>
+                <td>セルフホスト後　引数を持つ例外の定義</td>
+            </tr>
+
+            <!-- 発展：エフェクトハンドラ -->
+
+            <tr class="advanced">
+                <th>
+                    <code>type _ Effect.t +=</code>
+                    <span class="math">C</span>
+                    <code>:</code>
+                    <span class="math">T</span><sub>1</sub>
+                    <code>-&gt;</code>
+                    <span class="math">T</span><sub>2</sub>
+                    <code>Effect.t</code>
+                </th>
+                <td>セルフホスト後　エフェクトの定義</td>
+            </tr>
+
+            <tr>
+                <th>
+                    <code>module</code>
+                    <span class="math">M</span>
+                    <code>=</code>
+                    <span class="math">m</span>
+                </th>
+                <td>モジュール定義</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>module type</code>
+                    <span class="math">S</span>
+                    <code>=</code>
+                    <span class="math">S</span><sub>1</sub>
+                </th>
+                <td>セルフホスト後　モジュール型定義</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>open</code>
+                    <span class="math">M</span>
+                </th>
+                <td>モジュールを開く宣言</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>include</code>
+                    <span class="math">m</span>
+                </th>
+                <td>モジュールの内容の取り込み</td>
+            </tr>
+        </table>
     <h2>定数</h2>
     <table>
         <tr>
@@ -559,275 +828,6 @@
                     <span class="math">S</span><code>)</code>
                 </th>
                 <td>セルフホスト後　モジュール型注釈付き展開パターン</td>
-            </tr>
-        </table>
-    <h2>宣言</h2>
-        <table>
-            <tr>
-                <th><span class="math">d</span> ::=</th>
-                <td>宣言</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>let</code>
-                    <span class="math">p</span>
-                    <code>=</code>
-                    <span class="math">e</span>
-                </th>
-                <td>値定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>let</code>
-                    <span class="math">f p</span><sub>1</sub> ...
-                    <span class="math">p</span><sub>n</sub>
-                    <code>=</code>
-                    <span class="math">e</span>
-                </th>
-                <td>非再帰関数定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>let rec</code>
-                    <span class="math">f p</span><sub>1</sub> ...
-                    <span class="math">p</span><sub>n</sub>
-                    <code>=</code>
-                    <span class="math">e</span>
-                </th>
-                <td>再帰関数定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>let</code>
-                    <span class="math">p</span><sub>1</sub>
-                    <code>=</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>and</code> ...
-                    <code>and</code>
-                    <span class="math">p</span><sub>n</sub>
-                    <code>=</code>
-                    <span class="math">e</span><sub>n</sub>
-                </th>
-                <td>複数の非再帰定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>let rec</code>
-                    <span class="math">f</span><sub>1</sub>
-                    <span class="math">p</span><sub>11</sub> ...
-                    <span class="math">p</span><sub>1m₁</sub>
-                    <code>=</code>
-                    <span class="math">e</span><sub>1</sub>
-                    <code>and</code> ...
-                    <code>and</code>
-                    <span class="math">f</span><sub>n</sub>
-                    <span class="math">p</span><sub>n1</sub> ...
-                    <span class="math">p</span><sub>nmₙ</sub>
-                    <code>=</code>
-                    <span class="math">e</span><sub>n</sub>
-                </th>
-                <td>相互再帰関数定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>type</code>
-                    <span class="math">t</span>
-                    <code>=</code>
-                    <span class="math">T</span>
-                </th>
-                <td>型別名の定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>type</code>
-                    <span class="math">α t</span>
-                    <code>=</code>
-                    <span class="math">T</span>
-                </th>
-                <td>型引数を持つ型別名の定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>type</code>
-                    <span class="math">t</span>
-                    <code>= {</code>
-                    <span class="math">l</span><sub>1</sub>
-                    <code>:</code>
-                    <span class="math">T</span><sub>1</sub><code>;</code> ...
-                    <code>;</code>
-                    <span class="math">l</span><sub>n</sub>
-                    <code>:</code>
-                    <span class="math">T</span><sub>n</sub>
-                    <code>}</code>
-                </th>
-                <td>レコード型定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>type</code>
-                    <span class="math">α t</span>
-                    <code>= {</code>
-                    <span class="math">l</span><sub>1</sub>
-                    <code>:</code>
-                    <span class="math">T</span><sub>1</sub><code>;</code> ...
-                    <code>;</code>
-                    <span class="math">l</span><sub>n</sub>
-                    <code>:</code>
-                    <span class="math">T</span><sub>n</sub>
-                    <code>}</code>
-                </th>
-                <td>型引数を持つレコード型定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>type</code> <span class="math">t</span>
-                    <code>= { mutable</code>
-                    <span class="math">l</span>
-                    <code>:</code> <span class="math">T</span>
-                    <code>; ... }</code>
-                </th>
-                <td>可変フィールドを持つレコード型定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>type</code>
-                    <span class="math">t</span>
-                    <code>=</code>
-                    <span class="math">C</span><sub>1</sub>
-                    <code>of</code>
-                    <span class="math">T</span><sub>1</sub>
-                    <code>|</code> ...
-                    <code>|</code>
-                    <span class="math">C</span><sub>n</sub>
-                    <code>of</code>
-                    <span class="math">T</span><sub>n</sub>
-                </th>
-                <td>ヴァリアント型定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>type</code>
-                    <span class="math">α t</span>
-                    <code>=</code>
-                    <span class="math">C</span><sub>1</sub>
-                    <code>of</code>
-                    <span class="math">T</span><sub>1</sub>
-                    <code>|</code> ...
-                    <code>|</code>
-                    <span class="math">C</span><sub>n</sub>
-                    <code>of</code>
-                    <span class="math">T</span><sub>n</sub>
-                </th>
-                <td>型引数を持つヴァリアント型定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>type</code>
-                    <span class="math">t</span><sub>1</sub>
-                    <code>=</code>
-                    <span class="math">T</span><sub>1</sub>
-                    <code>and</code> ...
-                    <code>and</code>
-                    <span class="math">t</span><sub>n</sub>
-                    <code>=</code>
-                    <span class="math">T</span><sub>n</sub>
-                </th>
-                <td>相互再帰型定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>module</code>
-                    <span class="math">M</span>
-                    <code>= struct</code>
-                    <span class="math">d</span><sub>1</sub> ...
-                    <span class="math">d</span><sub>n</sub>
-                    <code>end</code>
-                </th>
-                <td>モジュール定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>open</code>
-                    <span class="math">M</span>
-                </th>
-                <td>モジュールを開く宣言</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>external</code>
-                    <span class="math">x</span>
-                    <code>:</code>
-                    <span class="math">T</span>
-                    <code>=</code>
-                    <span class="math">s</span>
-                </th>
-                <td>外部関数宣言</td>
-            </tr>
-            <!-- 発展：例外 -->
-
-            <tr class="advanced">
-                <th>
-                    <code>exception</code>
-                    <span class="math">C</span>
-                </th>
-                <td>セルフホスト後　引数を持たない例外の定義</td>
-            </tr>
-            <tr class="advanced">
-                <th>
-                    <code>exception</code>
-                    <span class="math">C</span>
-                    <code>of</code>
-                    <span class="math">T</span>
-                </th>
-                <td>セルフホスト後　引数を持つ例外の定義</td>
-            </tr>
-
-            <!-- 発展：エフェクトハンドラ -->
-
-            <tr class="advanced">
-                <th>
-                    <code>type _ Effect.t +=</code>
-                    <span class="math">C</span>
-                    <code>:</code>
-                    <span class="math">T</span><sub>1</sub>
-                    <code>-&gt;</code>
-                    <span class="math">T</span><sub>2</sub>
-                    <code>Effect.t</code>
-                </th>
-                <td>セルフホスト後　エフェクトの定義</td>
-            </tr>
-
-            <tr>
-                <th>
-                    <code>module</code>
-                    <span class="math">M</span>
-                    <code>=</code>
-                    <span class="math">m</span>
-                </th>
-                <td>モジュール定義</td>
-            </tr>
-            <tr class="advanced">
-                <th>
-                    <code>module type</code>
-                    <span class="math">S</span>
-                    <code>=</code>
-                    <span class="math">S</span><sub>1</sub>
-                </th>
-                <td>セルフホスト後　モジュール型定義</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>open</code>
-                    <span class="math">M</span>
-                </th>
-                <td>モジュールを開く宣言</td>
-            </tr>
-            <tr>
-                <th>
-                    <code>include</code>
-                    <span class="math">m</span>
-                </th>
-                <td>モジュールの内容の取り込み</td>
             </tr>
         </table>
     <h2>型</h2>

@@ -72,3 +72,15 @@ a:visited {
         color: blue;
     }
 }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    border: 1px solid gray;
+    padding: 0.75rem;
+    vertical-align: top;
+}

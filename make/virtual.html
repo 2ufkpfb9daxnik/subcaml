@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title></title>
+    <title>仮想レジスタ中間表現</title>
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
 </head>
@@ -11,1007 +11,1724 @@
     <div class="site-header">
         <button class="theme-toggle" type="button"></button>
     </div>
-<h1>仮想レジスタ中間表現</h1>
 
-<p>
-    低水準中間表現に命令選択と基本ブロック化を行い、
-    仮想レジスタを使用する命令列へ変換します。
-</p>
+    <h1>仮想レジスタ中間表現</h1>
 
-<ul>
-    <li>低水準中間表現<br>↓ 命令選択・基本ブロック化</li>
-    <li>仮想レジスタ中間表現</li>
-</ul>
+    <p>
+        低水準中間表現に命令選択、仮想レジスタ化、基本ブロック化を行い、
+        個数制限のない仮想レジスタを使用する命令列へ変換します。
+        入れ子になった式は、ラベル、通常命令、終端命令からなる
+        基本ブロックの集合へ変換します。
+    </p>
 
-<h2>仮想レジスタ</h2>
+    <ul>
+        <li>低水準中間表現</li>
+        <li>↓ 命令選択・仮想レジスタ化・基本ブロック化</li>
+        <li>仮想レジスタ中間表現</li>
+    </ul>
 
-<p>
-    仮想レジスタは、コンパイラが必要なだけ生成できる一時的なレジスタです。
-    仮想CPUが持つ16本の物理レジスタとは異なり、個数に制限はありません。
-</p>
+    <p>
+        この段階では、仮想レジスタを物理レジスタへ割り当てません。
+        spill位置、スタックフレーム、引数レジスタ、戻り値レジスタなどは、
+        後続のレジスタ割当てと呼出し規約の具体化で決定します。
+    </p>
 
-<pre><code>v0
+    <h2>プログラムの構文</h2>
+
+    <p>
+        仮想レジスタ中間表現のプログラムは、
+        外部関数宣言、静的データ、関数定義から構成されます。
+        低水準中間表現の大域値定義とプログラム本体は、
+        特別な
+        <code>global_init</code>関数と
+        <code>main</code>関数へ変換します。
+    </p>
+
+    <p>
+        プログラムを
+        <span class="math">P</span>、
+        外部関数宣言を
+        <span class="math">X</span>、
+        静的データを
+        <span class="math">D</span>、
+        関数を
+        <span class="math">F</span>
+        で表します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">P</span> ::=
+                    <span class="math">X</span><sub>1</sub> ...
+                    <span class="math">X</span><sub>l</sub>
+                    <span class="math">D</span><sub>1</sub> ...
+                    <span class="math">D</span><sub>m</sub>
+                    <span class="math">F</span><sub>1</sub> ...
+                    <span class="math">F</span><sub>n</sub>
+                </th>
+                <td>仮想レジスタプログラム</td>
+                <td>
+                    外部関数宣言、静的データ、
+                    および基本ブロック化された関数定義の集合
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>外部関数宣言の構文</h2>
+
+    <p>
+        外部関数宣言は低水準中間表現から引き継ぎます。
+        実装上は、引数の個数、戻り値の有無、
+        GCセーフポイントかどうか、例外を送出する可能性などの属性も保持できます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">X</span> ::=
+                    <code>external</code>
+                    <span class="math">f</span>
+                    <code>=</code>
+                    <span class="math">name</span>
+                </th>
+                <td>外部関数宣言</td>
+                <td>
+                    内部ラベル
+                    <span class="math">f</span>を、ランタイムまたは外部環境の関数
+                    <span class="math">name</span>へ対応付ける
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>静的データの構文</h2>
+
+    <p>
+        低水準中間表現で生成された静的データは、そのまま保持します。
+        各ラベルの具体的なアドレスは、
+        アセンブルまたはリンク時に決定されます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">D</span> ::=
+                    <code>string</code>
+                    <span class="math">L s</span>
+                </th>
+                <td>文字列定数</td>
+                <td>
+                    ラベル
+                    <span class="math">L</span>へ文字列
+                    <span class="math">s</span>の静的表現を配置する
+                </td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <span class="math">D</span> ::=
+                    <code>float</code>
+                    <span class="math">L r</span>
+                </th>
+                <td>発展　浮動小数点定数</td>
+                <td>
+                    ラベル
+                    <span class="math">L</span>へ浮動小数点数
+                    <span class="math">r</span>の静的表現を配置する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">D</span> ::=
+                    <code>block</code>
+                    <span class="math">L k</span>
+                    <code>[</code>
+                    <span class="math">w</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">w</span><sub>n</sub><code>]</code>
+                </th>
+                <td>静的ブロック</td>
+                <td>
+                    タグ
+                    <span class="math">k</span>と固定フィールドを持つ
+                    読取り専用ブロックを配置する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>関数の構文</h2>
+
+    <p>
+        関数は、仮想レジスタで表された仮引数、
+        入口ブロックのラベル、および基本ブロックの集合を持ちます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">F</span> ::=
+                    <code>function</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>n</sub>
+                    <code>) entry</code>
+                    <span class="math">L</span><sub>entry</sub>
+                    <code>{</code>
+                    <span class="math">B</span><sub>1</sub> ...
+                    <span class="math">B</span><sub>m</sub>
+                    <code>}</code>
+                </th>
+                <td>関数</td>
+                <td>
+                    コードラベル
+                    <span class="math">f</span>、
+                    仮引数を表す仮想レジスタ、
+                    入口ブロック、および基本ブロックの集合からなる
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        環境付き関数では、クロージャ環境を受け取る仮想レジスタも
+        通常の仮引数列に含めます。
+    </p>
+
+    <pre><code>function add_x(v_env, v_y) entry add_x_entry {
+    ...
+}</code></pre>
+
+    <h2>基本ブロックの構文</h2>
+
+    <p>
+        基本ブロックは、先頭のラベル、0個以上の通常命令、
+        および1個の終端命令から構成されます。
+        通常命令の途中から別の基本ブロックへ制御が移動することはありません。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">B</span> ::=
+                    <span class="math">L</span><code>:</code>
+                    <span class="math">I</span><sub>1</sub> ...
+                    <span class="math">I</span><sub>n</sub>
+                    <span class="math">T</span>
+                </th>
+                <td>基本ブロック</td>
+                <td>
+                    ラベル
+                    <span class="math">L</span>、
+                    通常命令列、および終端命令からなる
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>仮想レジスタ</h2>
+
+    <p>
+        仮想レジスタは、コンパイラが必要な数だけ生成できる一時的な保存場所です。
+        仮想CPUが持つ有限個の物理レジスタとは異なり、
+        この段階では個数に制限がありません。
+    </p>
+
+    <pre><code>v0
 v1
 v2
 ...</code></pre>
 
-<p>
-    低水準中間表現の変数と一時的な計算結果を、
-    仮想レジスタへ対応させます。
-</p>
-
-<pre><code>let z = add (x, y) in
-mul (z, z)
-
-    ↓
-
-add v2, v0, v1
-mul v3, v2, v2</code></pre>
-<h2>命令選択と基本ブロック化の規則</h2>
-
-<p>
-    <span class="math">V</span>[<span class="math">e</span>,
-    <span class="math">v</span><sub>d</sub>]は、
-    低水準中間表現の式<span class="math">e</span>を評価し、
-    結果を仮想レジスタ<span class="math">v</span><sub>d</sub>へ格納する
-    命令列を表します。
-</p>
-
-<p>
-    条件分岐や<code>switch</code>では新しい基本ブロックを生成します。
-    <span class="math">v</span><sub>x</sub>は変数
-    <span class="math">x</span>に対応する仮想レジスタを表します。
-</p>
-
-<h3>プログラム全体の変換</h3>
-
-<table>
-    <tr>
-        <th>低水準中間表現</th>
-        <td>仮想レジスタ中間表現</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">D</span><sub>1</sub> ...
-            <span class="math">D</span><sub>n</sub><code>;</code>
-            <span class="math">F</span><sub>1</sub> ...
-            <span class="math">F</span><sub>m</sub><code>;</code>
-            <span class="math">e</span>
-        </th>
-        <td>
-            静的データ
-            <span class="math">D</span><sub>1</sub> ...
-            <span class="math">D</span><sub>n</sub>と、
-            変換した関数
-            <span class="math">V</span>[<span class="math">F</span><sub>1</sub>] ...
-            <span class="math">V</span>[<span class="math">F</span><sub>m</sub>]、
-            メイン式から生成した<code>main</code>関数
-        </td>
-    </tr>
-</table>
-
-<h3>関数定義の変換</h3>
-
-<table>
-    <tr>
-        <th>低水準中間表現</th>
-        <td>仮想レジスタ中間表現</td>
-    </tr>
-    <tr>
-        <th>
-            <code>function</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>) =</code>
-            <span class="math">e</span>
-        </th>
-        <td>
-            <code>function</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>) {</code><br>
-            <span class="math">L</span><sub>entry</sub><code>:</code><br>
-            <span class="math">V</span>[<span class="math">e</span>,
-            <span class="math">v</span><sub>result</sub>]<br>
-            <code>return</code>
-            <span class="math">v</span><sub>result</sub><br>
-            <code>}</code>
-        </td>
-    </tr>
-</table>
-
-<h3>式の変換</h3>
-
-<table>
-    <tr>
-        <th>低水準中間表現</th>
-        <td>仮想レジスタ中間表現</td>
-    </tr>
-
-    <tr>
-        <th><span class="math">w</span></th>
-        <td>
-            <code>li</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">w</span>
-        </td>
-    </tr>
-
-    <tr>
-        <th><span class="math">x</span></th>
-        <td>
-            <code>mov</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>x</sub>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>let</code>
-            <span class="math">x</span>
-            <code>=</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>in</code>
-            <span class="math">e</span><sub>2</sub>
-        </th>
-        <td>
-            新しい仮想レジスタ
-            <span class="math">v</span><sub>x</sub>を生成し、<br>
-            <span class="math">V</span>[<span class="math">e</span><sub>1</sub>,
-            <span class="math">v</span><sub>x</sub>]<br>
-            <span class="math">V</span>[<span class="math">e</span><sub>2</sub>,
-            <span class="math">v</span><sub>d</sub>]
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <span class="math">op</span>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            <span class="math">op</span>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>x₁</sub><code>,</code> ...
-            <code>,</code>
-            <span class="math">v</span><sub>xₙ</sub>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>if</code>
-            <span class="math">x</span>
-            <code>then</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>else</code>
-            <span class="math">e</span><sub>2</sub>
-        </th>
-        <td>
-            <code>branch</code>
-            <span class="math">v</span><sub>x</sub><code>,</code>
-            <span class="math">L</span><sub>then</sub><code>,</code>
-            <span class="math">L</span><sub>else</sub><br><br>
-
-            <span class="math">L</span><sub>then</sub><code>:</code><br>
-            <span class="math">V</span>[<span class="math">e</span><sub>1</sub>,
-            <span class="math">v</span><sub>d</sub>]<br>
-            <code>jump</code> <span class="math">L</span><sub>join</sub><br><br>
-
-            <span class="math">L</span><sub>else</sub><code>:</code><br>
-            <span class="math">V</span>[<span class="math">e</span><sub>2</sub>,
-            <span class="math">v</span><sub>d</sub>]<br>
-            <code>jump</code> <span class="math">L</span><sub>join</sub><br><br>
-
-            <span class="math">L</span><sub>join</sub><code>:</code>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>switch</code>
-            <span class="math">x</span>
-            <code>with</code>
-            <span class="math">w</span><sub>1</sub>
-            <code>-&gt;</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>|</code> ...
-            <code>|</code>
-            <span class="math">w</span><sub>n</sub>
-            <code>-&gt;</code>
-            <span class="math">e</span><sub>n</sub>
-        </th>
-        <td>
-            <code>switch</code>
-            <span class="math">v</span><sub>x</sub>
-            <code>[</code>
-            <span class="math">w</span><sub>1</sub><code>:</code>
-            <span class="math">L</span><sub>1</sub><code>,</code> ...
-            <code>,</code>
-            <span class="math">w</span><sub>n</sub><code>:</code>
-            <span class="math">L</span><sub>n</sub>
-            <code>]</code><br><br>
-
-            各<span class="math">i</span>について、<br>
-            <span class="math">L</span><sub>i</sub><code>:</code><br>
-            <span class="math">V</span>[<span class="math">e</span><sub>i</sub>,
-            <span class="math">v</span><sub>d</sub>]<br>
-            <code>jump</code> <span class="math">L</span><sub>join</sub><br><br>
-
-            <span class="math">L</span><sub>join</sub><code>:</code>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>alloc</code> <span class="math">x</span>
-        </th>
-        <td>
-            <code>runtime_call</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <code>runtime_alloc(</code>
-            <span class="math">v</span><sub>x</sub><code>)</code>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>load</code>
-            <span class="math">x i</span>
-        </th>
-        <td>
-            <code>load</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">i</span><code>(</code>
-            <span class="math">v</span><sub>x</sub><code>)</code>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>store</code>
-            <span class="math">x i y</span>
-        </th>
-        <td>
-            <code>store</code>
-            <span class="math">v</span><sub>y</sub><code>,</code>
-            <span class="math">i</span><code>(</code>
-            <span class="math">v</span><sub>x</sub><code>)</code><br>
-            <code>li</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">unit</span>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>address_add</code>
-            <span class="math">x i</span>
-        </th>
-        <td>
-            <code>addi</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>x</sub><code>,</code>
-            <span class="math">i</span>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>address_of</code>
-            <span class="math">L</span>
-        </th>
-        <td>
-            <code>la</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">L</span>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>call</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            <code>call</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">v</span><sub>x₁</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>xₙ</sub><code>)</code>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>call_indirect</code>
-            <span class="math">x</span>
-            <code>(</code><span class="math">y</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">y</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            <code>callr</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>x</sub>
-            <code>(</code><span class="math">v</span><sub>y₁</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>yₙ</sub><code>)</code>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>runtime_call</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            <code>runtime_call</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">v</span><sub>x₁</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>xₙ</sub><code>)</code>
-        </td>
-    </tr>
-
-    <tr class="advanced">
-        <th>
-            <code>raise</code> <span class="math">x</span>
-        </th>
-        <td>
-            <code>raise</code>
-            <span class="math">v</span><sub>x</sub>
-        </td>
-    </tr>
-</table>
-
-<h3>末尾位置の変換</h3>
-
-<p>
-    関数本体の末尾位置では、呼出し結果を一時レジスタへ受け取って
-    <code>return</code>する代わりに、末尾呼出しを生成します。
-</p>
-
-<table>
-    <tr>
-        <th>低水準中間表現の末尾式</th>
-        <td>仮想レジスタ中間表現</td>
-    </tr>
-    <tr>
-        <th>
-            <code>call</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            <code>tailcall</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">v</span><sub>x₁</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>xₙ</sub><code>)</code>
-        </td>
-    </tr>
-    <tr>
-        <th>
-            <code>call_indirect</code>
-            <span class="math">x</span>
-            <code>(</code><span class="math">y</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">y</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            <code>tailcallr</code>
-            <span class="math">v</span><sub>x</sub>
-            <code>(</code><span class="math">v</span><sub>y₁</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>yₙ</sub><code>)</code>
-        </td>
-    </tr>
-    <tr>
-        <th>それ以外の<span class="math">e</span></th>
-        <td>
-            <span class="math">V</span>[<span class="math">e</span>,
-            <span class="math">v</span><sub>result</sub>]<br>
-            <code>return</code>
-            <span class="math">v</span><sub>result</sub>
-        </td>
-    </tr>
-</table>
-<h2>命令選択</h2>
-
-<p>
-    低水準中間表現の演算を、仮想CPUの命令に近い命令へ変換します。
-    この段階では、命令のオペランドに仮想レジスタを使用します。
-</p>
-
-<table>
-    <tr>
-        <th>低水準中間表現</th>
-        <td>仮想レジスタ命令</td>
-    </tr>
-    <tr>
-        <th><code>x + y</code></th>
-        <td><code>add vd, vx, vy</code></td>
-    </tr>
-    <tr>
-        <th><code>x - y</code></th>
-        <td><code>sub vd, vx, vy</code></td>
-    </tr>
-    <tr>
-        <th><code>x * y</code></th>
-        <td><code>mul vd, vx, vy</code></td>
-    </tr>
-    <tr>
-        <th><code>load x i</code></th>
-        <td><code>load vd, i(vx)</code></td>
-    </tr>
-    <tr>
-        <th><code>store x i y</code></th>
-        <td><code>store vy, i(vx)</code></td>
-    </tr>
-    <tr>
-        <th><code>address_of L</code></th>
-        <td><code>la vd, L</code></td>
-    </tr>
-    <tr>
-        <th><code>call f (x1, ..., xn)</code></th>
-        <td><code>call vd, f (v1, ..., vn)</code></td>
-    </tr>
-    <tr>
-        <th><code>call_indirect f (x1, ..., xn)</code></th>
-        <td><code>callr vd, vf (v1, ..., vn)</code></td>
-    </tr>
-</table>
-
-<h2>基本ブロック化</h2>
-
-<p>
-    式の木構造を、命令列と分岐からなる基本ブロックの集合へ変換します。
-</p>
-
-<p>
-    基本ブロックは、先頭にラベルを持ち、
-    途中に分岐を含まない命令列です。
-    各基本ブロックの最後には、必ず終端命令を置きます。
-</p>
-
-<pre><code>if v0 then
-    v1 + v2
-else
-    v1 - v2
-
-    ↓
-
-entry:
-    branch v0, then_block, else_block
-
-then_block:
-    add v3, v1, v2
-    jump end_block
-
-else_block:
-    sub v3, v1, v2
-    jump end_block
-
-end_block:
-    return v3</code></pre>
-
-<h2>制御フローグラフ</h2>
-
-<p>
-    基本ブロックを頂点とし、終端命令による移動先を辺とするグラフを、
-    制御フローグラフと呼びます。
-</p>
-
-<p>
-    制御フローグラフは独立した中間表現ではなく、
-    仮想レジスタ中間表現に含まれる基本ブロックと終端命令から得られます。
-</p>
-
-<h2>プログラム</h2>
-
-<table>
-    <tr>
-        <th><span class="math">P</span> ::=</th>
-        <td>仮想レジスタプログラム</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">D</span><sub>1</sub> ...
-            <span class="math">D</span><sub>n</sub><code>;</code>
-            <span class="math">F</span><sub>1</sub> ...
-            <span class="math">F</span><sub>m</sub>
-        </th>
-        <td>静的データと関数定義</td>
-    </tr>
-</table>
-
-<h2>静的データ</h2>
-
-<p>
-    低水準中間表現の静的データは、そのまま保持します。
-    ラベルは後のアセンブリ出力とアセンブルによって具体的なアドレスへ変換されます。
-</p>
-
-<table>
-    <tr>
-        <th><span class="math">D</span> ::=</th>
-        <td>静的データ</td>
-    </tr>
-    <tr>
-        <th>
-            <code>string</code>
-            <span class="math">L s</span>
-        </th>
-        <td>文字列定数</td>
-    </tr>
-    <tr>
-        <th>
-            <code>float</code>
-            <span class="math">L r</span>
-        </th>
-        <td>浮動小数点定数</td>
-    </tr>
-    <tr>
-        <th>
-            <code>block</code>
-            <span class="math">L</span>
-            <code>[</code><span class="math">w</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">w</span><sub>n</sub><code>]</code>
-        </th>
-        <td>静的ブロック</td>
-    </tr>
-</table>
-
-<h2>関数</h2>
-
-<table>
-    <tr>
-        <th><span class="math">F</span> ::=</th>
-        <td>関数</td>
-    </tr>
-    <tr>
-        <th>
-            <code>function</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>) {</code>
-            <span class="math">B</span><sub>1</sub> ...
-            <span class="math">B</span><sub>m</sub>
-            <code>}</code>
-        </th>
-        <td>基本ブロックの集合からなる関数</td>
-    </tr>
-</table>
-
-<p>
-    関数の仮引数も仮想レジスタとして扱います。
-    引数を物理レジスタやスタックへ配置する処理は、
-    後のレジスタ割当てとコード生成で行います。
-</p>
-
-<h2>基本ブロック</h2>
-
-<table>
-    <tr>
-        <th><span class="math">B</span> ::=</th>
-        <td>基本ブロック</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">L</span><code>:</code>
-            <span class="math">I</span><sub>1</sub> ...
-            <span class="math">I</span><sub>n</sub>
-            <span class="math">T</span>
-        </th>
-        <td>ラベル、通常命令列、終端命令</td>
-    </tr>
-</table>
-
-<h2>通常命令</h2>
-
-<table>
-    <tr>
-        <th><span class="math">I</span> ::=</th>
-        <td>通常命令</td>
-    </tr>
-    <tr>
-        <th>
-            <code>li</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">i</span>
-        </th>
-        <td>整数即値の読み込み</td>
-    </tr>
-    <tr>
-        <th>
-            <code>la</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">L</span>
-        </th>
-        <td>ラベルアドレスの読み込み</td>
-    </tr>
-    <tr>
-        <th>
-            <code>mov</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>s</sub>
-        </th>
-        <td>値のコピー</td>
-    </tr>
-    <tr>
-        <th>
-            <code>add</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>1</sub><code>,</code>
-            <span class="math">v</span><sub>2</sub>
-        </th>
-        <td>加算</td>
-    </tr>
-    <tr>
-        <th>
-            <code>sub</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>1</sub><code>,</code>
-            <span class="math">v</span><sub>2</sub>
-        </th>
-        <td>減算</td>
-    </tr>
-    <tr>
-        <th>
-            <code>mul</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>1</sub><code>,</code>
-            <span class="math">v</span><sub>2</sub>
-        </th>
-        <td>乗算</td>
-    </tr>
-    <tr>
-        <th>
-            <code>div</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>1</sub><code>,</code>
-            <span class="math">v</span><sub>2</sub>
-        </th>
-        <td>除算</td>
-    </tr>
-    <tr>
-        <th>
-            <code>rem</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>1</sub><code>,</code>
-            <span class="math">v</span><sub>2</sub>
-        </th>
-        <td>剰余</td>
-    </tr>
-    <tr>
-        <th>
-            <code>addi</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>s</sub><code>,</code>
-            <span class="math">i</span>
-        </th>
-        <td>即値加算</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">bitop</span>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>1</sub><code>,</code>
-            <span class="math">v</span><sub>2</sub>
-        </th>
-        <td>ビット演算</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">cmp</span>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>1</sub><code>,</code>
-            <span class="math">v</span><sub>2</sub>
-        </th>
-        <td>比較</td>
-    </tr>
-    <tr>
-        <th>
-            <code>load</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">i</span><code>(</code><span class="math">v</span><sub>b</sub><code>)</code>
-        </th>
-        <td>メモリの読み出し</td>
-    </tr>
-    <tr>
-        <th>
-            <code>store</code>
-            <span class="math">v</span><sub>s</sub><code>,</code>
-            <span class="math">i</span><code>(</code><span class="math">v</span><sub>b</sub><code>)</code>
-        </th>
-        <td>メモリへの書き込み</td>
-    </tr>
-    <tr>
-        <th>
-            <code>call</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>)</code>
-        </th>
-        <td>直接関数呼出し</td>
-    </tr>
-    <tr>
-        <th>
-            <code>callr</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>f</sub>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>)</code>
-        </th>
-        <td>間接関数呼出し</td>
-    </tr>
-    <tr>
-        <th>
-            <code>runtime_call</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>)</code>
-        </th>
-        <td>ランタイム関数呼出し</td>
-    </tr>
-</table>
-
-<p>
-    <span class="math">bitop</span>には、<code>and</code>、<code>or</code>、
-    <code>xor</code>、<code>shl</code>、<code>shr</code>、
-    <code>sar</code>が入ります。
-</p>
-
-<p>
-    <span class="math">cmp</span>には、<code>seq</code>と
-    <code>slt</code>が入ります。
-    その他の比較は、これらの命令とビット演算または分岐の組合せへ変換します。
-</p>
-
-<h2>終端命令</h2>
-
-<table>
-    <tr>
-        <th><span class="math">T</span> ::=</th>
-        <td>終端命令</td>
-    </tr>
-    <tr>
-        <th>
-            <code>jump</code>
-            <span class="math">L</span>
-        </th>
-        <td>無条件分岐</td>
-    </tr>
-    <tr>
-        <th>
-            <code>branch</code>
-            <span class="math">v</span><code>,</code>
-            <span class="math">L</span><sub>1</sub><code>,</code>
-            <span class="math">L</span><sub>2</sub>
-        </th>
-        <td>条件分岐</td>
-    </tr>
-    <tr>
-        <th>
-            <code>switch</code>
-            <span class="math">v</span>
-            <code>[</code>
-            <span class="math">i</span><sub>1</sub><code>:</code>
-            <span class="math">L</span><sub>1</sub><code>,</code> ...
-            <code>,</code>
-            <span class="math">i</span><sub>n</sub><code>:</code>
-            <span class="math">L</span><sub>n</sub>
-            <code>]</code>
-        </th>
-        <td>整数値による多方向分岐</td>
-    </tr>
-    <tr>
-        <th>
-            <code>return</code>
-            <span class="math">v</span>
-        </th>
-        <td>関数からの復帰</td>
-    </tr>
-    <tr>
-        <th>
-            <code>tailcall</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>)</code>
-        </th>
-        <td>直接末尾呼出し</td>
-    </tr>
-    <tr>
-        <th>
-            <code>tailcallr</code>
-            <span class="math">v</span><sub>f</sub>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>)</code>
-        </th>
-        <td>間接末尾呼出し</td>
-    </tr>
-    <tr>
-        <th><code>halt</code></th>
-        <td>プログラムの停止</td>
-    </tr>
-    <tr class="advanced">
-        <th>
-            <code>raise</code>
-            <span class="math">v</span>
-        </th>
-        <td>発展　例外の送出</td>
-    </tr>
-</table>
-
-<h2>関数呼出し</h2>
-
-<p>
-    この段階では、関数の引数と戻り値を仮想レジスタとして表します。
-    物理レジスタやスタックへの具体的な配置は、レジスタ割当て後に行います。
-</p>
-
-<pre><code>call v3, add(v1, v2)</code></pre>
-
-<p>
-    上の命令は、<code>add</code>へ<code>v1</code>と<code>v2</code>を渡し、
-    戻り値を<code>v3</code>へ格納することを表します。
-</p>
-
-<h2>クロージャ呼出し</h2>
-
-<p>
-    クロージャ呼出しでは、低水準化によって読み出されたコードアドレスと、
-    クロージャ自身を含む引数を使用します。
-</p>
-
-<pre><code>load  v2, 0(v1)
-callr v3, v2(v1, v4)</code></pre>
-
-<p>
-    <code>v1</code>はクロージャ、
-    <code>v2</code>はコードアドレス、
-    <code>v4</code>は通常の引数です。
-</p>
-
-<h2>末尾呼出し</h2>
-
-<p>
-    関数本体の最後にある直接呼出しと間接呼出しは、
-    末尾呼出しとして表します。
-</p>
-
-<pre><code>tailcall loop(v1, v2)</code></pre>
-
-<p>
-    末尾呼出しは、後のコード生成で現在のスタックフレームを再利用し、
-    <code>call</code>ではなくジャンプへ変換します。
-</p>
-
-<h2>条件分岐の変換</h2>
-
-<p>低水準中間表現の次の式を考えます。</p>
-
-<pre><code>if x then
-    e1
-else
-    e2</code></pre>
-
-<p>仮想レジスタ中間表現では、次の基本ブロックへ変換します。</p>
-
-<pre><code>entry:
-    branch vx, then_block, else_block
-
-then_block:
-    e1
-    jump end_block
-
-else_block:
-    e2
-    jump end_block
-
-end_block:
+    <p>
+        低水準中間表現の変数ごとに仮想レジスタを割り当てます。
+        一時的な計算結果にも、新しい仮想レジスタを割り当てます。
+    </p>
+
+    <p>
+        仮想レジスタ中間表現はSSAではありません。
+        分岐の合流では、複数の分岐から同じ結果用仮想レジスタへ
+        <code>mov</code>することを許します。
+        直線的な命令列では、新しい計算結果ごとに新しい仮想レジスタを生成します。
+    </p>
+
+    <h2>仮想レジスタの種別</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>種別</th>
+                <th>内容</th>
+                <th>主な用途</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>value</code></th>
+                <td>タグ付き即値またはヒープポインタになり得る言語上の値</td>
+                <td>通常の式、GCルート</td>
+            </tr>
+            <tr>
+                <th><code>word</code></th>
+                <td>タグなし64ビット整数</td>
+                <td>サイズ、ヘッダ、ビット演算</td>
+            </tr>
+            <tr>
+                <th><code>address</code></th>
+                <td>データ領域を指すアドレス</td>
+                <td>ロード、ストア、アドレス計算</td>
+            </tr>
+            <tr>
+                <th><code>code_address</code></th>
+                <td>関数コードを指すアドレス</td>
+                <td>間接関数呼出し</td>
+            </tr>
+            <tr class="advanced">
+                <th><code>float64</code></th>
+                <td>発展　非ボックス化された浮動小数点数</td>
+                <td>浮動小数点専用レジスタを追加する場合</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>通常命令の構文</h2>
+
+    <p>
+        通常命令は、同じ基本ブロック内の次の命令へ制御を移します。
+        分岐、復帰、末尾呼出しは終端命令として表します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>定義する仮想レジスタ</th>
+                <th>使用する仮想レジスタ</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>li</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">w</span>
+                </th>
+                <td>ワード即値の読込み</td>
+                <td><span class="math">v</span><sub>d</sub></td>
+                <td>なし</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>la</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">L</span>
+                </th>
+                <td>ラベルアドレスの読込み</td>
+                <td><span class="math">v</span><sub>d</sub></td>
+                <td>なし</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>mov</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>s</sub>
+                </th>
+                <td>値のコピー</td>
+                <td><span class="math">v</span><sub>d</sub></td>
+                <td><span class="math">v</span><sub>s</sub></td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">binop</span>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code>
+                    <span class="math">v</span><sub>2</sub>
+                </th>
+                <td>二項演算</td>
+                <td><span class="math">v</span><sub>d</sub></td>
+                <td>
+                    <span class="math">v</span><sub>1</sub>、
+                    <span class="math">v</span><sub>2</sub>
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">unop</span>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>s</sub>
+                </th>
+                <td>単項演算</td>
+                <td><span class="math">v</span><sub>d</sub></td>
+                <td><span class="math">v</span><sub>s</sub></td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">binopi</span>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>s</sub><code>,</code>
+                    <span class="math">i</span>
+                </th>
+                <td>即値付き二項演算</td>
+                <td><span class="math">v</span><sub>d</sub></td>
+                <td><span class="math">v</span><sub>s</sub></td>
+            </tr>
+            <tr>
+                <th>
+                    <code>load</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">i</span><code>(</code><span class="math">v</span><sub>b</sub><code>)</code>
+                </th>
+                <td>メモリの読出し</td>
+                <td><span class="math">v</span><sub>d</sub></td>
+                <td><span class="math">v</span><sub>b</sub></td>
+            </tr>
+            <tr>
+                <th>
+                    <code>store</code>
+                    <span class="math">v</span><sub>s</sub><code>,</code>
+                    <span class="math">i</span><code>(</code><span class="math">v</span><sub>b</sub><code>)</code>
+                </th>
+                <td>メモリへの書込み</td>
+                <td>なし</td>
+                <td>
+                    <span class="math">v</span><sub>s</sub>、
+                    <span class="math">v</span><sub>b</sub>
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>load_global</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">g</span>
+                </th>
+                <td>大域値の読出し</td>
+                <td><span class="math">v</span><sub>d</sub></td>
+                <td>なし</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>store_global</code>
+                    <span class="math">g</span><code>,</code>
+                    <span class="math">v</span><sub>s</sub>
+                </th>
+                <td>大域値への書込み</td>
+                <td>なし</td>
+                <td><span class="math">v</span><sub>s</sub></td>
+            </tr>
+            <tr>
+                <th>
+                    <code>call</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>n</sub><code>)</code>
+                </th>
+                <td>直接関数呼出し</td>
+                <td><span class="math">v</span><sub>d</sub></td>
+                <td>
+                    <span class="math">v</span><sub>1</sub>から
+                    <span class="math">v</span><sub>n</sub>
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>callr</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>f</sub>
+                    <code>(</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>n</sub><code>)</code>
+                </th>
+                <td>間接関数呼出し</td>
+                <td><span class="math">v</span><sub>d</sub></td>
+                <td>
+                    <span class="math">v</span><sub>f</sub>、
+                    <span class="math">v</span><sub>1</sub>から
+                    <span class="math">v</span><sub>n</sub>
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>runtime_call</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>n</sub><code>)</code>
+                </th>
+                <td>ランタイム関数呼出し</td>
+                <td><span class="math">v</span><sub>d</sub></td>
+                <td>
+                    <span class="math">v</span><sub>1</sub>から
+                    <span class="math">v</span><sub>n</sub>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        値を返さない関数については、宛先仮想レジスタを省略できます。
+    </p>
+
+    <pre><code>runtime_call runtime_print_int(v0)</code></pre>
+
+    <h2>演算命令</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>分類</th>
+                <th>命令</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>算術演算</th>
+                <td>
+                    <code>add</code>、
+                    <code>sub</code>、
+                    <code>mul</code>、
+                    <code>div</code>、
+                    <code>rem</code>
+                </td>
+                <td>64ビットワードの加算、減算、乗算、除算、剰余</td>
+            </tr>
+            <tr>
+                <th>ビット演算</th>
+                <td>
+                    <code>and</code>、
+                    <code>or</code>、
+                    <code>xor</code>、
+                    <code>not</code>
+                </td>
+                <td>論理積、論理和、排他的論理和、ビット反転</td>
+            </tr>
+            <tr>
+                <th>シフト</th>
+                <td>
+                    <code>shl</code>、
+                    <code>shr</code>、
+                    <code>sar</code>
+                </td>
+                <td>左シフト、論理右シフト、算術右シフト</td>
+            </tr>
+            <tr>
+                <th>比較</th>
+                <td>
+                    <code>seq</code>、
+                    <code>sne</code>、
+                    <code>slt</code>、
+                    <code>sle</code>、
+                    <code>sgt</code>、
+                    <code>sge</code>
+                </td>
+                <td>言語上の真偽値を表すタグ付きワードを生成する</td>
+            </tr>
+            <tr>
+                <th>即値演算</th>
+                <td>
+                    <code>addi</code>、
+                    <code>andi</code>、
+                    <code>ori</code>、
+                    <code>xori</code>、
+                    <code>shli</code>、
+                    <code>shri</code>、
+                    <code>sari</code>
+                </td>
+                <td>第2オペランドとして即値を使用する演算</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>メモリ命令のオフセット</h2>
+
+    <p>
+        <code>load</code>と
+        <code>store</code>のオフセットはワード単位です。
+        1ワードが8バイトの場合、
+        オフセット2は実アドレス上の16バイトに対応します。
+        バイト単位への変換は最終命令を生成する段階で行います。
+    </p>
+
+    <h2>終端命令の構文</h2>
+
+    <p>
+        各基本ブロックは、必ず一つの終端命令で終了します。
+        終端命令の後ろに通常命令を置くことはできません。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>使用する仮想レジスタ</th>
+                <th>後続ブロック</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>jump</code>
+                    <span class="math">L</span>
+                </th>
+                <td>無条件分岐</td>
+                <td>なし</td>
+                <td><span class="math">L</span></td>
+            </tr>
+            <tr>
+                <th>
+                    <code>branch</code>
+                    <span class="math">v</span><code>,</code>
+                    <span class="math">L</span><sub>true</sub><code>,</code>
+                    <span class="math">L</span><sub>false</sub>
+                </th>
+                <td>条件分岐</td>
+                <td><span class="math">v</span></td>
+                <td>
+                    <span class="math">L</span><sub>true</sub>と
+                    <span class="math">L</span><sub>false</sub>
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>switch</code>
+                    <span class="math">v</span>
+                    <code>[</code>
+                    <span class="math">w</span><sub>1</sub><code>:</code>
+                    <span class="math">L</span><sub>1</sub><code>,</code> ...
+                    <code>, default:</code>
+                    <span class="math">L</span><sub>d</sub>
+                    <code>]</code>
+                </th>
+                <td>多方向分岐</td>
+                <td><span class="math">v</span></td>
+                <td>各分岐先と省略可能な既定分岐先</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>return</code>
+                    <span class="math">v</span>
+                </th>
+                <td>関数からの復帰</td>
+                <td><span class="math">v</span></td>
+                <td>なし</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>tailcall</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>n</sub><code>)</code>
+                </th>
+                <td>直接末尾呼出し</td>
+                <td>
+                    <span class="math">v</span><sub>1</sub>から
+                    <span class="math">v</span><sub>n</sub>
+                </td>
+                <td>なし</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>tailcallr</code>
+                    <span class="math">v</span><sub>f</sub>
+                    <code>(</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>n</sub><code>)</code>
+                </th>
+                <td>間接末尾呼出し</td>
+                <td>
+                    <span class="math">v</span><sub>f</sub>、
+                    <span class="math">v</span><sub>1</sub>から
+                    <span class="math">v</span><sub>n</sub>
+                </td>
+                <td>なし</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>halt</code>
+                    <span class="math">v</span>
+                </th>
+                <td>プログラムの停止</td>
+                <td><span class="math">v</span></td>
+                <td>なし</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>raise</code>
+                    <span class="math">v</span>
+                </th>
+                <td>発展　例外の送出</td>
+                <td><span class="math">v</span></td>
+                <td>通常の後続ブロックを持たない</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>制御フローグラフ</h2>
+
+    <p>
+        基本ブロックを頂点とし、
+        終端命令が指定する移動先を有向辺とするグラフを
+        制御フローグラフと呼びます。
+        制御フローグラフは独立した構文ではなく、
+        関数内の基本ブロックと終端命令から構築します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>終端命令</th>
+                <th>後続ブロック集合</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>jump L</code></th>
+                <td>{<span class="math">L</span>}</td>
+            </tr>
+            <tr>
+                <th><code>branch v, L1, L2</code></th>
+                <td>
+                    {<span class="math">L</span><sub>1</sub>,
+                    <span class="math">L</span><sub>2</sub>}
+                </td>
+            </tr>
+            <tr>
+                <th><code>switch</code></th>
+                <td>すべての分岐先ラベルの集合</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>return</code>、
+                    <code>tailcall</code>、
+                    <code>tailcallr</code>、
+                    <code>halt</code>
+                </th>
+                <td>空集合</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>命令選択と基本ブロック化</h2>
+
+    <p>
+        低水準中間表現から仮想レジスタ中間表現への変換には、
+        非末尾位置の変換と末尾位置の変換を使用します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>記法</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">V</span><code>⟦</code>
+                    <span class="math">e</span><code>,</code>
+                    <span class="math">v</span><sub>d</sub>
+                    <code>⟧</code>
+                </th>
+                <td>
+                    式
+                    <span class="math">e</span>を非末尾位置として変換し、
+                    結果を
+                    <span class="math">v</span><sub>d</sub>へ格納する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">VT</span><code>⟦</code>
+                    <span class="math">e</span>
+                    <code>⟧</code>
+                </th>
+                <td>
+                    式
+                    <span class="math">e</span>を関数本体の末尾位置として変換し、
+                    復帰または末尾呼出しを生成する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">VM</span><code>⟦</code>
+                    <span class="math">e</span>
+                    <code>⟧</code>
+                </th>
+                <td>
+                    プログラム本体
+                    <span class="math">e</span>を
+                    <code>main</code>の末尾位置として変換し、
+                    最後に
+                    <code>halt</code>を生成する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        変換は、命令列だけでなく、
+        現在の基本ブロックと新しく生成した基本ブロックの集合も更新します。
+        <span class="math">v</span><sub>x</sub>は、
+        低水準中間表現の変数
+        <span class="math">x</span>に対応する仮想レジスタです。
+    </p>
+
+    <h2>プログラム全体の変換</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>低水準中間表現</th>
+                <th>仮想レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">X</span><sub>1</sub> ...
+                    <span class="math">X</span><sub>l</sub>
+                    <span class="math">D</span><sub>1</sub> ...
+                    <span class="math">D</span><sub>m</sub>
+                    <span class="math">F</span><sub>1</sub> ...
+                    <span class="math">F</span><sub>n</sub>
+                    <span class="math">G</span><sub>1</sub> ...
+                    <span class="math">G</span><sub>p</sub>
+                    <code>in</code>
+                    <span class="math">e</span>
+                </th>
+                <td>
+                    外部関数宣言と静的データを保持し、
+                    各関数定義を変換する。
+                    大域値定義から
+                    <code>global_init</code>を生成し、
+                    プログラム本体から
+                    <code>main</code>を生成する
+                </td>
+                <td>
+                    低水準プログラムを、
+                    静的データと基本ブロック化された関数の集合へ変換する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>外部関数宣言と静的データの変換</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>低水準中間表現</th>
+                <th>仮想レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>external</code>
+                    <span class="math">f</span>
+                    <code>=</code>
+                    <span class="math">name</span>
+                </th>
+                <td>
+                    <code>external</code>
+                    <span class="math">f</span>
+                    <code>=</code>
+                    <span class="math">name</span>
+                </td>
+                <td>外部関数宣言をそのまま保持する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>string</code>
+                    <span class="math">L s</span>
+                </th>
+                <td>
+                    <code>string</code>
+                    <span class="math">L s</span>
+                </td>
+                <td>文字列定数とラベルをそのまま保持する</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>float</code>
+                    <span class="math">L r</span>
+                </th>
+                <td>
+                    <code>float</code>
+                    <span class="math">L r</span>
+                </td>
+                <td>発展　浮動小数点定数とラベルをそのまま保持する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>block</code>
+                    <span class="math">L k</span>
+                    <code>[</code>
+                    <span class="math">w</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">w</span><sub>n</sub><code>]</code>
+                </th>
+                <td>
+                    同じラベル、タグ、フィールドを持つ静的ブロック
+                </td>
+                <td>静的ブロックをそのまま保持する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>関数定義の変換</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>低水準中間表現</th>
+                <th>仮想レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>function</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub>
+                    <code>) =</code>
+                    <span class="math">e</span>
+                </th>
+                <td>
+                    <pre><code>function f(v_x1, ..., v_xn) entry L_entry {
+L_entry:
+    VT⟦e⟧
+}</code></pre>
+                </td>
+                <td>
+                    各仮引数へ仮想レジスタを割り当て、
+                    新しい入口ブロックから関数本体の末尾位置変換を開始する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>大域値初期化の変換</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>低水準中間表現</th>
+                <th>仮想レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>大域値定義がない場合</th>
+                <td>
+                    <pre><code>function global_init() entry init_entry {
+init_entry:
+    li v_unit, unit_value
+    return v_unit
+}</code></pre>
+                </td>
+                <td>
+                    単位値を返す空の初期化関数を生成する。
+                    実装ではこの関数自体を省略してもよい
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">g</span><sub>1</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    ...
+                    <code>let</code>
+                    <span class="math">g</span><sub>n</sub>
+                    <code>=</code>
+                    <span class="math">e</span><sub>n</sub>
+                </th>
+                <td>
+                    <pre><code>function global_init() entry init_entry {
+init_entry:
+    V⟦e1, v_g1⟧
+    store_global g1, v_g1
+    ...
+    V⟦en, v_gn⟧
+    store_global gn, v_gn
+    li v_unit, unit_value
+    return v_unit
+}</code></pre>
+                </td>
+                <td>
+                    大域値の初期化式を宣言順に評価し、
+                    各結果を対応する大域領域へ保存する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>非末尾位置の式の変換</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>低水準中間表現</th>
+                <th>生成する仮想レジスタ命令</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><span class="math">w</span></th>
+                <td>
+                    <code>li</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">w</span>
+                </td>
+                <td>1ワード定数を宛先仮想レジスタへ格納する</td>
+            </tr>
+            <tr>
+                <th><span class="math">x</span></th>
+                <td>
+                    <code>mov</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>x</sub>
+                </td>
+                <td>
+                    変数に対応する仮想レジスタの値を宛先へコピーする。
+                    不要なコピーは後続処理で除去できる
+                </td>
+            </tr>
+            <tr>
+                <th>大域変数<span class="math">g</span></th>
+                <td>
+                    <code>load_global</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">g</span>
+                </td>
+                <td>大域領域に保存された値を読み出す</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">op</span><code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    対応する
+                    <span class="math">op</span>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>x₁</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>xₙ</sub>
+                </td>
+                <td>低水準演算を対応する仮想命令へ変換する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">x</span>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>in</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>
+                    新しい
+                    <span class="math">v</span><sub>x</sub>を生成し、
+                    <div>
+                        <span class="math">V</span><code>⟦</code>
+                        <span class="math">e</span><sub>1</sub><code>,</code>
+                        <span class="math">v</span><sub>x</sub>
+                        <code>⟧</code>
+                    </div>
+                    <div>
+                        <span class="math">V</span><code>⟦</code>
+                        <span class="math">e</span><sub>2</sub><code>,</code>
+                        <span class="math">v</span><sub>d</sub>
+                        <code>⟧</code>
+                    </div>
+                </td>
+                <td>束縛式と後続式を順番に変換する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>address_of</code>
+                    <span class="math">L</span>
+                </th>
+                <td>
+                    <code>la</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">L</span>
+                </td>
+                <td>ラベルのアドレスを仮想レジスタへ格納する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>address_add</code>
+                    <span class="math">x i</span>
+                </th>
+                <td>
+                    <code>addi</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>x</sub><code>,</code>
+                    <span class="math">i</span>
+                </td>
+                <td>アドレスへワード単位の即値オフセットを加える</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>load</code>
+                    <span class="math">x i</span>
+                </th>
+                <td>
+                    <code>load</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">i</span><code>(</code><span class="math">v</span><sub>x</sub><code>)</code>
+                </td>
+                <td>指定されたワードオフセットから値を読み出す</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>store</code>
+                    <span class="math">x i y</span>
+                </th>
+                <td>
+                    <pre><code>store v_y, i(v_x)
+li v_d, unit_value</code></pre>
+                </td>
+                <td>
+                    値を書き込んだ後、
+                    式の結果として単位値を宛先へ格納する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>alloc</code>
+                    <span class="math">x</span>
+                </th>
+                <td>
+                    <code>runtime_call</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <code>runtime_alloc(</code>
+                    <span class="math">v</span><sub>x</sub><code>)</code>
+                </td>
+                <td>
+                    ヒープ領域を確保し、
+                    確保した領域の先頭アドレスを受け取る
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>call</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    <code>call</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">v</span><sub>x₁</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>xₙ</sub><code>)</code>
+                </td>
+                <td>既知のコードラベルを直接呼び出す</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>call_indirect</code>
+                    <span class="math">x</span>
+                    <code>(</code>
+                    <span class="math">y</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">y</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    <code>callr</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>x</sub>
+                    <code>(</code>
+                    <span class="math">v</span><sub>y₁</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>yₙ</sub><code>)</code>
+                </td>
+                <td>仮想レジスタが保持するコードアドレスを呼び出す</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>runtime_call</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    <code>runtime_call</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">v</span><sub>x₁</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>xₙ</sub><code>)</code>
+                </td>
+                <td>ランタイム呼出しであることを保持したまま命令化する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>if</code>
+                    <span class="math">x</span>
+                    <code>then</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>else</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>
+                    <pre><code>current:
+    branch v_x, L_then, L_else
+
+L_then:
+    V⟦e1, v_then⟧
+    mov v_d, v_then
+    jump L_join
+
+L_else:
+    V⟦e2, v_else⟧
+    mov v_d, v_else
+    jump L_join
+
+L_join:
     ...</code></pre>
-
-<p>
-    分岐式の結果を後続の処理で使用する場合、
-    両方の分岐で同じ結果用仮想レジスタを定義します。
-</p>
-
-<pre><code>then_block:
-    mov v_result, v_then
-    jump end_block
-
-else_block:
-    mov v_result, v_else
-    jump end_block</code></pre>
-
-<h2>switchの変換</h2>
-
-<p>
-    低水準中間表現の<code>switch</code>は、
-    複数の基本ブロックへの分岐へ変換します。
-</p>
-
-<pre><code>entry:
-    switch v0 [
-        0: case_0,
-        1: case_1,
-        2: case_2
+                </td>
+                <td>
+                    真分岐、偽分岐、合流ブロックを生成し、
+                    両方の結果を同じ宛先仮想レジスタへ格納する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>switch</code>
+                    <span class="math">x</span>
+                    <code>with</code>
+                    <span class="math">w</span><sub>1</sub>
+                    <code>-&gt;</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>|</code> ...
+                    <code>| default -&gt;</code>
+                    <span class="math">e</span><sub>d</sub>
+                </th>
+                <td>
+                    <pre><code>current:
+    switch v_x [
+        w1: L_1,
+        ...,
+        default: L_default
     ]
 
-case_0:
-    ...
-    jump end_block
+L_1:
+    V⟦e1, v_1⟧
+    mov v_d, v_1
+    jump L_join
 
-case_1:
-    ...
-    jump end_block
+...
 
-case_2:
-    ...
-    jump end_block</code></pre>
+L_default:
+    V⟦ed, v_default⟧
+    mov v_d, v_default
+    jump L_join
 
-<p>
-    分岐数が少ない場合は比較と条件分岐の列へ変換し、
-    分岐数が多い場合はジャンプテーブルとして実装できます。
-</p>
+L_join:
+    ...</code></pre>
+                </td>
+                <td>
+                    各分岐と既定分岐の基本ブロック、および合流ブロックを生成する
+                </td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>raise</code>
+                    <span class="math">x</span>
+                </th>
+                <td>
+                    <code>raise</code>
+                    <span class="math">v</span><sub>x</sub>
+                </td>
+                <td>発展　通常の後続を持たない例外送出終端命令を生成する</td>
+            </tr>
+        </tbody>
+    </table>
 
-<h2>ヒープ確保の変換</h2>
+    <h2>末尾位置の式の変換</h2>
 
-<p>
-    低水準中間表現の<code>alloc</code>は、
-    ランタイム関数呼出しへ変換します。
-</p>
+    <table>
+        <thead>
+            <tr>
+                <th>低水準中間表現の末尾式</th>
+                <th>仮想レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">x</span>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>in</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>
+                    新しい
+                    <span class="math">v</span><sub>x</sub>を生成し、
+                    <div>
+                        <span class="math">V</span><code>⟦</code>
+                        <span class="math">e</span><sub>1</sub><code>,</code>
+                        <span class="math">v</span><sub>x</sub>
+                        <code>⟧</code>
+                    </div>
+                    <div>
+                        <span class="math">VT</span><code>⟦</code>
+                        <span class="math">e</span><sub>2</sub>
+                        <code>⟧</code>
+                    </div>
+                </td>
+                <td>束縛式を非末尾位置で変換し、後続式を末尾位置で変換する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>call</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    <code>tailcall</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">v</span><sub>x₁</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>xₙ</sub><code>)</code>
+                </td>
+                <td>直接呼出しを直接末尾呼出しへ変換する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>call_indirect</code>
+                    <span class="math">x</span>
+                    <code>(</code>
+                    <span class="math">y</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">y</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    <code>tailcallr</code>
+                    <span class="math">v</span><sub>x</sub>
+                    <code>(</code>
+                    <span class="math">v</span><sub>y₁</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>yₙ</sub><code>)</code>
+                </td>
+                <td>間接呼出しを間接末尾呼出しへ変換する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>if</code>
+                    <span class="math">x</span>
+                    <code>then</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>else</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>
+                    <pre><code>current:
+    branch v_x, L_then, L_else
 
-<pre><code>let p = alloc size in e
+L_then:
+    VT⟦e1⟧
 
-    ↓
+L_else:
+    VT⟦e2⟧</code></pre>
+                </td>
+                <td>
+                    両方の分岐を末尾位置として変換する。
+                    合流ブロックは生成しない
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>switch</code>
+                    <span class="math">x</span>
+                    <code>with</code> ...
+                </th>
+                <td>
+                    各分岐ブロックを生成し、
+                    それぞれの分岐本体へ
+                    <span class="math">VT</span>を適用する
+                </td>
+                <td>すべての分岐が終端命令で終了するため合流ブロックを生成しない</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>raise</code>
+                    <span class="math">x</span>
+                </th>
+                <td>
+                    <code>raise</code>
+                    <span class="math">v</span><sub>x</sub>
+                </td>
+                <td>発展　例外送出終端命令を生成する</td>
+            </tr>
+            <tr>
+                <th>その他の式<span class="math">e</span></th>
+                <td>
+                    <pre><code>V⟦e, v_result⟧
+return v_result</code></pre>
+                </td>
+                <td>式の結果を新しい仮想レジスタへ格納して復帰する</td>
+            </tr>
+        </tbody>
+    </table>
 
-runtime_call vp, runtime_alloc(v_size)
-...</code></pre>
+    <h2>メイン式の変換</h2>
 
-<p>
-    戻り値として、確保された領域の先頭アドレスを受け取ります。
-</p>
-
-<h2>メイン式</h2>
-
-<p>
-    低水準中間表現のメイン式は、特別な関数<code>main</code>へ変換します。
-</p>
-
-<pre><code>function main() {
-entry:
-    ...
-    halt
+    <table>
+        <thead>
+            <tr>
+                <th>低水準中間表現</th>
+                <th>仮想レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>プログラム本体<span class="math">e</span></th>
+                <td>
+                    <pre><code>function main() entry main_entry {
+main_entry:
+    call v_unit, global_init()
+    V⟦e, v_result⟧
+    halt v_result
 }</code></pre>
+                </td>
+                <td>
+                    大域値を初期化してからプログラム本体を評価し、
+                    本体の結果を渡してプログラムを停止する
+                </td>
+            </tr>
+        </tbody>
+    </table>
 
-<p>
-    <code>main</code>はプログラムのエントリポイントになります。
-</p>
+    <h2>発展的な配列操作の変換</h2>
 
-<h2>仮想レジスタ中間表現の性質</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>低水準中間表現</th>
+                <th>仮想レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="advanced">
+                <th>
+                    <code>runtime_call runtime_array_make(</code>
+                    <span class="math">length</span><code>,</code>
+                    <span class="math">initial</span><code>)</code>
+                </th>
+                <td>
+                    <code>runtime_call</code>
+                    <span class="math">v</span><sub>array</sub><code>,</code>
+                    <code>runtime_array_make(</code>
+                    <span class="math">v</span><sub>length</sub><code>,</code>
+                    <span class="math">v</span><sub>initial</sub><code>)</code>
+                </td>
+                <td>発展　配列を作成し、結果を仮想レジスタへ格納する</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>runtime_call runtime_array_length(</code>
+                    <span class="math">array</span><code>)</code>
+                </th>
+                <td>
+                    <code>runtime_call</code>
+                    <span class="math">v</span><sub>length</sub><code>,</code>
+                    <code>runtime_array_length(</code>
+                    <span class="math">v</span><sub>array</sub><code>)</code>
+                </td>
+                <td>発展　配列の長さを取得する</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>runtime_call runtime_array_get(</code>
+                    <span class="math">array</span><code>,</code>
+                    <span class="math">index</span><code>)</code>
+                </th>
+                <td>
+                    <code>runtime_call</code>
+                    <span class="math">v</span><sub>value</sub><code>,</code>
+                    <code>runtime_array_get(</code>
+                    <span class="math">v</span><sub>array</sub><code>,</code>
+                    <span class="math">v</span><sub>index</sub><code>)</code>
+                </td>
+                <td>発展　範囲検査後に配列要素を読み出す</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>runtime_call runtime_array_set(</code>
+                    <span class="math">array</span><code>,</code>
+                    <span class="math">index</span><code>,</code>
+                    <span class="math">value</span><code>)</code>
+                </th>
+                <td>
+                    <code>runtime_call</code>
+                    <span class="math">v</span><sub>unit</sub><code>,</code>
+                    <code>runtime_array_set(</code>
+                    <span class="math">v</span><sub>array</sub><code>,</code>
+                    <span class="math">v</span><sub>index</sub><code>,</code>
+                    <span class="math">v</span><sub>value</sub><code>)</code>
+                </td>
+                <td>発展　範囲検査後に配列要素へ書き込む</td>
+            </tr>
+        </tbody>
+    </table>
 
-<ul>
-    <li>仮想レジスタは必要な数だけ生成できる</li>
-    <li>関数は基本ブロックの集合として表される</li>
-    <li>各基本ブロックはラベル、通常命令列、終端命令を持つ</li>
-    <li>制御フローはジャンプと分岐として明示される</li>
-    <li>関数呼出しの引数と戻り値は仮想レジスタで表される</li>
-    <li>直接呼出し、間接呼出し、末尾呼出しを区別する</li>
-    <li>ヒープ確保や外部処理はランタイム関数呼出しとして表される</li>
-    <li>まだ物理レジスタ、spill位置、スタックフレームは決まっていない</li>
-</ul>
+    <h2>呼出し命令の性質</h2>
 
-<p>
-    次のレジスタ割当てとコード生成では、
-    仮想レジスタの生存範囲を解析し、
-    各仮想レジスタを物理レジスタまたはスタックスロットへ割り当てます。
-</p>
+    <p>
+        この段階では、関数の引数と戻り値を仮想レジスタで表します。
+        物理的な引数レジスタ、戻り値レジスタ、
+        スタック引数への具体的な配置はまだ決定しません。
+    </p>
+
+    <pre><code>call v_result, add(v_left, v_right)</code></pre>
+
+    <p>
+        呼出し命令は、一部の物理レジスタを破壊する可能性があります。
+        破壊される物理レジスタの集合は呼出し規約で決定し、
+        レジスタ割当て時に考慮します。
+    </p>
+
+    <h2>末尾呼出しの性質</h2>
+
+    <p>
+        末尾呼出しは、現在の関数へ戻る必要がない関数呼出しです。
+        仮想レジスタ中間表現では終端命令として表します。
+    </p>
+
+    <pre><code>tailcall loop(v_state, v_input)</code></pre>
+
+    <p>
+        後続のコード生成では、現在のスタックフレームを破棄または再利用し、
+        呼出し先へのジャンプとして実装します。
+        引数を安全に並べ替えられない場合は、
+        一時領域を使用して並行コピーを解決します。
+    </p>
+
+    <h2>生存変数解析に必要な情報</h2>
+
+    <p>
+        後続のレジスタ割当てでは、
+        各命令の定義集合と使用集合を使用します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>命令</th>
+                <th>定義集合</th>
+                <th>使用集合</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>add vd, v1, v2</code></th>
+                <td>{<code>vd</code>}</td>
+                <td>{<code>v1</code>, <code>v2</code>}</td>
+            </tr>
+            <tr>
+                <th><code>load vd, i(vb)</code></th>
+                <td>{<code>vd</code>}</td>
+                <td>{<code>vb</code>}</td>
+            </tr>
+            <tr>
+                <th><code>store vs, i(vb)</code></th>
+                <td>∅</td>
+                <td>{<code>vs</code>, <code>vb</code>}</td>
+            </tr>
+            <tr>
+                <th><code>load_global vd, g</code></th>
+                <td>{<code>vd</code>}</td>
+                <td>∅</td>
+            </tr>
+            <tr>
+                <th><code>store_global g, vs</code></th>
+                <td>∅</td>
+                <td>{<code>vs</code>}</td>
+            </tr>
+            <tr>
+                <th><code>call vd, f(v1, ..., vn)</code></th>
+                <td>{<code>vd</code>}</td>
+                <td>{<code>v1</code>, ..., <code>vn</code>}</td>
+            </tr>
+            <tr>
+                <th><code>callr vd, vf(v1, ..., vn)</code></th>
+                <td>{<code>vd</code>}</td>
+                <td>{<code>vf</code>, <code>v1</code>, ..., <code>vn</code>}</td>
+            </tr>
+            <tr>
+                <th><code>branch v, L1, L2</code></th>
+                <td>∅</td>
+                <td>{<code>v</code>}</td>
+            </tr>
+            <tr>
+                <th><code>return v</code></th>
+                <td>∅</td>
+                <td>{<code>v</code>}</td>
+            </tr>
+            <tr>
+                <th><code>tailcall f(v1, ..., vn)</code></th>
+                <td>∅</td>
+                <td>{<code>v1</code>, ..., <code>vn</code>}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        基本ブロックの
+        <code>use</code>集合は、ブロック内で定義される前に使用される
+        仮想レジスタの集合です。
+        <code>def</code>集合は、ブロック内で定義される
+        仮想レジスタの集合です。
+    </p>
+
+    <h2>命令選択で変化しないもの</h2>
+
+    <ul>
+        <li>外部関数宣言と外部名の対応は変更しない</li>
+        <li>静的データの内容とラベルは変更しない</li>
+        <li>関数の引数順序は変更しない</li>
+        <li>低水準中間表現で確定した値表現は変更しない</li>
+        <li>ワード単位のメモリ配置とフィールド順序は変更しない</li>
+        <li>直接呼出し、間接呼出し、ランタイム呼出しの区別は変更しない</li>
+        <li><code>let</code>で明示された評価順序は命令順序として保存する</li>
+        <li>条件分岐と<code>switch</code>の意味は制御フローとして保存する</li>
+        <li>末尾位置にある呼出しは末尾呼出しとして保存する</li>
+    </ul>
+
+    <h2>変換後に成立する条件</h2>
+
+    <ul>
+        <li>すべての関数が基本ブロックの集合へ変換されている</li>
+        <li>プログラム本体が<code>main</code>関数へ変換されている</li>
+        <li>大域値の初期化が宣言順に実行される<code>global_init</code>へ変換されている</li>
+        <li>各関数に一つの入口ブロックが存在する</li>
+        <li>各基本ブロックは一つのラベルを持つ</li>
+        <li>各基本ブロックは0個以上の通常命令と一つの終端命令を持つ</li>
+        <li>終端命令の後ろに通常命令が存在しない</li>
+        <li>すべての分岐先ラベルが同じ関数内の基本ブロックを指している</li>
+        <li>低水準中間表現の局所変数が仮想レジスタへ対応付けられている</li>
+        <li>大域変数の参照と初期化が<code>load_global</code>と<code>store_global</code>で明示されている</li>
+        <li>一時的な計算結果が仮想レジスタへ格納されている</li>
+        <li>仮想レジスタに<code>value</code>、<code>word</code>、<code>address</code>などの種別が付与されている</li>
+        <li>低水準演算が仮想命令セットの命令へ変換されている</li>
+        <li>メモリ操作が<code>load</code>と<code>store</code>へ変換されている</li>
+        <li>ヒープ確保が<code>runtime_alloc</code>の呼出しへ変換されている</li>
+        <li>条件式が<code>branch</code>と基本ブロックへ変換されている</li>
+        <li><code>switch</code>が多方向分岐と基本ブロックへ変換されている</li>
+        <li>直接呼出しが<code>call</code>へ変換されている</li>
+        <li>間接呼出しが<code>callr</code>へ変換されている</li>
+        <li>ランタイム呼出しが<code>runtime_call</code>として区別されている</li>
+        <li>末尾位置の直接呼出しが<code>tailcall</code>へ変換されている</li>
+        <li>末尾位置の間接呼出しが<code>tailcallr</code>へ変換されている</li>
+        <li>静的データとコードラベルが具体的なアドレスへ変換されず、ラベルのまま保持されている</li>
+        <li>まだ物理レジスタ、spillスロット、スタックフレームの配置は決定されていない</li>
+        <li class="advanced">発展　配列操作がランタイム関数の呼出しへ変換されている</li>
+    </ul>
+
+    <h2>次の変換との関係</h2>
+
+    <p>
+        次のレジスタ割当てでは、制御フローグラフを使用して
+        各仮想レジスタの生存範囲を計算します。
+        同時に生存する仮想レジスタを同じ物理レジスタへ割り当てないようにし、
+        物理レジスタへ収まらない値をスタックスロットへspillします。
+    </p>
+
+    <ul>
+        <li>各命令と基本ブロックの使用集合・定義集合を求める</li>
+        <li>基本ブロック間で生存変数解析を行う</li>
+        <li>仮想レジスタ間の干渉関係を求める</li>
+        <li>仮想レジスタを物理レジスタへ割り当てる</li>
+        <li>割り当てられない値へspillスロットを割り当てる</li>
+        <li>必要な位置へspillとreloadを挿入する</li>
+        <li>関数呼出し規約に従って引数と戻り値を配置する</li>
+        <li>末尾呼出しの引数移動を並行コピーとして解決する</li>
+    </ul>
 </body>
 </html>

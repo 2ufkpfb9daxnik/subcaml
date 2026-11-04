@@ -12,284 +12,1932 @@
         <button class="theme-toggle" type="button"></button>
     </div>
     <h1>コア中間表現</h1>
+    
 
-<p>
-    型検査が完了した抽象構文木から、後の変換で扱いやすい
-    コア中間表現を生成します。
-</p>
+    <p>
+        型検査が完了した抽象構文木を、後続のK正規化とクロージャ変換で扱いやすい
+        コア中間表現へ変換します。
+        この段階では、派生構文を基本構文へ変換し、パターンマッチを明示的な分岐へ変換します。
+        また、リスト、レコード、ヴァリアント、配列、参照などのデータ構造を、
+        タグ付きブロックとプリミティブ演算によって統一して表します。
+    </p>
+    
 
-<ul>
-    <li>型付きAST<br>↓ 脱糖</li>
-    <li>コアAST<br>↓ パターンマッチコンパイル</li>
-    <li>コア中間表現</li>
-</ul>
+    <ul>
+        <li>型付き抽象構文木<br>↓ 脱糖、名前解決結果の反映、データ表現の変換</li>
+        <li>コアAST<br>↓ パターンマッチのコンパイル</li>
+        <li>コア中間表現</li>
+    </ul>
+    
 
-<h2>コア中間表現までに行う処理</h2>
+    <h2>コア中間表現の構文</h2>
+    
 
-<table>
-    <tr>
-        <th>脱糖</th>
-        <td>派生構文を少数の基本構文へ変換する</td>
-    </tr>
-    <tr>
-        <th>パターンマッチコンパイル</th>
-        <td>パターンを条件分岐、タグ検査、フィールドの読み出しへ変換する</td>
-    </tr>
-    <tr>
-        <th>モジュールの展開</th>
-        <td>モジュール内の名前を解決し、実行時に必要な値だけを残す</td>
-    </tr>
-    <tr>
-        <th>プリミティブ演算の明示</th>
-        <td>既知の演算を通常の関数適用からプリミティブ演算へ変換する</td>
-    </tr>
-</table>
+    <p>
+        コア中間表現の式を
+        <span class="math">e</span>、
+        定数を
+        <span class="math">c</span>、
+        変数を
+        <span class="math">x</span>、
+        プリミティブ演算を
+        <span class="math">op</span>
+        で表します。
+    </p>
+       <h2>プログラムと大域宣言の構文</h2>
+    
 
-<h2>脱糖</h2>
+    <p>
+        コア中間表現におけるプログラムは、大域宣言の列と、
+        プログラム開始時に評価する本体式から構成されます。
+        大域宣言を
+        <span class="math">d</span>、
+        プログラムを
+        <span class="math">P</span>
+        で表します。
+    </p>
+    
 
-<p>
-    脱糖では、同じ意味を持つ複数の具体構文を、
-    より少数の基本構文へ統一します。
-</p>
+    <table>
+        <tr>
+            <th>構文</th>
+            <th>名称</th>
+            <th>説明</th>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">P</span> ::=
+                <span class="math">d</span><sub>1</sub> ...
+                <span class="math">d</span><sub>n</sub>
+                <code>in</code>
+                <span class="math">e</span>
+            </th>
+            <td>プログラム</td>
+            <td>
+                大域宣言
+                <span class="math">d</span><sub>1</sub>から
+                <span class="math">d</span><sub>n</sub>を順番に初期化し、
+                本体式
+                <span class="math">e</span>を評価する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">d</span> ::=
+                <code>let</code>
+                <span class="math">x</span>
+                <code>=</code>
+                <span class="math">e</span>
+            </th>
+            <td>大域値定義</td>
+            <td>
+                式
+                <span class="math">e</span>を評価し、その結果を大域変数
+                <span class="math">x</span>へ束縛する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">d</span> ::=
+                <code>let rec</code>
+                <span class="math">f</span><sub>1</sub>
+                <span class="math">x</span><sub>11</sub> ...
+                <span class="math">x</span><sub>1m₁</sub>
+                <code>=</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>and</code> ...
+                <code>and</code>
+                <span class="math">f</span><sub>n</sub>
+                <span class="math">x</span><sub>n1</sub> ...
+                <span class="math">x</span><sub>nmₙ</sub>
+                <code>=</code>
+                <span class="math">e</span><sub>n</sub>
+            </th>
+            <td>大域再帰関数定義</td>
+            <td>
+                一つ以上の相互再帰関数を大域的に定義する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">d</span> ::=
+                <code>external</code>
+                <span class="math">f</span>
+                <code>=</code>
+                <span class="math">name</span>
+            </th>
+            <td>外部関数宣言</td>
+            <td>
+                大域識別子
+                <span class="math">f</span>を、ランタイムまたは外部環境の関数
+                <span class="math">name</span>へ対応付ける
+            </td>
+        </tr>
+    </table>
+    
 
-<table>
-    <tr>
-        <th>具体構文</th>
-        <td>脱糖後</td>
-    </tr>
-    <tr>
-        <th>
-            <code>let f x y = e1 in e2</code>
-        </th>
-        <td>
-            <code>let f = fun x -&gt; fun y -&gt; e1 in e2</code>
-        </td>
-    </tr>
-    <tr>
-        <th>
-            <code>e1 &amp;&amp; e2</code>
-        </th>
-        <td>
-            <code>if e1 then e2 else false</code>
-        </td>
-    </tr>
-    <tr>
-        <th>
-            <code>e1 || e2</code>
-        </th>
-        <td>
-            <code>if e1 then true else e2</code>
-        </td>
-    </tr>
-    <tr>
-        <th>
-            <code>e1; e2</code>
-        </th>
-        <td>
-            <code>let _ = e1 in e2</code>
-        </td>
-    </tr>
-    <tr>
-        <th>
-            <code>[e1; e2; ...; en]</code>
-        </th>
-        <td>
-            <code>e1 :: e2 :: ... :: en :: []</code>
-        </td>
-    </tr>
-    <tr>
-        <th>
-            <code>ref e</code>
-        </th>
-        <td>
-            1フィールドの可変ブロックの作成
-        </td>
-    </tr>
-    <tr>
-        <th>
-            <code>!e</code>
-        </th>
-        <td>
-            可変ブロックのフィールドの読み出し
-        </td>
-    </tr>
-    <tr>
-        <th>
-            <code>e1 := e2</code>
-        </th>
-        <td>
-            可変ブロックのフィールドへの書き込み
-        </td>
-    </tr>
-</table>
-<h2>コア中間表現</h2>
+    <h2>宣言の変換</h2>
+    
 
-<table>
-    <tr>
-        <th><span class="math">e</span> ::=</th>
-        <td>式</td>
-    </tr>
-    <tr>
-        <th><span class="math">c</span></th>
-        <td>定数</td>
-    </tr>
-    <tr>
-        <th><span class="math">x</span></th>
-        <td>変数</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">op</span>(<span class="math">e</span><sub>1</sub>, ...,
-            <span class="math">e</span><sub>n</sub>)
-        </th>
-        <td>プリミティブ演算</td>
-    </tr>
-    <tr>
-        <th>
-            <code>if</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>then</code>
-            <span class="math">e</span><sub>2</sub>
-            <code>else</code>
-            <span class="math">e</span><sub>3</sub>
-        </th>
-        <td>条件分岐</td>
-    </tr>
-    <tr>
-        <th>
-            <code>let</code>
-            <span class="math">x</span>
-            <code>=</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>in</code>
-            <span class="math">e</span><sub>2</sub>
-        </th>
-        <td>局所定義</td>
-    </tr>
-    <tr>
-        <th>
-            <code>let rec</code>
-            <span class="math">f</span><sub>1</sub>
-            <span class="math">x</span><sub>11</sub> ...
-            <span class="math">x</span><sub>1m₁</sub>
-            <code>=</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>and</code> ...
-            <code>and</code>
-            <span class="math">f</span><sub>n</sub>
-            <span class="math">x</span><sub>n1</sub> ...
-            <span class="math">x</span><sub>nmₙ</sub>
-            <code>=</code>
-            <span class="math">e</span><sub>n</sub>
-            <code>in</code>
-            <span class="math">e</span>
-        </th>
-        <td>再帰関数定義</td>
-    </tr>
-    <tr>
-        <th>
-            <code>fun</code>
-            <span class="math">x</span><sub>1</sub> ...
-            <span class="math">x</span><sub>n</sub>
-            <code>-&gt;</code>
-            <span class="math">e</span>
-        </th>
-        <td>関数</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">e e</span><sub>1</sub> ...
-            <span class="math">e</span><sub>n</sub>
-        </th>
-        <td>関数適用</td>
-    </tr>
-    <tr>
-        <th>
-            <code>(</code><span class="math">e</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">e</span><sub>n</sub><code>)</code>
-        </th>
-        <td>組の作成</td>
-    </tr>
-    <tr>
-        <th>
-            <code>block</code>
-            <span class="math">k</span>
-            <code>(</code><span class="math">e</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">e</span><sub>n</sub><code>)</code>
-        </th>
-        <td>タグ<span class="math">k</span>を持つブロックの作成</td>
-    </tr>
-    <tr>
-        <th>
-            <code>field</code>
-            <span class="math">i</span>
-            <span class="math">e</span>
-        </th>
-        <td>ブロックのフィールドの読み出し</td>
-    </tr>
-    <tr>
-        <th>
-            <code>setfield</code>
-            <span class="math">i</span>
-            <span class="math">e</span><sub>1</sub>
-            <span class="math">e</span><sub>2</sub>
-        </th>
-        <td>ブロックのフィールドへの書き込み</td>
-    </tr>
-    <tr>
-        <th>
-            <code>tag</code>
-            <span class="math">e</span>
-        </th>
-        <td>ブロックのタグの読み出し</td>
-    </tr>
-    <tr>
-        <th>
-            <code>switch</code>
-            <span class="math">e</span>
-            <code>with</code>
-            <span class="math">k</span><sub>1</sub>
-            <code>-&gt;</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>|</code> ...
-            <code>|</code>
-            <span class="math">k</span><sub>n</sub>
-            <code>-&gt;</code>
-            <span class="math">e</span><sub>n</sub>
-        </th>
-        <td>タグによる分岐</td>
-    </tr>
-    <tr class="advanced">
-        <th>
-            <code>raise</code>
-            <span class="math">e</span>
-        </th>
-        <td>発展　例外の送出</td>
-    </tr>
-    <tr class="advanced">
-        <th>
-            <code>try</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>with</code>
-            <span class="math">x</span>
-            <code>-&gt;</code>
-            <span class="math">e</span><sub>2</sub>
-        </th>
-        <td>発展　例外処理</td>
-    </tr>
-    <tr class="advanced">
-        <th>
-            <code>perform</code>
-            <span class="math">e</span>
-        </th>
-        <td>発展　エフェクトの実行</td>
-    </tr>
-</table>
+    <p>
+        型付き抽象構文木の宣言を、コア中間表現の大域宣言へ変換します。
+        宣言の変換関数を
+        <span class="math">D</span><code>⟦</code><span class="math">d</span><code>⟧</code>
+        と表します。
+        コア中間表現に実行時の構文を生成しない宣言については、
+        変換結果を
+        <span class="math">ε</span>
+        と表します。
+    </p>
+    
 
-<p>
-    コア中間表現では、リスト、レコード、ヴァリアント、参照などを、
-    タグ付きブロックの作成とフィールド操作として統一して表します。
-    複雑なパターンは残らず、条件分岐、タグ分岐、フィールド読み出しへ変換されています。
-</p>
+    <table>
+        <tr>
+            <th>型付き抽象構文木の宣言</th>
+            <th>変換後のコア中間表現</th>
+            <th>説明</th>
+        </tr>
+        <tr>
+            <th>
+                <code>let</code>
+                <span class="math">x</span>
+                <code>=</code>
+                <span class="math">e</span>
+            </th>
+            <td>
+                <code>let</code>
+                <span class="math">x</span>
+                <code>=</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+            </td>
+            <td>
+                大域値の初期化式を再帰的に変換する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>let</code>
+                <span class="math">p</span>
+                <code>=</code>
+                <span class="math">e</span>
+            </th>
+            <td>
+                <code>let</code>
+                <span class="math">x</span>
+                <code>=</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+                <br>
+                <code>let</code>
+                <span class="math">x</span><sub>1</sub>
+                <code>=</code>
+                <span class="math">E</span><sub>1</sub>
+                <br>
+                ...
+                <br>
+                <code>let</code>
+                <span class="math">x</span><sub>n</sub>
+                <code>=</code>
+                <span class="math">E</span><sub>n</sub>
+            </td>
+            <td>
+                変数以外の大域パターンでは、初期化結果を新しい大域変数
+                <span class="math">x</span>へ保存する。
+                その後、パターン検査とフィールド読み出しによって、
+                パターンが束縛する各変数
+                <span class="math">x</span><sub>1</sub>から
+                <span class="math">x</span><sub>n</sub>を定義する。
+                <span class="math">E</span><sub>i</sub>は、
+                パターンマッチコンパイルによって生成された式である
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>let rec</code>
+                <span class="math">f</span><sub>1</sub>
+                <span class="math">p</span><sub>11</sub> ...
+                <span class="math">p</span><sub>1m₁</sub>
+                <code>=</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>and</code> ...
+                <code>and</code>
+                <span class="math">f</span><sub>n</sub>
+                <span class="math">p</span><sub>n1</sub> ...
+                <span class="math">p</span><sub>nmₙ</sub>
+                <code>=</code>
+                <span class="math">e</span><sub>n</sub>
+            </th>
+            <td>
+                <code>let rec</code>
+                <span class="math">f</span><sub>1</sub>
+                <span class="math">x</span><sub>11</sub> ...
+                <span class="math">x</span><sub>1m₁</sub>
+                <code>=</code>
+                <span class="math">M</span><sub>1</sub>
+                <code>and</code> ...
+                <code>and</code>
+                <span class="math">f</span><sub>n</sub>
+                <span class="math">x</span><sub>n1</sub> ...
+                <span class="math">x</span><sub>nmₙ</sub>
+                <code>=</code>
+                <span class="math">M</span><sub>n</sub>
+            </td>
+            <td>
+                各仮引数パターン
+                <span class="math">p</span><sub>ij</sub>を新しい変数
+                <span class="math">x</span><sub>ij</sub>へ置き換える。
+                <span class="math">M</span><sub>i</sub>は、
+                各仮引数に対するパターン検査と
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>i</sub><code>⟧</code>
+                を組み合わせた関数本体である
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>type</code>
+                <span class="math">t</span>
+                <code>=</code> ...
+            </th>
+            <td>
+                <span class="math">ε</span>
+            </td>
+            <td>
+                実行時の宣言は生成しない。
+                レコードのフィールド位置、定数コンストラクタ番号、
+                引数付きコンストラクタのタグをコンパイル時の環境へ登録する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>external</code>
+                <span class="math">f</span>
+                <code>:</code>
+                <span class="math">τ</span>
+                <code>=</code>
+                <span class="math">name</span>
+            </th>
+            <td>
+                <code>external</code>
+                <span class="math">f</span>
+                <code>=</code>
+                <span class="math">name</span>
+            </td>
+            <td>
+                型
+                <span class="math">τ</span>は型検査後に除去する。
+                外部関数
+                <span class="math">name</span>との対応は後続のコード生成まで保持する。
+                既知のプリミティブに対応する場合は、この宣言を生成せず、
+                <span class="math">f</span>への適用をプリミティブ演算へ直接変換してもよい
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>module</code>
+                <span class="math">M</span>
+                <code>= struct</code>
+                <span class="math">d</span><sub>1</sub> ...
+                <span class="math">d</span><sub>n</sub>
+                <code>end</code>
+            </th>
+            <td>
+                <span class="math">D</span><code>⟦</code><span class="math">d</span><sub>1</sub><code>⟧</code>
+                <br>
+                ...
+                <br>
+                <span class="math">D</span><code>⟦</code><span class="math">d</span><sub>n</sub><code>⟧</code>
+            </td>
+            <td>
+                モジュール内の実行時宣言を宣言順に展開する。
+                各識別子にはモジュールを考慮した一意な内部識別子を使用し、
+                モジュール構造自体は残さない
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>open</code>
+                <span class="math">M</span>
+            </th>
+            <td>
+                <span class="math">ε</span>
+            </td>
+            <td>
+                名前解決環境の変更にだけ使用する。
+                名前解決済みのコア中間表現には残さない
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>include</code>
+                <span class="math">M</span>
+            </th>
+            <td>
+                <span class="math">ε</span>
+            </td>
+            <td>
+                モジュール
+                <span class="math">M</span>が公開する構成要素を名前解決環境へ追加する。
+                実行時の初期化処理はモジュール
+                <span class="math">M</span>の定義側で生成済みであり、
+                <code>include</code>自体からは新しい処理を生成しない
+            </td>
+        </tr>
+        <tr>
+            <th>モジュール型宣言</th>
+            <td>
+                <span class="math">ε</span>
+            </td>
+            <td>
+                モジュールの型検査と可視性の検査にだけ使用し、
+                コア中間表現には残さない
+            </td>
+        </tr>
+        <tr>
+            <th>シグネチャ</th>
+            <td>
+                <span class="math">ε</span>
+            </td>
+            <td>
+                公開される名前と型の検査にだけ使用し、
+                コア中間表現には残さない
+            </td>
+        </tr>
+        <tr>
+            <th>型注釈</th>
+            <td>
+                注釈対象の式または宣言の変換結果
+            </td>
+            <td>
+                型注釈そのものを除去し、注釈されていた式または宣言だけを変換する
+            </td>
+        </tr>
+    </table>
+    
+
+    <h2>宣言変換後に保持する補助情報</h2>
+    
+
+    <p>
+        コア中間表現から消去される宣言であっても、
+        すべての情報が失われるわけではありません。
+        後続の変換に必要な情報は、コア構文とは別のコンパイル時環境に保持します。
+    </p>
+    
+
+    <table>
+        <tr>
+            <th>補助情報</th>
+            <th>内容</th>
+            <th>使用箇所</th>
+        </tr>
+        <tr>
+            <th>フィールド配置</th>
+            <td>
+                各レコードフィールド名に対応するフィールド番号
+            </td>
+            <td>
+                レコード作成、フィールド読み出し、フィールド書き込み、
+                レコードパターンの変換
+            </td>
+        </tr>
+        <tr>
+            <th>コンストラクタ配置</th>
+            <td>
+                定数コンストラクタ番号、
+                引数付きコンストラクタのタグ、
+                引数の個数
+            </td>
+            <td>
+                ヴァリアント値の作成とパターンマッチコンパイル
+            </td>
+        </tr>
+        <tr>
+            <th>外部関数情報</th>
+            <td>
+                コア上の識別子、外部名、呼出し規約、
+                プリミティブ演算との対応
+            </td>
+            <td>
+                K正規化、低水準化、コード生成、ランタイムとの接続
+            </td>
+        </tr>
+        <tr>
+            <th>大域識別子情報</th>
+            <td>
+                ソース上の名前と一意な内部識別子の対応
+            </td>
+            <td>
+                大域値の参照、別モジュールからの参照、リンク
+            </td>
+        </tr>
+    </table>
+
+    <table>
+        <tr>
+            <th>構文</th>
+            <th>名称</th>
+            <th>説明</th>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span> ::=
+            </th>
+            <td>式</td>
+            <td>コア中間表現を構成する式</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">c</span>
+            </th>
+            <td>定数</td>
+            <td>
+                整数、浮動小数点数、真偽値、文字、文字列、
+                <code>unit</code>などの定数
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">x</span>
+            </th>
+            <td>変数</td>
+            <td>名前解決済みの局所変数または大域変数</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">op</span><code>(</code><span class="math">e</span><sub>1</sub><code>,</code> ...
+                <code>,</code> <span class="math">e</span><sub>n</sub><code>)</code>
+            </th>
+            <td>プリミティブ演算</td>
+            <td>
+                算術、比較、文字列操作、配列操作など、
+                コンパイラまたはランタイムが直接実装する演算
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>if</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>then</code>
+                <span class="math">e</span><sub>2</sub>
+                <code>else</code>
+                <span class="math">e</span><sub>3</sub>
+            </th>
+            <td>条件分岐</td>
+            <td>
+                <span class="math">e</span><sub>1</sub>が真なら
+                <span class="math">e</span><sub>2</sub>を、偽なら
+                <span class="math">e</span><sub>3</sub>を評価する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>let</code>
+                <span class="math">x</span>
+                <code>=</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>in</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>局所定義</td>
+            <td>
+                <span class="math">e</span><sub>1</sub>の値を
+                <span class="math">x</span>へ束縛し、
+                <span class="math">e</span><sub>2</sub>を評価する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>let rec</code>
+                <span class="math">f</span><sub>1</sub>
+                <span class="math">x</span><sub>11</sub> ...
+                <span class="math">x</span><sub>1m₁</sub>
+                <code>=</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>and</code> ...
+                <code>and</code>
+                <span class="math">f</span><sub>n</sub>
+                <span class="math">x</span><sub>n1</sub> ...
+                <span class="math">x</span><sub>nmₙ</sub>
+                <code>=</code>
+                <span class="math">e</span><sub>n</sub>
+                <code>in</code>
+                <span class="math">e</span>
+            </th>
+            <td>再帰関数定義</td>
+            <td>
+                一つ以上の相互再帰関数を定義してから
+                <span class="math">e</span>を評価する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>fun</code>
+                <span class="math">x</span><sub>1</sub> ...
+                <span class="math">x</span><sub>n</sub>
+                <code>-&gt;</code>
+                <span class="math">e</span>
+            </th>
+            <td>関数</td>
+            <td>
+                仮引数
+                <span class="math">x</span><sub>1</sub>から
+                <span class="math">x</span><sub>n</sub>を受け取り、
+                <span class="math">e</span>を評価する関数を作成する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span>
+                <span class="math">e</span><sub>1</sub> ...
+                <span class="math">e</span><sub>n</sub>
+            </th>
+            <td>関数適用</td>
+            <td>
+                関数
+                <span class="math">e</span>へ引数
+                <span class="math">e</span><sub>1</sub>から
+                <span class="math">e</span><sub>n</sub>を渡す
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>block</code>
+                <span class="math">k</span>
+                <code>(</code><span class="math">e</span><sub>1</sub><code>,</code> ...
+                <code>,</code> <span class="math">e</span><sub>n</sub><code>)</code>
+            </th>
+            <td>ブロックの作成</td>
+            <td>
+                タグ
+                <span class="math">k</span>とフィールド
+                <span class="math">e</span><sub>1</sub>から
+                <span class="math">e</span><sub>n</sub>を持つブロックを作成する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>field</code>
+                <span class="math">i</span>
+                <span class="math">e</span>
+            </th>
+            <td>フィールドの読み出し</td>
+            <td>
+                <span class="math">e</span>が表すブロックの
+                <span class="math">i</span>番目のフィールドを読み出す
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>setfield</code>
+                <span class="math">i</span>
+                <span class="math">e</span><sub>1</sub>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>フィールドへの書き込み</td>
+            <td>
+                <span class="math">e</span><sub>1</sub>が表す可変ブロックの
+                <span class="math">i</span>番目のフィールドへ
+                <span class="math">e</span><sub>2</sub>を書き込む
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>tag</code>
+                <span class="math">e</span>
+            </th>
+            <td>タグの読み出し</td>
+            <td>
+                <span class="math">e</span>が表すブロックのタグを読み出す
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>switch</code>
+                <span class="math">e</span>
+                <code>with</code>
+                <span class="math">k</span><sub>1</sub>
+                <code>-&gt;</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>|</code> ...
+                <code>|</code>
+                <span class="math">k</span><sub>n</sub>
+                <code>-&gt;</code>
+                <span class="math">e</span><sub>n</sub>
+                <code>| default -&gt;</code>
+                <span class="math">e</span><sub>d</sub>
+            </th>
+            <td>整数またはタグによる分岐</td>
+            <td>
+                <span class="math">e</span>の値に対応する分岐を選択する。
+                該当する値がない場合は省略可能な
+                <code>default</code>分岐を選択する
+            </td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>raise</code>
+                <span class="math">e</span>
+            </th>
+            <td>例外の送出</td>
+            <td>発展　例外値<span class="math">e</span>を送出する</td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>try</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>with</code>
+                <span class="math">x</span>
+                <code>-&gt;</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>例外処理</td>
+            <td>
+                発展　
+                <span class="math">e</span><sub>1</sub>から送出された例外を
+                <span class="math">x</span>へ束縛し、
+                <span class="math">e</span><sub>2</sub>で処理する
+            </td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>perform</code>
+                <span class="math">e</span>
+            </th>
+            <td>エフェクトの実行</td>
+            <td>発展　エフェクト値<span class="math">e</span>を実行する</td>
+        </tr>
+    </table>
+    
+
+    <h2>プリミティブ演算</h2>
+    
+
+    <p>
+        プリミティブ演算は、通常の関数適用とは区別されます。
+        各演算の引数は左から右へ評価されます。
+        演算結果の型は型付き抽象構文木の型情報によって確定しています。
+    </p>
+    
+
+    <table>
+        <tr>
+            <th>分類</th>
+            <th>プリミティブ演算</th>
+            <th>説明</th>
+        </tr>
+        <tr>
+            <th>整数算術</th>
+            <td>
+                <code>int_neg</code>、
+                <code>int_add</code>、
+                <code>int_sub</code>、
+                <code>int_mul</code>、
+                <code>int_div</code>、
+                <code>int_mod</code>
+            </td>
+            <td>整数の符号反転、加算、減算、乗算、除算、剰余</td>
+        </tr>
+        <tr>
+            <th>整数ビット演算</th>
+            <td>
+                <code>int_not</code>、
+                <code>int_and</code>、
+                <code>int_or</code>、
+                <code>int_xor</code>、
+                <code>int_shift_left</code>、
+                <code>int_shift_right</code>
+            </td>
+            <td>整数に対するビット演算とシフト演算</td>
+        </tr>
+        <tr>
+            <th>浮動小数点算術</th>
+            <td>
+                <code>float_neg</code>、
+                <code>float_add</code>、
+                <code>float_sub</code>、
+                <code>float_mul</code>、
+                <code>float_div</code>
+            </td>
+            <td>浮動小数点数の符号反転と四則演算</td>
+        </tr>
+        <tr>
+            <th>比較</th>
+            <td>
+                <code>eq</code>、
+                <code>ne</code>、
+                <code>lt</code>、
+                <code>le</code>、
+                <code>gt</code>、
+                <code>ge</code>
+            </td>
+            <td>
+                等値比較および順序比較。
+                適用できる型は型検査によって制限される
+            </td>
+        </tr>
+        <tr>
+            <th>文字変換</th>
+            <td>
+                <code>char_code</code>、
+                <code>char_of_code</code>
+            </td>
+            <td>文字と文字コードを相互に変換する</td>
+        </tr>
+        <tr>
+            <th>文字列</th>
+            <td>
+                <code>string_length</code>、
+                <code>string_get</code>、
+                <code>string_concat</code>
+            </td>
+            <td>文字列の長さ、要素の取得、連結</td>
+        </tr>
+        <tr>
+            <th>配列</th>
+            <td>
+                <code>array_make</code>、
+                <code>array_length</code>、
+                <code>array_get</code>、
+                <code>array_set</code>
+            </td>
+            <td>配列の作成、長さ、要素の読み出し、要素への書き込み</td>
+        </tr>
+        <tr>
+            <th>変換</th>
+            <td>
+                <code>int_of_float</code>、
+                <code>float_of_int</code>
+            </td>
+            <td>整数と浮動小数点数を相互に変換する</td>
+        </tr>
+    </table>
+    
+
+    <h2>型付き抽象構文木からコアASTへの変換</h2>
+    
+
+    <p>
+        型付き抽象構文木の各構文を、次の規則によってコアASTへ変換します。
+        変換関数を
+        <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+        と表します。
+        変数とコンストラクタの名前は、この変換より前に一意な識別子へ解決されているものとします。
+    </p>
+    
+
+    <table>
+        <tr>
+            <th>型付き抽象構文木</th>
+            <th>コアAST</th>
+            <th>説明</th>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">c</span>
+            </th>
+            <td>
+                <span class="math">c</span>
+            </td>
+            <td>定数をそのまま残す</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">x</span>
+            </th>
+            <td>
+                <span class="math">x</span>
+            </td>
+            <td>名前解決済みの変数をそのまま残す</td>
+        </tr>
+        <tr>
+            <th>
+                <code>if</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>then</code>
+                <span class="math">e</span><sub>2</sub>
+                <code>else</code>
+                <span class="math">e</span><sub>3</sub>
+            </th>
+            <td>
+                <code>if</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                <code>then</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+                <code>else</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>3</sub><code>⟧</code>
+            </td>
+            <td>条件式と各分岐を再帰的に変換する</td>
+        </tr>
+        <tr>
+            <th>
+                <code>if</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>then</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>
+                <code>if</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                <code>then</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+                <code>else ()</code>
+            </td>
+            <td>省略された偽分岐へ<code>unit</code>を補う</td>
+        </tr>
+        <tr>
+            <th>
+                <code>let</code>
+                <span class="math">x</span>
+                <code>=</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>in</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>
+                <code>let</code>
+                <span class="math">x</span>
+                <code>=</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                <code>in</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+            </td>
+            <td>束縛される式と本体を再帰的に変換する</td>
+        </tr>
+        <tr>
+            <th>
+                <code>let</code>
+                <span class="math">p</span>
+                <code>=</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>in</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>
+                <code>let</code>
+                <span class="math">x</span>
+                <code>=</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                <code>in</code>
+                <span class="math">Match</span><code>(</code><span class="math">x</span><code>,</code>
+                <span class="math">p</span><code>,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code><code>)</code>
+            </td>
+            <td>
+                変数以外のパターン束縛を一時変数への束縛と
+                パターン検査へ分解する。
+                <span class="math">Match</span>は後のパターンマッチのコンパイルで除去する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>let f</code>
+                <span class="math">p</span><sub>1</sub> ...
+                <span class="math">p</span><sub>n</sub>
+                <code>=</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>in</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>
+                <code>let f = fun</code>
+                <span class="math">x</span><sub>1</sub> ...
+                <span class="math">x</span><sub>n</sub>
+                <code>-&gt;</code>
+                <span class="math">MatchArgs</span><code>(</code>
+                <span class="math">x</span><sub>1</sub><code>,</code>
+                <span class="math">p</span><sub>1</sub><code>,</code> ...
+                <code>,</code>
+                <span class="math">x</span><sub>n</sub><code>,</code>
+                <span class="math">p</span><sub>n</sub><code>,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code><code>)</code>
+                <code>in</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+            </td>
+            <td>
+                関数定義を局所定義と関数式へ変換し、
+                仮引数パターンを新しい変数に対するパターン検査へ変換する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>let rec</code>
+                <span class="math">f</span><sub>1</sub>
+                <span class="math">p</span><sub>11</sub> ...
+                <span class="math">p</span><sub>1m₁</sub>
+                <code>=</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>and</code> ...
+                <code>and</code>
+                <span class="math">f</span><sub>n</sub>
+                <span class="math">p</span><sub>n1</sub> ...
+                <span class="math">p</span><sub>nmₙ</sub>
+                <code>=</code>
+                <span class="math">e</span><sub>n</sub>
+                <code>in</code>
+                <span class="math">e</span>
+            </th>
+            <td>
+                <code>let rec</code>
+                <span class="math">f</span><sub>1</sub>
+                <span class="math">x</span><sub>11</sub> ...
+                <span class="math">x</span><sub>1m₁</sub>
+                <code>=</code>
+                <span class="math">MatchArgs</span><code>(</code>...<code>,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code><code>)</code>
+                <code>and</code> ...
+                <code>and</code>
+                <span class="math">f</span><sub>n</sub>
+                <span class="math">x</span><sub>n1</sub> ...
+                <span class="math">x</span><sub>nmₙ</sub>
+                <code>=</code>
+                <span class="math">MatchArgs</span><code>(</code>...<code>,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>n</sub><code>⟧</code><code>)</code>
+                <code>in</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+            </td>
+            <td>
+                各仮引数パターンを新しい変数へ置き換え、
+                関数本体の先頭でパターン検査を行う
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>fun</code>
+                <span class="math">p</span><sub>1</sub> ...
+                <span class="math">p</span><sub>n</sub>
+                <code>-&gt;</code>
+                <span class="math">e</span>
+            </th>
+            <td>
+                <code>fun</code>
+                <span class="math">x</span><sub>1</sub> ...
+                <span class="math">x</span><sub>n</sub>
+                <code>-&gt;</code>
+                <span class="math">MatchArgs</span><code>(</code>
+                <span class="math">x</span><sub>1</sub><code>,</code>
+                <span class="math">p</span><sub>1</sub><code>,</code> ...
+                <code>,</code>
+                <span class="math">x</span><sub>n</sub><code>,</code>
+                <span class="math">p</span><sub>n</sub><code>,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code><code>)</code>
+            </td>
+            <td>
+                仮引数を変数へ限定し、
+                仮引数パターンの検査を関数本体へ移動する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span>
+                <span class="math">e</span><sub>1</sub> ...
+                <span class="math">e</span><sub>n</sub>
+            </th>
+            <td>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code> ...
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>n</sub><code>⟧</code>
+            </td>
+            <td>関数と各実引数を再帰的に変換する</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><sub>1</sub>
+                <code>&amp;&amp;</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>
+                <code>if</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                <code>then</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+                <code>else false</code>
+            </td>
+            <td>短絡評価を条件分岐として表す</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><sub>1</sub>
+                <code>||</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>
+                <code>if</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                <code>then true else</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+            </td>
+            <td>短絡評価を条件分岐として表す</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><sub>1</sub>
+                <code>;</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>
+                <code>let</code>
+                <span class="math">x</span>
+                <code>=</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                <code>in</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+            </td>
+            <td>
+                使用されない新しい変数
+                <span class="math">x</span>への局所定義として表し、
+                左辺を右辺より先に評価する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">op</span>
+                <span class="math">e</span><sub>1</sub> ...
+                <span class="math">e</span><sub>n</sub>
+            </th>
+            <td>
+                <span class="math">op</span><code>(</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code><code>,</code> ...
+                <code>,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>n</sub><code>⟧</code><code>)</code>
+            </td>
+            <td>
+                型検査によって解決された組み込み演算子を、
+                対応するプリミティブ演算へ変換する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>(</code><span class="math">e</span><sub>1</sub><code>,</code> ...
+                <code>,</code> <span class="math">e</span><sub>n</sub><code>)</code>
+            </th>
+            <td>
+                <code>block 0 (</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧,</code> ...
+                <code>,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>n</sub><code>⟧)</code>
+            </td>
+            <td>組をタグ0の不変ブロックとして表す</td>
+        </tr>
+        <tr>
+            <th>
+                <code>{ l</code><sub>1</sub>
+                <code>=</code>
+                <span class="math">e</span><sub>1</sub><code>;</code> ...
+                <code>; l</code><sub>n</sub>
+                <code>=</code>
+                <span class="math">e</span><sub>n</sub>
+                <code>}</code>
+            </th>
+            <td>
+                <code>block 0 (</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>π(1)</sub><code>⟧,</code> ...
+                <code>,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>π(n)</sub><code>⟧)</code>
+            </td>
+            <td>
+                レコードをタグ0のブロックとして表す。
+                <span class="math">π</span>は型定義のフィールド宣言順に並べ替える置換である
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><code>.l</code>
+            </th>
+            <td>
+                <code>field</code>
+                <span class="math">index</span><code>(l)</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+            </td>
+            <td>
+                フィールド名を型定義の宣言順に対応する整数位置へ変換する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><sub>1</sub><code>.l &lt;-</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>
+                <code>setfield</code>
+                <span class="math">index</span><code>(l)</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+            </td>
+            <td>可変レコードフィールドへの書き込みへ変換する</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">K</span>
+            </th>
+            <td>
+                <span class="math">constructor_index</span><code>(K)</code>
+            </td>
+            <td>
+                引数を持たないコンストラクタを、
+                その型における定数コンストラクタ番号で表す
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">K</span>
+                <span class="math">e</span><sub>1</sub> ...
+                <span class="math">e</span><sub>n</sub>
+            </th>
+            <td>
+                <code>block</code>
+                <span class="math">constructor_tag</span><code>(K) (</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧,</code> ...
+                <code>,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>n</sub><code>⟧)</code>
+            </td>
+            <td>
+                引数を持つコンストラクタを、
+                コンストラクタタグを持つブロックとして表す
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>[]</code>
+            </th>
+            <td>
+                <span class="math">nil_index</span>
+            </td>
+            <td>空リストを引数なしコンストラクタの番号で表す</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><sub>1</sub>
+                <code>::</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>
+                <code>block</code>
+                <span class="math">cons_tag</span>
+                <code>(</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧)</code>
+            </td>
+            <td>リストのconsを2フィールドのブロックとして表す</td>
+        </tr>
+        <tr>
+            <th>
+                <code>[</code><span class="math">e</span><sub>1</sub><code>;</code> ...
+                <code>;</code> <span class="math">e</span><sub>n</sub><code>]</code>
+            </th>
+            <td>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                <code>::</code> ...
+                <code>::</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>n</sub><code>⟧</code>
+                <code>:: []</code>
+            </td>
+            <td>リストリテラルをconsと空リストへ展開する</td>
+        </tr>
+        <tr>
+            <th>
+                <code>[|</code><span class="math">e</span><sub>1</sub><code>;</code> ...
+                <code>;</code> <span class="math">e</span><sub>n</sub><code>|]</code>
+            </th>
+            <td>
+                <code>array_literal(</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧,</code> ...
+                <code>,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>n</sub><code>⟧)</code>
+            </td>
+            <td>
+                配列リテラルを、要素数が既知の配列を作成するプリミティブ演算へ変換する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><sub>1</sub><code>.(</code><span class="math">e</span><sub>2</sub><code>)</code>
+            </th>
+            <td>
+                <code>array_get(</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧)</code>
+            </td>
+            <td>配列要素の読み出しへ変換する</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><sub>1</sub><code>.(</code><span class="math">e</span><sub>2</sub><code>) &lt;-</code>
+                <span class="math">e</span><sub>3</sub>
+            </th>
+            <td>
+                <code>array_set(</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>3</sub><code>⟧)</code>
+            </td>
+            <td>配列要素への書き込みへ変換する</td>
+        </tr>
+        <tr>
+            <th>
+                <code>ref</code>
+                <span class="math">e</span>
+            </th>
+            <td>
+                <code>block</code>
+                <span class="math">ref_tag</span>
+                <code>(</code><span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧)</code>
+            </td>
+            <td>参照セルを1フィールドの可変ブロックとして表す</td>
+        </tr>
+        <tr>
+            <th>
+                <code>!</code><span class="math">e</span>
+            </th>
+            <td>
+                <code>field 0</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+            </td>
+            <td>参照セルの唯一のフィールドを読み出す</td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">e</span><sub>1</sub>
+                <code>:=</code>
+                <span class="math">e</span><sub>2</sub>
+            </th>
+            <td>
+                <code>setfield 0</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+            </td>
+            <td>参照セルの唯一のフィールドへ書き込む</td>
+        </tr>
+        <tr>
+            <th>
+                <code>match</code>
+                <span class="math">e</span>
+                <code>with</code>
+                <span class="math">p</span><sub>1</sub>
+                <code>-&gt;</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>|</code> ...
+                <code>|</code>
+                <span class="math">p</span><sub>n</sub>
+                <code>-&gt;</code>
+                <span class="math">e</span><sub>n</sub>
+            </th>
+            <td>
+                <code>match</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+                <code>with</code>
+                <span class="math">p</span><sub>1</sub>
+                <code>-&gt;</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                <code>|</code> ...
+                <code>|</code>
+                <span class="math">p</span><sub>n</sub>
+                <code>-&gt;</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>n</sub><code>⟧</code>
+            </td>
+            <td>
+                被検査式と各分岐本体を変換する。
+                パターン自体は次のパターンマッチのコンパイルで除去する
+            </td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>raise</code>
+                <span class="math">e</span>
+            </th>
+            <td>
+                <code>raise</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+            </td>
+            <td>発展　例外値を再帰的に変換する</td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>try</code>
+                <span class="math">e</span><sub>1</sub>
+                <code>with</code>
+                <span class="math">p</span><sub>1</sub>
+                <code>-&gt;</code>
+                <span class="math">e</span><sub>2</sub>
+                <code>|</code> ...
+            </th>
+            <td>
+                <code>try</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                <code>with</code>
+                <span class="math">x</span>
+                <code>-&gt;</code>
+                <span class="math">MatchException</span><code>(</code><span class="math">x</span><code>,</code> ...<code>)</code>
+            </td>
+            <td>
+                発展　例外ハンドラのパターンを、
+                捕捉した例外値に対するパターン検査へ変換する
+            </td>
+        </tr>
+        <tr class="advanced">
+            <th>
+                <code>perform</code>
+                <span class="math">e</span>
+            </th>
+            <td>
+                <code>perform</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+            </td>
+            <td>発展　エフェクト値を再帰的に変換する</td>
+        </tr>
+    </table>
+    
+ 
+    
+
+        <h2>パターンマッチコンパイル</h2>
+
+    <p>
+        コアASTに一時的に残したパターンマッチを、条件分岐、
+        <code>switch</code>、ブロックのタグ検査、フィールド読み出し、
+        および局所変数への束縛へ変換します。
+        変換後のコア中間表現には、パターンおよび
+        <code>match</code>式を残しません。
+    </p>
+
+    <h3>パターンマッチコンパイルの定義</h3>
+
+    <p>
+        パターン
+        <span class="math">p</span>による値
+        <span class="math">v</span>の検査を、次の変換関数で表します。
+    </p>
+
+    <table>
+        <tr>
+            <th>記法</th>
+            <th>意味</th>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">v</span><code>,</code>
+                <span class="math">p</span><code>,</code>
+                <span class="math">S</span><code>,</code>
+                <span class="math">F</span>
+                <code>⟧</code>
+            </th>
+            <td>
+                値
+                <span class="math">v</span>をパターン
+                <span class="math">p</span>と照合する。
+                照合に成功した場合は成功式
+                <span class="math">S</span>を評価し、
+                失敗した場合は失敗式
+                <span class="math">F</span>を評価する。
+                パターンに変数が含まれる場合、
+                その変数は成功式
+                <span class="math">S</span>の中だけで有効になる
+            </td>
+        </tr>
+    </table>
+
+    <p>
+        <span class="math">S</span>と
+        <span class="math">F</span>は、コア中間表現の式です。
+        変換関数
+        <span class="math">P</span>自体はコンパイラ内部の定義であり、
+        変換後のコア中間表現には現れません。
+    </p>
+
+    <h3>個別のパターンの変換</h3>
+
+    <table>
+        <tr>
+            <th>パターン</th>
+            <th>変換結果</th>
+            <th>説明</th>
+        </tr>
+        <tr>
+            <th>
+                <code>_</code>
+            </th>
+            <td>
+                <span class="math">S</span>
+            </td>
+            <td>
+                被検査値を検査せず、そのまま成功式を評価する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">x</span>
+            </th>
+            <td>
+                <code>let</code>
+                <span class="math">x</span>
+                <code>=</code>
+                <span class="math">v</span>
+                <code>in</code>
+                <span class="math">S</span>
+            </td>
+            <td>
+                被検査値を変数
+                <span class="math">x</span>へ束縛し、成功式を評価する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">c</span>
+            </th>
+            <td>
+                <code>if eq(</code><span class="math">v</span><code>,</code>
+                <span class="math">c</span><code>) then</code>
+                <span class="math">S</span>
+                <code>else</code>
+                <span class="math">F</span>
+            </td>
+            <td>
+                被検査値と定数
+                <span class="math">c</span>を比較する。
+                等しい場合は成功式を、異なる場合は失敗式を評価する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">p</span>
+                <code>as</code>
+                <span class="math">x</span>
+            </th>
+            <td>
+                <code>let</code>
+                <span class="math">x</span>
+                <code>=</code>
+                <span class="math">v</span>
+                <code>in</code>
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">v</span><code>,</code>
+                <span class="math">p</span><code>,</code>
+                <span class="math">S</span><code>,</code>
+                <span class="math">F</span>
+                <code>⟧</code>
+            </td>
+            <td>
+                被検査値全体を
+                <span class="math">x</span>へ束縛してから、
+                同じ値をパターン
+                <span class="math">p</span>と照合する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">p</span><sub>1</sub>
+                <code>|</code>
+                <span class="math">p</span><sub>2</sub>
+            </th>
+            <td>
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">v</span><code>,</code>
+                <span class="math">p</span><sub>1</sub><code>,</code>
+                <span class="math">S</span><code>,</code>
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">v</span><code>,</code>
+                <span class="math">p</span><sub>2</sub><code>,</code>
+                <span class="math">S</span><code>,</code>
+                <span class="math">F</span>
+                <code>⟧⟧</code>
+            </td>
+            <td>
+                最初に
+                <span class="math">p</span><sub>1</sub>を試し、
+                失敗した場合に
+                <span class="math">p</span><sub>2</sub>を試す。
+                両方の選択肢は、同じ名前と型の変数を束縛しなければならない
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>(</code><span class="math">p</span><sub>1</sub><code>,</code> ...
+                <code>,</code>
+                <span class="math">p</span><sub>n</sub><code>)</code>
+            </th>
+            <td>
+                <code>let</code>
+                <span class="math">x</span><sub>1</sub>
+                <code>= field 0</code>
+                <span class="math">v</span>
+                <code>in</code>
+                ...
+                <code>let</code>
+                <span class="math">x</span><sub>n</sub>
+                <code>= field</code>
+                <span class="math">n - 1</span>
+                <span class="math">v</span>
+                <code>in</code>
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">x</span><sub>1</sub><code>,</code>
+                <span class="math">p</span><sub>1</sub><code>,</code> ...
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">x</span><sub>n</sub><code>,</code>
+                <span class="math">p</span><sub>n</sub><code>,</code>
+                <span class="math">S</span><code>,</code>
+                <span class="math">F</span>
+                <code>⟧ ...</code>
+                <code>,</code>
+                <span class="math">F</span>
+                <code>⟧</code>
+            </td>
+            <td>
+                タプルの各フィールドを一度だけ読み出し、
+                左から右へ対応する部分パターンと照合する。
+                いずれかの部分パターンが失敗した場合は
+                <span class="math">F</span>を評価する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>{ l</code><sub>1</sub>
+                <code>=</code>
+                <span class="math">p</span><sub>1</sub><code>;</code> ...
+                <code>; l</code><sub>n</sub>
+                <code>=</code>
+                <span class="math">p</span><sub>n</sub>
+                <code>}</code>
+            </th>
+            <td>
+                <code>let</code>
+                <span class="math">x</span><sub>1</sub>
+                <code>= field</code>
+                <span class="math">index</span><code>(l</code><sub>1</sub><code>)</code>
+                <span class="math">v</span>
+                <code>in</code>
+                ...
+                <code>let</code>
+                <span class="math">x</span><sub>n</sub>
+                <code>= field</code>
+                <span class="math">index</span><code>(l</code><sub>n</sub><code>)</code>
+                <span class="math">v</span>
+                <code>in</code>
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">x</span><sub>1</sub><code>,</code>
+                <span class="math">p</span><sub>1</sub><code>,</code> ...
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">x</span><sub>n</sub><code>,</code>
+                <span class="math">p</span><sub>n</sub><code>,</code>
+                <span class="math">S</span><code>,</code>
+                <span class="math">F</span>
+                <code>⟧ ...</code>
+                <code>,</code>
+                <span class="math">F</span>
+                <code>⟧</code>
+            </td>
+            <td>
+                各フィールド名を型定義で確定したフィールド番号へ変換する。
+                各フィールドを一度だけ読み出し、対応する部分パターンと照合する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">K</span>
+            </th>
+            <td>
+                <code>if eq(</code><span class="math">v</span><code>,</code>
+                <span class="math">constructor_index</span><code>(K)) then</code>
+                <span class="math">S</span>
+                <code>else</code>
+                <span class="math">F</span>
+            </td>
+            <td>
+                引数を持たないコンストラクタを、
+                型定義で確定した定数コンストラクタ番号と比較する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">K</span>
+                <span class="math">p</span><sub>1</sub> ...
+                <span class="math">p</span><sub>n</sub>
+            </th>
+            <td>
+                <code>if eq(tag</code>
+                <span class="math">v</span><code>,</code>
+                <span class="math">constructor_tag</span><code>(K)) then</code>
+                <br>
+                <code>let</code>
+                <span class="math">x</span><sub>1</sub>
+                <code>= field 0</code>
+                <span class="math">v</span>
+                <code>in</code>
+                ...
+                <code>let</code>
+                <span class="math">x</span><sub>n</sub>
+                <code>= field</code>
+                <span class="math">n - 1</span>
+                <span class="math">v</span>
+                <code>in</code>
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">x</span><sub>1</sub><code>,</code>
+                <span class="math">p</span><sub>1</sub><code>,</code> ...
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">x</span><sub>n</sub><code>,</code>
+                <span class="math">p</span><sub>n</sub><code>,</code>
+                <span class="math">S</span><code>,</code>
+                <span class="math">F</span>
+                <code>⟧ ...</code>
+                <code>,</code>
+                <span class="math">F</span>
+                <code>⟧</code>
+                <br>
+                <code>else</code>
+                <span class="math">F</span>
+            </td>
+            <td>
+                先にブロックのタグを検査する。
+                タグが一致した場合だけフィールドを読み出し、
+                各部分パターンと左から右へ照合する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <code>[]</code>
+            </th>
+            <td>
+                <code>if eq(</code><span class="math">v</span><code>,</code>
+                <span class="math">nil_index</span><code>) then</code>
+                <span class="math">S</span>
+                <code>else</code>
+                <span class="math">F</span>
+            </td>
+            <td>
+                被検査値を空リストの定数コンストラクタ番号と比較する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">p</span><sub>1</sub>
+                <code>::</code>
+                <span class="math">p</span><sub>2</sub>
+            </th>
+            <td>
+                <code>if eq(tag</code>
+                <span class="math">v</span><code>,</code>
+                <span class="math">cons_tag</span><code>) then</code>
+                <br>
+                <code>let</code>
+                <span class="math">x</span><sub>1</sub>
+                <code>= field 0</code>
+                <span class="math">v</span>
+                <code>in</code>
+                <code>let</code>
+                <span class="math">x</span><sub>2</sub>
+                <code>= field 1</code>
+                <span class="math">v</span>
+                <code>in</code>
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">x</span><sub>1</sub><code>,</code>
+                <span class="math">p</span><sub>1</sub><code>,</code>
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">x</span><sub>2</sub><code>,</code>
+                <span class="math">p</span><sub>2</sub><code>,</code>
+                <span class="math">S</span><code>,</code>
+                <span class="math">F</span>
+                <code>⟧,</code>
+                <span class="math">F</span>
+                <code>⟧</code>
+                <br>
+                <code>else</code>
+                <span class="math">F</span>
+            </td>
+            <td>
+                consのタグを検査し、先頭要素と残りのリストを読み出す。
+                先頭のパターンに成功した場合だけ、残りのリストのパターンを検査する
+            </td>
+        </tr>
+    </table>
+
+    <h3>複数の分岐の変換</h3>
+
+    <p>
+        パターンマッチの各分岐は、ソースプログラムに記述された順序で試します。
+        分岐列の変換を
+        <span class="math">R</span>で表します。
+    </p>
+
+    <table>
+        <tr>
+            <th>変換対象</th>
+            <th>変換結果</th>
+            <th>説明</th>
+        </tr>
+        <tr>
+            <th>分岐がない場合</th>
+            <td>
+                <code>match_failure()</code>
+            </td>
+            <td>
+                どのパターンにも一致しなかったため、
+                パターンマッチ失敗を表すプリミティブ演算を実行する
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">p</span>
+                <code>-&gt;</code>
+                <span class="math">e</span>
+                <code>|</code>
+                <span class="math">r</span><sub>2</sub>
+                <code>|</code> ...
+                <code>|</code>
+                <span class="math">r</span><sub>n</sub>
+            </th>
+            <td>
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">v</span><code>,</code>
+                <span class="math">p</span><code>,</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧,</code>
+                <span class="math">R</span><code>⟦</code>
+                <span class="math">v</span><code>,</code>
+                <span class="math">r</span><sub>2</sub><code>,</code> ...
+                <code>,</code>
+                <span class="math">r</span><sub>n</sub>
+                <code>⟧⟧</code>
+            </td>
+            <td>
+                最初のパターンに成功した場合は、その分岐本体を評価する。
+                失敗した場合は、残りの分岐を順番に試す
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <span class="math">p</span>
+                <code>when</code>
+                <span class="math">g</span>
+                <code>-&gt;</code>
+                <span class="math">e</span>
+                <code>|</code>
+                <span class="math">r</span><sub>2</sub>
+                <code>|</code> ...
+                <code>|</code>
+                <span class="math">r</span><sub>n</sub>
+            </th>
+            <td>
+                <span class="math">P</span><code>⟦</code>
+                <span class="math">v</span><code>,</code>
+                <span class="math">p</span><code>,</code>
+                <code>if</code>
+                <span class="math">C</span><code>⟦</code><span class="math">g</span><code>⟧</code>
+                <code>then</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+                <code>else</code>
+                <span class="math">R</span><code>⟦</code>
+                <span class="math">v</span><code>,</code>
+                <span class="math">r</span><sub>2</sub><code>,</code> ...
+                <code>,</code>
+                <span class="math">r</span><sub>n</sub>
+                <code>⟧,</code>
+                <span class="math">R</span><code>⟦</code>
+                <span class="math">v</span><code>,</code>
+                <span class="math">r</span><sub>2</sub><code>,</code> ...
+                <code>,</code>
+                <span class="math">r</span><sub>n</sub>
+                <code>⟧⟧</code>
+            </td>
+            <td>
+                パターンに成功した後でガード式を評価する。
+                ガード式が偽の場合は、その分岐に失敗したものとして次の分岐を試す
+            </td>
+        </tr>
+    </table>
+
+    <h3><code>match</code>式全体の変換</h3>
+
+    <table>
+        <tr>
+            <th>コアAST</th>
+            <th>変換後のコア中間表現</th>
+            <th>説明</th>
+        </tr>
+        <tr>
+            <th>
+                <code>match</code>
+                <span class="math">e</span>
+                <code>with</code>
+                <span class="math">r</span><sub>1</sub>
+                <code>|</code> ...
+                <code>|</code>
+                <span class="math">r</span><sub>n</sub>
+            </th>
+            <td>
+                <code>let</code>
+                <span class="math">v</span>
+                <code>=</code>
+                <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+                <code>in</code>
+                <span class="math">R</span><code>⟦</code>
+                <span class="math">v</span><code>,</code>
+                <span class="math">r</span><sub>1</sub><code>,</code> ...
+                <code>,</code>
+                <span class="math">r</span><sub>n</sub>
+                <code>⟧</code>
+            </td>
+            <td>
+                被検査式を新しい変数
+                <span class="math">v</span>へ一度だけ束縛する。
+                その後、同じ値に対して各分岐を記述順に試す
+            </td>
+        </tr>
+    </table>
+
+    <h3>変換例</h3>
+
+    <p>次のリストに対するパターンマッチを変換します。</p>
+
+    <pre><code>match xs with
+| [] -&gt; 0
+| x :: _ -&gt; x</code></pre>
+
+    <p>単純な変換結果は次のようになります。</p>
+
+    <pre><code>let scrutinee = xs in
+if eq(scrutinee, nil_index) then
+    0
+else
+    if eq(tag scrutinee, cons_tag) then
+        let head = field 0 scrutinee in
+        let tail = field 1 scrutinee in
+        let x = head in
+        x
+    else
+        match_failure()</code></pre>
+
+    <p>
+        変数
+        <code>tail</code>はワイルドカードに対応するため、実際のコンパイラでは
+        <code>field 1</code>の読み出し自体を省略できます。
+        その場合、最適化後の結果は次のようになります。
+    </p>
+
+    <pre><code>let scrutinee = xs in
+if eq(scrutinee, nil_index) then
+    0
+else
+    if eq(tag scrutinee, cons_tag) then
+        let x = field 0 scrutinee in
+        x
+    else
+        match_failure()</code></pre>
+
+    <h3><code>switch</code>を使用する変換</h3>
+
+    <p>
+        同じ値に対するコンストラクタタグの検査が複数続く場合は、
+        複数の条件分岐を一つの
+        <code>switch</code>へまとめます。
+    </p>
+
+    <pre><code>match tree with
+| Leaf x -&gt; x
+| Node (left, right) -&gt; sum left right</code></pre>
+
+    <p>各コンストラクタのタグを検査する変換結果は次のようになります。</p>
+
+    <pre><code>let scrutinee = tree in
+switch tag scrutinee with
+| leaf_tag -&gt;
+    let x = field 0 scrutinee in
+    x
+| node_tag -&gt;
+    let left = field 0 scrutinee in
+    let right = field 1 scrutinee in
+    sum left right
+| default -&gt;
+    match_failure()</code></pre>
+
+    <h3>変換後に成立する条件</h3>
+
+    <ul>
+        <li>被検査式は一度だけ評価され、その結果は新しい変数へ束縛されている</li>
+        <li>各分岐はソースプログラムに記述された順序で試される</li>
+        <li>変数パターンによる束縛は、その分岐のガード式と本体だけで有効である</li>
+        <li>ガード式は、対応するパターンの検査と変数束縛に成功した後でだけ評価される</li>
+        <li>ブロックのフィールドは、コンストラクタタグの一致を確認した後で読み出される</li>
+        <li>タプルとレコードの部分パターンは左から右へ検査される</li>
+        <li>いずれかの部分パターンが失敗した場合は、その分岐全体が失敗する</li>
+        <li>どの分岐にも一致しない可能性がある場合は、最後に<code>match_failure()</code>が生成される</li>
+        <li>網羅性検査によってすべての場合が覆われていると証明できる場合は、到達不能な<code>match_failure()</code>を省略できる</li>
+        <li>変換後のコア中間表現には、<code>match</code>、パターン、ガード付き分岐を残さない</li>
+    </ul>
+
+    <h3>実装上の補足</h3>
+
+    <p>
+        上の規則は、各分岐を上から順番に試す単純な変換を定義しています。
+        この方法は意味が明確で実装も容易ですが、複数の分岐で同じタグ検査や
+        フィールド読み出しを繰り返すことがあります。
+    </p>
+
+    <p>
+        実装では、複数のパターンを行列としてまとめて解析する
+        パターン行列法を使用できます。
+        パターン行列法では、同じ被検査値に対するコンストラクタ検査を共有し、
+        一つの
+        <code>switch</code>へまとめます。
+        ただし、どの方法を使用しても、変換結果はこの節で定義した
+        条件分岐、タグ分岐、フィールド読み出し、局所変数束縛だけで構成されます。
+    </p>
+
 </body>
 </html>

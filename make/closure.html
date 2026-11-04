@@ -11,703 +11,1497 @@
     <div class="site-header">
         <button class="theme-toggle" type="button"></button>
     </div>
+
     <h1>クロージャ中間表現</h1>
 
-<p>
-    K正規形に自由変数解析とクロージャ変換を行い、
-    関数と、その関数が参照する外側の変数を明示します。
-</p>
+    <p>
+        K正規形に自由変数解析とクロージャ変換を行い、
+        局所関数と無名関数をトップレベル関数定義へ移動します。
+        自由変数を持つ関数については、
+        関数のコード位置と自由変数を保持するクロージャを明示します。
+    </p>
 
-<ul>
-    <li>K正規形<br>↓ 自由変数解析・クロージャ変換</li>
-    <li>クロージャ中間表現</li>
-</ul>
+    <ul>
+        <li>K正規形</li>
+        <li>↓ 自由変数解析・クロージャ変換</li>
+        <li>クロージャ中間表現</li>
+    </ul>
 
-<h2>トップレベル関数定義</h2>
+    <p>
+        クロージャ変換後は、
+        <code>fun</code>および局所的な
+        <code>let rec</code>を式として残しません。
+        すべての関数本体はトップレベル関数定義へ移され、
+        関数適用は直接呼出しまたはクロージャ呼出しへ分類されます。
+    </p>
 
-<p>
-    クロージャ変換後は、関数本体を式の内部に残さず、
-    トップレベル関数定義としてまとめます。
-</p>
+    <h2>プログラムの構文</h2>
 
-<table>
-    <tr>
-        <th>
-            <span class="math">F</span> ::=
-        </th>
-        <td>トップレベル関数定義</td>
-    </tr>
-    <tr>
-        <th>
-            <code>function</code>
-            <span class="math">f</span>
-            <code>(</code>
-            <span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code>
-            <span class="math">x</span><sub>n</sub>
-            <code>;</code>
-            <span class="math">z</span><sub>1</sub><code>,</code> ...
-            <code>,</code>
-            <span class="math">z</span><sub>m</sub>
-            <code>) =</code>
-            <span class="math">e</span>
-        </th>
-        <td>引数と自由変数を持つ関数定義</td>
-    </tr>
-</table>
+    <p>
+        クロージャ中間表現のプログラムは、
+        外部関数宣言、トップレベル関数定義、大域値定義、
+        およびプログラム本体から構成されます。
+        プログラムを
+        <span class="math">P</span>、
+        外部関数宣言を
+        <span class="math">X</span>、
+        トップレベル関数定義を
+        <span class="math">F</span>、
+        大域値定義を
+        <span class="math">G</span>、
+        式を
+        <span class="math">e</span>
+        で表します。
+    </p>
 
-<p>
-    <span class="math">x</span><sub>1</sub>から
-    <span class="math">x</span><sub>n</sub>は通常の引数、
-    <span class="math">z</span><sub>1</sub>から
-    <span class="math">z</span><sub>m</sub>は自由変数です。
-</p>
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">P</span> ::=
+                    <span class="math">X</span><sub>1</sub> ...
+                    <span class="math">X</span><sub>l</sub>
+                    <span class="math">F</span><sub>1</sub> ...
+                    <span class="math">F</span><sub>m</sub>
+                    <span class="math">G</span><sub>1</sub> ...
+                    <span class="math">G</span><sub>n</sub>
+                    <code>in</code>
+                    <span class="math">e</span>
+                </th>
+                <td>プログラム</td>
+                <td>
+                    外部関数宣言、トップレベル関数定義、大域値定義、
+                    およびプログラム本体をまとめたもの
+                </td>
+            </tr>
+        </tbody>
+    </table>
 
-<h2>クロージャ中間表現のプログラム</h2>
+    <h2>外部関数宣言の構文</h2>
 
-<table>
-    <tr>
-        <th><span class="math">P</span> ::=</th>
-        <td>プログラム</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">F</span><sub>1</sub> ...
-            <span class="math">F</span><sub>n</sub><code>;</code>
-            <span class="math">e</span>
-        </th>
-        <td>トップレベル関数定義とメイン式</td>
-    </tr>
-</table>
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">X</span> ::=
+                    <code>external</code>
+                    <span class="math">f</span>
+                    <code>=</code>
+                    <span class="math">name</span>
+                </th>
+                <td>外部関数宣言</td>
+                <td>
+                    内部識別子
+                    <span class="math">f</span>を、ランタイムまたは外部環境の関数
+                    <span class="math">name</span>へ対応付ける
+                </td>
+            </tr>
+        </tbody>
+    </table>
 
-<h2>クロージャ中間表現の式</h2>
+    <h2>トップレベル関数定義の構文</h2>
 
-<table>
-    <tr>
-        <th><span class="math">e</span> ::=</th>
-        <td>クロージャ中間表現の式</td>
-    </tr>
-    <tr>
-        <th><span class="math">c</span></th>
-        <td>定数</td>
-    </tr>
-    <tr>
-        <th><span class="math">x</span></th>
-        <td>変数</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">op</span>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
-        </th>
-        <td>プリミティブ演算</td>
-    </tr>
-    <tr>
-        <th>
-            <code>if</code>
-            <span class="math">x</span>
-            <code>then</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>else</code>
-            <span class="math">e</span><sub>2</sub>
-        </th>
-        <td>条件分岐</td>
-    </tr>
-    <tr>
-        <th>
-            <code>let</code>
-            <span class="math">x</span>
-            <code>=</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>in</code>
-            <span class="math">e</span><sub>2</sub>
-        </th>
-        <td>局所定義</td>
-    </tr>
-    <tr>
-        <th>
-            <code>make_closure</code>
-            <span class="math">f</span>
-            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
-            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
-        </th>
-        <td>クロージャの作成</td>
-    </tr>
-    <tr>
-        <th>
-            <code>apply_direct</code>
-            <span class="math">f</span>
-            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
-            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
-        </th>
-        <td>関数の直接呼出し</td>
-    </tr>
-    <tr>
-        <th>
-            <code>apply_closure</code>
-            <span class="math">f</span>
-            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
-            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
-        </th>
-        <td>クロージャを経由した関数呼出し</td>
-    </tr>
-    <tr>
-        <th>
-            <code>block</code>
-            <span class="math">k</span>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
-        </th>
-        <td>ブロックの作成</td>
-    </tr>
-    <tr>
-        <th>
-            <code>field</code>
-            <span class="math">i x</span>
-        </th>
-        <td>ブロックのフィールドの読み出し</td>
-    </tr>
-    <tr>
-        <th>
-            <code>setfield</code>
-            <span class="math">i x y</span>
-        </th>
-        <td>ブロックのフィールドへの書き込み</td>
-    </tr>
-    <tr>
-        <th>
-            <code>tag</code>
-            <span class="math">x</span>
-        </th>
-        <td>ブロックのタグの読み出し</td>
-    </tr>
-    <tr>
-        <th>
-            <code>switch</code>
-            <span class="math">x</span>
-            <code>with</code>
-            <span class="math">k</span><sub>1</sub>
-            <code>-&gt;</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>|</code> ...
-            <code>|</code>
-            <span class="math">k</span><sub>n</sub>
-            <code>-&gt;</code>
-            <span class="math">e</span><sub>n</sub>
-        </th>
-        <td>タグによる分岐</td>
-    </tr>
-    <tr class="advanced">
-        <th>
-            <code>raise</code>
-            <span class="math">x</span>
-        </th>
-        <td>発展　例外の送出</td>
-    </tr>
-    <tr class="advanced">
-        <th>
-            <code>try</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>with</code>
-            <span class="math">x</span>
-            <code>-&gt;</code>
-            <span class="math">e</span><sub>2</sub>
-        </th>
-        <td>発展　例外処理</td>
-    </tr>
-    <tr class="advanced">
-        <th>
-            <code>perform</code>
-            <span class="math">x</span>
-        </th>
-        <td>発展　エフェクトの実行</td>
-    </tr>
-</table>
+    <p>
+        クロージャ中間表現では、すべての関数本体をトップレベルへ移動します。
+        各関数定義には、コードラベル、通常の仮引数、
+        クロージャ環境から取得する自由変数、および関数本体を記録します。
+    </p>
 
-<h2>クロージャ変換の規則</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">F</span> ::=
+                    <code>function</code>
+                    <span class="math">l</span>
+                    <code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub>
+                    <code>;</code>
+                    <span class="math">z</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">z</span><sub>m</sub>
+                    <code>) =</code>
+                    <span class="math">e</span>
+                </th>
+                <td>トップレベル関数定義</td>
+                <td>
+                    コードラベル
+                    <span class="math">l</span>を持つ関数を定義する。
+                    <span class="math">x</span><sub>1</sub>から
+                    <span class="math">x</span><sub>n</sub>は通常の仮引数、
+                    <span class="math">z</span><sub>1</sub>から
+                    <span class="math">z</span><sub>m</sub>はクロージャ環境から受け取る自由変数である
+                </td>
+            </tr>
+        </tbody>
+    </table>
 
-<p>
-    <span class="math">C</span>[<span class="math">e</span>]は、
-    K正規形の式<span class="math">e</span>をクロージャ変換した結果を表します。
-</p>
+    <p>
+        自由変数を持たない関数では、
+        セミコロンより後ろの自由変数列を空にします。
+    </p>
 
-<p>
-    クロージャ変換では、関数本体をトップレベル関数定義へ移動します。
-    関数が外側の変数を参照する場合は、その自由変数をクロージャへ保存します。
-</p>
+    <pre><code>function add(x, y; ) =
+    int_add(x, y)</code></pre>
 
-<table>
-    <tr>
-        <th>K正規形</th>
-        <td>クロージャ中間表現</td>
-    </tr>
+    <p>
+        自由変数を持つ関数では、
+        クロージャ内の各要素と自由変数列を同じ順序で対応付けます。
+    </p>
 
-    <tr>
-        <th><span class="math">c</span></th>
-        <td><span class="math">c</span></td>
-    </tr>
+    <pre><code>function add_x(y; x) =
+    int_add(x, y)</code></pre>
 
-    <tr>
-        <th><span class="math">x</span></th>
-        <td><span class="math">x</span></td>
-    </tr>
+    <h2>大域値定義の構文</h2>
 
-    <tr>
-        <th>
-            <span class="math">op</span>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            <span class="math">op</span>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
-        </td>
-    </tr>
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">G</span> ::=
+                    <code>let</code>
+                    <span class="math">x</span>
+                    <code>=</code>
+                    <span class="math">e</span>
+                </th>
+                <td>大域値定義</td>
+                <td>
+                    式
+                    <span class="math">e</span>を評価し、その結果を大域変数
+                    <span class="math">x</span>へ束縛する
+                </td>
+            </tr>
+        </tbody>
+    </table>
 
-    <tr>
-        <th>
-            <code>if</code>
-            <span class="math">x</span>
-            <code>then</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>else</code>
-            <span class="math">e</span><sub>2</sub>
-        </th>
-        <td>
-            <code>if</code>
-            <span class="math">x</span>
-            <code>then</code>
-            <span class="math">C</span>[<span class="math">e</span><sub>1</sub>]
-            <code>else</code>
-            <span class="math">C</span>[<span class="math">e</span><sub>2</sub>]
-        </td>
-    </tr>
+    <p>
+        K正規形に存在した大域再帰関数定義は、
+        トップレベル関数定義と、必要に応じて生成する大域クロージャ値へ分解します。
+        そのため、クロージャ中間表現には大域的な
+        <code>let rec</code>を残しません。
+    </p>
 
-    <tr>
-        <th>
-            <code>let</code>
-            <span class="math">x</span>
-            <code>=</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>in</code>
-            <span class="math">e</span><sub>2</sub>
-        </th>
-        <td>
-            <code>let</code>
-            <span class="math">x</span>
-            <code>=</code>
-            <span class="math">C</span>[<span class="math">e</span><sub>1</sub>]
-            <code>in</code>
-            <span class="math">C</span>[<span class="math">e</span><sub>2</sub>]
-        </td>
-    </tr>
+    <h2>式の構文</h2>
 
-    <tr>
-        <th>
-            <code>fun</code>
-            <span class="math">x</span><sub>1</sub> ...
-            <span class="math">x</span><sub>n</sub>
-            <code>-&gt;</code>
-            <span class="math">e</span>
-        </th>
-        <td>
-            新しい関数ラベル<span class="math">f</span>を生成し、<br>
-            <code>function</code>
-            <span class="math">f</span>
-            <code>(closure,</code>
-            <span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>) =</code>
-            <span class="math">C</span>[<span class="math">e</span>]
-            をトップレベルへ追加し、<br>
-            <code>make_closure</code>
-            <span class="math">f</span>
-            <code>[</code>
-            <span class="math">z</span><sub>1</sub><code>;</code> ...
-            <code>;</code>
-            <span class="math">z</span><sub>m</sub>
-            <code>]</code>
-            を生成する
-        </td>
-    </tr>
+    <p>
+        定数を
+        <span class="math">c</span>、
+        変数を
+        <span class="math">x</span>、
+        コードラベルを
+        <span class="math">l</span>、
+        プリミティブ演算を
+        <span class="math">op</span>、
+        ブロックタグまたは
+        <code>switch</code>の比較値を
+        <span class="math">k</span>
+        で表します。
+    </p>
 
-    <tr>
-        <th>
-            <span class="math">f x</span><sub>1</sub> ...
-            <span class="math">x</span><sub>n</sub>
-        </th>
-        <td>
-            <code>apply_direct</code>
-            <span class="math">f</span>
-            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
-            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
-            <br>
-            <small>
-                呼出し先がトップレベル関数<span class="math">f</span>だと
-                コンパイル時に確定している場合
-            </small>
-        </td>
-    </tr>
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <span class="math">c</span>
+                </th>
+                <td>定数</td>
+                <td>
+                    整数、浮動小数点数、真偽値、文字、文字列、
+                    <code>unit</code>などの定数
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <span class="math">x</span>
+                </th>
+                <td>変数</td>
+                <td>局所変数または大域変数の参照</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <span class="math">op</span><code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub><code>)</code>
+                </th>
+                <td>プリミティブ演算</td>
+                <td>
+                    変数をオペランドとしてプリミティブ演算を実行する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>if</code>
+                    <span class="math">x</span>
+                    <code>then</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>else</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>条件分岐</td>
+                <td>
+                    <span class="math">x</span>が真なら
+                    <span class="math">e</span><sub>1</sub>を、偽なら
+                    <span class="math">e</span><sub>2</sub>を評価する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>let</code>
+                    <span class="math">x</span>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>in</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>局所定義</td>
+                <td>
+                    <span class="math">e</span><sub>1</sub>の結果を
+                    <span class="math">x</span>へ束縛し、
+                    <span class="math">e</span><sub>2</sub>を評価する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>make_closure</code>
+                    <span class="math">l</span>
+                    <code>[</code>
+                    <span class="math">z</span><sub>1</sub><code>;</code> ...
+                    <code>;</code>
+                    <span class="math">z</span><sub>m</sub><code>]</code>
+                </th>
+                <td>クロージャの作成</td>
+                <td>
+                    コードラベル
+                    <span class="math">l</span>と自由変数
+                    <span class="math">z</span><sub>1</sub>から
+                    <span class="math">z</span><sub>m</sub>を保持するクロージャを作成する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>apply_direct</code>
+                    <span class="math">l</span>
+                    <code>[</code>
+                    <span class="math">x</span><sub>1</sub><code>;</code> ...
+                    <code>;</code>
+                    <span class="math">x</span><sub>n</sub>
+                    <code>;</code>
+                    <span class="math">z</span><sub>1</sub><code>;</code> ...
+                    <code>;</code>
+                    <span class="math">z</span><sub>m</sub><code>]</code>
+                </th>
+                <td>関数の直接呼出し</td>
+                <td>
+                    コンパイル時に確定したコードラベル
+                    <span class="math">l</span>を直接呼び出す。
+                    通常の実引数に加えて、必要な自由変数を明示的に渡す
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>apply_closure</code>
+                    <span class="math">f</span>
+                    <code>[</code>
+                    <span class="math">x</span><sub>1</sub><code>;</code> ...
+                    <code>;</code>
+                    <span class="math">x</span><sub>n</sub><code>]</code>
+                </th>
+                <td>クロージャ呼出し</td>
+                <td>
+                    変数
+                    <span class="math">f</span>が保持するクロージャからコード位置と環境を取得し、
+                    通常の実引数とともに呼び出す
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>block</code>
+                    <span class="math">k</span>
+                    <code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub><code>)</code>
+                </th>
+                <td>ブロックの作成</td>
+                <td>
+                    タグ
+                    <span class="math">k</span>と指定されたフィールドを持つブロックを作成する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>field</code>
+                    <span class="math">i x</span>
+                </th>
+                <td>フィールドの読み出し</td>
+                <td>
+                    <span class="math">x</span>が表すブロックの
+                    <span class="math">i</span>番目のフィールドを読み出す
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>setfield</code>
+                    <span class="math">i x y</span>
+                </th>
+                <td>フィールドへの書き込み</td>
+                <td>
+                    <span class="math">x</span>が表す可変ブロックの
+                    <span class="math">i</span>番目のフィールドへ
+                    <span class="math">y</span>を書き込み、
+                    <code>unit</code>を返す
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>tag</code>
+                    <span class="math">x</span>
+                </th>
+                <td>タグの読み出し</td>
+                <td>
+                    <span class="math">x</span>が表すブロックのタグを読み出す
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>switch</code>
+                    <span class="math">x</span>
+                    <code>with</code>
+                    <span class="math">k</span><sub>1</sub>
+                    <code>-&gt;</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>|</code> ...
+                    <code>|</code>
+                    <span class="math">k</span><sub>n</sub>
+                    <code>-&gt;</code>
+                    <span class="math">e</span><sub>n</sub>
+                    <code>| default -&gt;</code>
+                    <span class="math">e</span><sub>d</sub>
+                </th>
+                <td>整数またはタグによる分岐</td>
+                <td>
+                    <span class="math">x</span>の値と一致する分岐を評価する。
+                    一致する値がない場合は省略可能な
+                    <code>default</code>分岐を評価する
+                </td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>raise</code>
+                    <span class="math">x</span>
+                </th>
+                <td>例外の送出</td>
+                <td>発展　変数<span class="math">x</span>が表す例外値を送出する</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>try</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>with</code>
+                    <span class="math">x</span>
+                    <code>-&gt;</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>例外処理</td>
+                <td>
+                    発展　
+                    <span class="math">e</span><sub>1</sub>から送出された例外を
+                    <span class="math">x</span>へ束縛し、
+                    <span class="math">e</span><sub>2</sub>で処理する
+                </td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <span class="math">e</span> ::=
+                    <code>perform</code>
+                    <span class="math">x</span>
+                </th>
+                <td>エフェクトの実行</td>
+                <td>発展　変数<span class="math">x</span>が表すエフェクトを実行する</td>
+            </tr>
+        </tbody>
+    </table>
 
-    <tr>
-        <th>
-            <span class="math">f x</span><sub>1</sub> ...
-            <span class="math">x</span><sub>n</sub>
-        </th>
-        <td>
-            <code>apply_closure</code>
-            <span class="math">f</span>
-            <code>[</code><span class="math">x</span><sub>1</sub><code>;</code> ...
-            <code>;</code> <span class="math">x</span><sub>n</sub><code>]</code>
-            <br>
-            <small>
-                呼出し先が実行時に決まる場合
-            </small>
-        </td>
-    </tr>
+    <h2>型情報</h2>
 
-    <tr>
-        <th>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
-        </td>
-    </tr>
+    <p>
+        表では簡潔さのため型を省略していますが、
+        実装上は大域変数、局所変数、関数の仮引数、自由変数、
+        関数の戻り値、およびクロージャ値の型を保持します。
+    </p>
 
-    <tr>
-        <th>
-            <code>block</code>
-            <span class="math">k</span>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            <code>block</code>
-            <span class="math">k</span>
-            <code>(</code><span class="math">x</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">x</span><sub>n</sub><code>)</code>
-        </td>
-    </tr>
+    <p>
+        トップレベル関数定義には、通常の仮引数の型、
+        自由変数の型、および戻り値の型を記録します。
+        クロージャ型には少なくとも、呼出し時に要求される引数型と戻り値型を保持します。
+    </p>
 
-    <tr>
-        <th>
-            <code>field</code>
-            <span class="math">i x</span>
-        </th>
-        <td>
-            <code>field</code>
-            <span class="math">i x</span>
-        </td>
-    </tr>
+    <h2>クロージャの論理的な構造</h2>
 
-    <tr>
-        <th>
-            <code>setfield</code>
-            <span class="math">i x y</span>
-        </th>
-        <td>
-            <code>setfield</code>
-            <span class="math">i x y</span>
-        </td>
-    </tr>
+    <p>
+        クロージャは、関数のコード位置と、その関数が必要とする自由変数をまとめた値です。
+        クロージャ中間表現では、クロージャの具体的なメモリ配置はまだ決定しません。
+    </p>
 
-    <tr>
-        <th>
-            <code>tag</code>
-            <span class="math">x</span>
-        </th>
-        <td>
-            <code>tag</code>
-            <span class="math">x</span>
-        </td>
-    </tr>
+    <pre><code>closure {
+    code = function_label;
+    environment = [free_variable_1; ...; free_variable_n];
+}</code></pre>
 
-    <tr>
-        <th>
-            <code>switch</code>
-            <span class="math">x</span>
-            <code>with</code>
-            <span class="math">k</span><sub>1</sub>
-            <code>-&gt;</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>|</code> ...
-            <code>|</code>
-            <span class="math">k</span><sub>n</sub>
-            <code>-&gt;</code>
-            <span class="math">e</span><sub>n</sub>
-        </th>
-        <td>
-            <code>switch</code>
-            <span class="math">x</span>
-            <code>with</code>
-            <span class="math">k</span><sub>1</sub>
-            <code>-&gt;</code>
-            <span class="math">C</span>[<span class="math">e</span><sub>1</sub>]
-            <code>|</code> ...<br>
-            <code>|</code>
-            <span class="math">k</span><sub>n</sub>
-            <code>-&gt;</code>
-            <span class="math">C</span>[<span class="math">e</span><sub>n</sub>]
-        </td>
-    </tr>
+    <p>
+        後続の低水準化では、
+        <code>make_closure</code>をヒープ上のブロック確保とフィールド書込みへ変換し、
+        <code>apply_closure</code>をコード位置の読み出しと間接呼出しへ変換します。
+    </p>
 
-    <tr class="advanced">
-        <th>
-            <code>raise</code>
-            <span class="math">x</span>
-        </th>
-        <td>
-            <code>raise</code>
-            <span class="math">x</span>
-        </td>
-    </tr>
+    <h2>自由変数</h2>
 
-    <tr class="advanced">
-        <th>
-            <code>try</code>
-            <span class="math">e</span><sub>1</sub>
-            <code>with</code>
-            <span class="math">x</span>
-            <code>-&gt;</code>
-            <span class="math">e</span><sub>2</sub>
-        </th>
-        <td>
-            <code>try</code>
-            <span class="math">C</span>[<span class="math">e</span><sub>1</sub>]
-            <code>with</code>
-            <span class="math">x</span>
-            <code>-&gt;</code>
-            <span class="math">C</span>[<span class="math">e</span><sub>2</sub>]
-        </td>
-    </tr>
+    <p>
+        式の中で参照される変数のうち、
+        その式の内部で束縛されていない変数を自由変数と呼びます。
+        式
+        <span class="math">e</span>の自由変数集合を
+        <span class="math">FV</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+        と表します。
+    </p>
 
-    <tr class="advanced">
-        <th>
-            <code>perform</code>
-            <span class="math">x</span>
-        </th>
-        <td>
-            <code>perform</code>
-            <span class="math">x</span>
-        </td>
-    </tr>
-</table>
+    <table>
+        <thead>
+            <tr>
+                <th>K正規形</th>
+                <th>自由変数</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><span class="math">c</span></th>
+                <td>∅</td>
+            </tr>
+            <tr>
+                <th><span class="math">x</span></th>
+                <td>{<span class="math">x</span>}</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">op</span><code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    {<span class="math">x</span><sub>1</sub>, ...,
+                    <span class="math">x</span><sub>n</sub>}
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>if</code>
+                    <span class="math">x</span>
+                    <code>then</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>else</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>
+                    {<span class="math">x</span>} ∪
+                    <span class="math">FV</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code> ∪
+                    <span class="math">FV</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">x</span>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>in</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>
+                    <span class="math">FV</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code> ∪
+                    (<span class="math">FV</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+                    − {<span class="math">x</span>})
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>fun</code>
+                    <span class="math">x</span><sub>1</sub> ...
+                    <span class="math">x</span><sub>n</sub>
+                    <code>-&gt;</code>
+                    <span class="math">e</span>
+                </th>
+                <td>
+                    <span class="math">FV</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+                    − {<span class="math">x</span><sub>1</sub>, ...,
+                    <span class="math">x</span><sub>n</sub>}
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">f x</span><sub>1</sub> ...
+                    <span class="math">x</span><sub>n</sub>
+                </th>
+                <td>
+                    {<span class="math">f</span>,
+                    <span class="math">x</span><sub>1</sub>, ...,
+                    <span class="math">x</span><sub>n</sub>}
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>block</code>
+                    <span class="math">k</span>
+                    <code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    {<span class="math">x</span><sub>1</sub>, ...,
+                    <span class="math">x</span><sub>n</sub>}
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>field</code>
+                    <span class="math">i x</span>
+                </th>
+                <td>{<span class="math">x</span>}</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>setfield</code>
+                    <span class="math">i x y</span>
+                </th>
+                <td>{<span class="math">x</span>, <span class="math">y</span>}</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>tag</code>
+                    <span class="math">x</span>
+                </th>
+                <td>{<span class="math">x</span>}</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>switch</code>
+                    <span class="math">x</span>
+                    <code>with</code> ...
+                </th>
+                <td>
+                    {<span class="math">x</span>}と、
+                    すべての分岐本体の自由変数集合の和集合
+                </td>
+            </tr>
+        </tbody>
+    </table>
 
-<h3>無名関数の変換</h3>
+    <p>
+        関数本体
+        <span class="math">e</span>からクロージャへ保存する自由変数は、
+        <span class="math">FV</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+        から、その関数の仮引数、関数自身の名前、
+        同じ相互再帰関数群に属する関数名を取り除いたものです。
+    </p>
 
-<p>
-    無名関数の自由変数を
-    <span class="math">z</span><sub>1</sub>、...、
-    <span class="math">z</span><sub>m</sub>とします。
-</p>
+    <h2>クロージャ変換</h2>
 
-<pre><code>fun x1 ... xn -&gt; e</code></pre>
+    <p>
+        K正規形の式
+        <span class="math">e</span>のクロージャ変換を
+        <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+        と表します。
+        変換は式を返すだけでなく、
+        新しく生成したトップレベル関数定義をプログラムへ追加します。
+    </p>
 
-<p>次のトップレベル関数定義を生成します。</p>
+    <p>
+        変換中は、直接呼び出せることが分かっている関数と、
+        各関数に必要な自由変数の情報を環境に保持します。
+    </p>
 
-<pre><code>function f(closure, x1, ..., xn):
-    let z1 = field 1 closure in
-    ...
-    let zm = field m closure in
-    C[e]</code></pre>
+    <h2>プログラムと大域宣言の変換</h2>
 
-<p>元の位置にはクロージャ生成を置きます。</p>
+    <table>
+        <thead>
+            <tr>
+                <th>K正規形</th>
+                <th>クロージャ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">d</span><sub>1</sub> ...
+                    <span class="math">d</span><sub>n</sub>
+                    <code>in</code>
+                    <span class="math">e</span>
+                </th>
+                <td>
+                    生成された外部関数宣言、
+                    トップレベル関数定義、
+                    大域値定義を順番に並べ、
+                    最後に
+                    <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+                    を置く
+                </td>
+                <td>
+                    各大域宣言を宣言順に変換し、
+                    全関数本体をトップレベルへ集約する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">x</span>
+                    <code>=</code>
+                    <span class="math">e</span>
+                </th>
+                <td>
+                    <code>let</code>
+                    <span class="math">x</span>
+                    <code>=</code>
+                    <span class="math">C</span><code>⟦</code><span class="math">e</span><code>⟧</code>
+                </td>
+                <td>
+                    大域値の初期化式をクロージャ変換する。
+                    初期化式内の関数定義はトップレベルへ移動する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>external</code>
+                    <span class="math">f</span>
+                    <code>=</code>
+                    <span class="math">name</span>
+                </th>
+                <td>
+                    <code>external</code>
+                    <span class="math">f</span>
+                    <code>=</code>
+                    <span class="math">name</span>
+                </td>
+                <td>
+                    外部関数宣言はそのまま保持する。
+                    外部関数への既知の呼出しは直接呼出しとして扱える
+                </td>
+            </tr>
+            <tr>
+                <th>大域再帰関数定義</th>
+                <td>
+                    一つ以上のトップレベル関数定義と、
+                    必要に応じて一つ以上の大域クロージャ値定義を生成する
+                </td>
+                <td>
+                    各関数本体をトップレベルへ移動する。
+                    関数が値として使用される場合や自由変数を必要とする場合は、
+                    対応するクロージャ値を生成する
+                </td>
+            </tr>
+        </tbody>
+    </table>
 
-<pre><code>make_closure f [z1; ...; zm]</code></pre>
+    <h2>式の変換</h2>
 
-<h3>再帰関数定義の変換</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>K正規形</th>
+                <th>クロージャ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><span class="math">c</span></th>
+                <td><span class="math">c</span></td>
+                <td>定数をそのまま残す</td>
+            </tr>
+            <tr>
+                <th><span class="math">x</span></th>
+                <td><span class="math">x</span></td>
+                <td>変数をそのまま残す</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">op</span><code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    <span class="math">op</span><code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub><code>)</code>
+                </td>
+                <td>プリミティブ演算をそのまま残す</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>if</code>
+                    <span class="math">x</span>
+                    <code>then</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>else</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>
+                    <code>if</code>
+                    <span class="math">x</span>
+                    <code>then</code>
+                    <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                    <code>else</code>
+                    <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+                </td>
+                <td>両方の分岐を独立にクロージャ変換する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>let</code>
+                    <span class="math">x</span>
+                    <code>=</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>in</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>
+                    <code>let</code>
+                    <span class="math">x</span>
+                    <code>=</code>
+                    <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                    <code>in</code>
+                    <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+                </td>
+                <td>
+                    束縛される式と後続式をクロージャ変換する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>fun</code>
+                    <span class="math">x</span><sub>1</sub> ...
+                    <span class="math">x</span><sub>n</sub>
+                    <code>-&gt;</code>
+                    <span class="math">e</span>
+                </th>
+                <td>
+                    新しいコードラベル
+                    <span class="math">l</span>を生成し、
+                    トップレベル関数定義を追加したうえで、
+                    元の位置を
+                    <code>make_closure</code>
+                    <span class="math">l</span>
+                    <code>[</code>
+                    <span class="math">z</span><sub>1</sub><code>;</code> ...
+                    <code>;</code>
+                    <span class="math">z</span><sub>m</sub><code>]</code>
+                    へ置き換える
+                </td>
+                <td>
+                    <span class="math">z</span><sub>1</sub>から
+                    <span class="math">z</span><sub>m</sub>は、
+                    関数本体から仮引数を除いて求めた自由変数である
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">f x</span><sub>1</sub> ...
+                    <span class="math">x</span><sub>n</sub>
+                </th>
+                <td>
+                    <code>apply_direct</code>
+                    <span class="math">l</span>
+                    <code>[</code>
+                    <span class="math">x</span><sub>1</sub><code>;</code> ...
+                    <code>;</code>
+                    <span class="math">x</span><sub>n</sub>
+                    <code>;</code>
+                    <span class="math">z</span><sub>1</sub><code>;</code> ...
+                    <code>;</code>
+                    <span class="math">z</span><sub>m</sub><code>]</code>
+                </td>
+                <td>
+                    <span class="math">f</span>に対応するコードラベル
+                    <span class="math">l</span>がコンパイル時に確定し、
+                    必要な自由変数を呼出し位置から直接渡せる場合
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">f x</span><sub>1</sub> ...
+                    <span class="math">x</span><sub>n</sub>
+                </th>
+                <td>
+                    <code>apply_closure</code>
+                    <span class="math">f</span>
+                    <code>[</code>
+                    <span class="math">x</span><sub>1</sub><code>;</code> ...
+                    <code>;</code>
+                    <span class="math">x</span><sub>n</sub><code>]</code>
+                </td>
+                <td>
+                    呼出し先のコードラベルまたは必要な環境が、
+                    コンパイル時に呼出し位置から確定できない場合
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>block</code>
+                    <span class="math">k</span>
+                    <code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    <code>block</code>
+                    <span class="math">k</span>
+                    <code>(</code>
+                    <span class="math">x</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">x</span><sub>n</sub><code>)</code>
+                </td>
+                <td>ブロック作成をそのまま残す</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>field</code>
+                    <span class="math">i x</span>
+                </th>
+                <td>
+                    <code>field</code>
+                    <span class="math">i x</span>
+                </td>
+                <td>フィールド読み出しをそのまま残す</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>setfield</code>
+                    <span class="math">i x y</span>
+                </th>
+                <td>
+                    <code>setfield</code>
+                    <span class="math">i x y</span>
+                </td>
+                <td>フィールド書込みをそのまま残す</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>tag</code>
+                    <span class="math">x</span>
+                </th>
+                <td>
+                    <code>tag</code>
+                    <span class="math">x</span>
+                </td>
+                <td>タグ読み出しをそのまま残す</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>switch</code>
+                    <span class="math">x</span>
+                    <code>with</code>
+                    <span class="math">k</span><sub>1</sub>
+                    <code>-&gt;</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>|</code> ...
+                    <code>| default -&gt;</code>
+                    <span class="math">e</span><sub>d</sub>
+                </th>
+                <td>
+                    <code>switch</code>
+                    <span class="math">x</span>
+                    <code>with</code>
+                    <span class="math">k</span><sub>1</sub>
+                    <code>-&gt;</code>
+                    <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                    <code>|</code> ...
+                    <code>| default -&gt;</code>
+                    <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>d</sub><code>⟧</code>
+                </td>
+                <td>各分岐を独立にクロージャ変換する</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>raise</code>
+                    <span class="math">x</span>
+                </th>
+                <td>
+                    <code>raise</code>
+                    <span class="math">x</span>
+                </td>
+                <td>発展　例外送出をそのまま残す</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>try</code>
+                    <span class="math">e</span><sub>1</sub>
+                    <code>with</code>
+                    <span class="math">x</span>
+                    <code>-&gt;</code>
+                    <span class="math">e</span><sub>2</sub>
+                </th>
+                <td>
+                    <code>try</code>
+                    <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>1</sub><code>⟧</code>
+                    <code>with</code>
+                    <span class="math">x</span>
+                    <code>-&gt;</code>
+                    <span class="math">C</span><code>⟦</code><span class="math">e</span><sub>2</sub><code>⟧</code>
+                </td>
+                <td>発展　保護式と例外処理式をクロージャ変換する</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>perform</code>
+                    <span class="math">x</span>
+                </th>
+                <td>
+                    <code>perform</code>
+                    <span class="math">x</span>
+                </td>
+                <td>発展　エフェクトの実行をそのまま残す</td>
+            </tr>
+        </tbody>
+    </table>
 
-<p>
-    各再帰関数の本体をトップレベル関数定義へ移動します。
-    関数本体から、その関数の名前と仮引数を除いた自由変数を求めます。
-</p>
+    <h2>無名関数の変換</h2>
 
-<pre><code>let rec f x1 ... xn = e1 in e2</code></pre>
+    <p>
+        次の無名関数を考えます。
+        関数本体
+        <span class="math">e</span>の自由変数を、
+        <span class="math">z</span><sub>1</sub>から
+        <span class="math">z</span><sub>m</sub>とします。
+    </p>
 
-<p>
-    自由変数が
-    <span class="math">z</span><sub>1</sub>、...、
-    <span class="math">z</span><sub>m</sub>の場合、概念的に次へ変換します。
-</p>
+    <pre><code>fun x1 ... xn -&gt; e</code></pre>
 
-<pre><code>function f_code(closure, x1, ..., xn):
-    let z1 = field 1 closure in
-    ...
-    let zm = field m closure in
-    C[e1]
+    <p>
+        新しいコードラベル
+        <span class="math">l</span>を生成し、
+        次のトップレベル関数定義を追加します。
+    </p>
 
-let f = make_closure f_code [z1; ...; zm] in
-C[e2]</code></pre>
+    <pre><code>function l(x1, ..., xn; z1, ..., zm) =
+    C⟦e⟧</code></pre>
 
-<h3>既知関数としての変換</h3>
+    <p>
+        元の無名関数の位置には、自由変数を保存するクロージャ作成を置きます。
+    </p>
 
-<p>
-    関数本体が仮引数と再帰関数名だけを使用し、
-    外側の自由変数を持たない場合は、クロージャを作成せずに直接呼び出せます。
-</p>
+    <pre><code>make_closure l [z1; ...; zm]</code></pre>
 
-<pre><code>let rec add x y = x + y in
-add a b</code></pre>
+    <p>
+        この段階では、自由変数の読出しを
+        <code>field</code>として関数本体へ挿入する必要はありません。
+        トップレベル関数定義の自由変数列が、
+        クロージャ環境から取得する値を論理的に表します。
+        具体的な環境ポインタとフィールド読出しは後続の低水準化で導入します。
+    </p>
 
-<p>概念的に次へ変換します。</p>
+    <h2>局所再帰関数の変換</h2>
 
-<pre><code>function add(x, y):
-    x + y
+    <p>
+        次の局所再帰関数を考えます。
+    </p>
 
-apply_direct add [a; b]</code></pre>
+    <pre><code>let rec f x1 ... xn = e1 in e2</code></pre>
 
-<h3>関数値として使用される既知関数</h3>
+    <p>
+        関数本体について、関数自身
+        <span class="math">f</span>と仮引数を除いた自由変数を求めます。
+        その自由変数を
+        <span class="math">z</span><sub>1</sub>から
+        <span class="math">z</span><sub>m</sub>とします。
+    </p>
 
-<p>
-    自由変数を持たない関数でも、その関数自体を値として使用する場合は、
-    コードアドレスだけを持つクロージャを作成します。
-</p>
+    <p>
+        新しいコードラベル
+        <span class="math">l</span>を生成し、
+        次のトップレベル関数定義を追加します。
+    </p>
 
-<pre><code>let rec add x y = x + y in
+    <pre><code>function l(x1, ..., xn; z1, ..., zm) =
+    C⟦e1⟧</code></pre>
+
+    <p>
+        関数
+        <span class="math">f</span>が後続式
+        <span class="math">e</span><sub>2</sub>で値として必要な場合は、
+        元の
+        <code>let rec</code>を次の局所定義へ置き換えます。
+    </p>
+
+    <pre><code>let f = make_closure l [z1; ...; zm] in
+C⟦e2⟧</code></pre>
+
+    <p>
+        関数
+        <span class="math">f</span>が既知の直接呼出しでしか使用されず、
+        クロージャ値として参照されない場合は、
+        <code>make_closure</code>を省略できます。
+    </p>
+
+    <pre><code>C⟦e2⟧</code></pre>
+
+    <p>
+        この場合、
+        <span class="math">e</span><sub>2</sub>に含まれる
+        <span class="math">f</span>への呼出しは、
+        コードラベル
+        <span class="math">l</span>への
+        <code>apply_direct</code>へ変換します。
+    </p>
+
+    <h2>再帰呼出し</h2>
+
+    <p>
+        再帰関数本体から同じ関数を呼ぶ場合も、
+        呼出し先のコードラベルは確定しています。
+        必要な自由変数を現在の関数が保持しているため、
+        自己再帰呼出しは直接呼出しにできます。
+    </p>
+
+    <pre><code>let rec loop n =
+    if is_zero(n) then
+        0
+    else
+        loop (pred n)
+in
+loop x</code></pre>
+
+    <p>
+        概念的には次のように変換します。
+    </p>
+
+    <pre><code>function loop_code(n; ) =
+    if is_zero(n) then
+        0
+    else
+        let next = pred(n) in
+        apply_direct loop_code [next; ]
+
+apply_direct loop_code [x; ]</code></pre>
+
+    <h2>自由変数を持つ関数の直接呼出し</h2>
+
+    <p>
+        自由変数を持つ関数でも、
+        呼出し先のコードラベルと必要な自由変数が呼出し位置で確定している場合は、
+        クロージャを経由せず直接呼び出せます。
+    </p>
+
+    <pre><code>let x = 10 in
+let rec add_x y =
+    int_add(x, y)
+in
+add_x z</code></pre>
+
+    <p>
+        概念的には次のように変換します。
+    </p>
+
+    <pre><code>function add_x_code(y; x) =
+    int_add(x, y)
+
+apply_direct add_x_code [z; x]</code></pre>
+
+    <p>
+        ただし、
+        <code>add_x</code>自体を別の関数へ渡したり、
+        データ構造へ格納したり、
+        結果として返したりする場合は、クロージャ作成が必要です。
+    </p>
+
+    <h2>関数値として使用される既知関数</h2>
+
+    <p>
+        自由変数を持たない関数でも、
+        関数そのものを値として使用する場合はクロージャ値が必要です。
+    </p>
+
+    <pre><code>let rec add x y =
+    int_add(x, y)
+in
 add</code></pre>
 
-<p>概念的に次へ変換します。</p>
+    <p>
+        関数本体をトップレベルへ移動し、
+        空の環境を持つクロージャを作成します。
+    </p>
 
-<pre><code>make_closure add []</code></pre>
+    <pre><code>function add_code(x, y; ) =
+    int_add(x, y)
 
-<h3>相互再帰関数の変換</h3>
+make_closure add_code []</code></pre>
 
-<p>
-    相互再帰する関数群は、一つの集合として自由変数を解析します。
-</p>
+    <h2>相互再帰関数の変換</h2>
 
-<pre><code>let rec even n =
-    if n = 0 then true else odd (n - 1)
+    <p>
+        相互再帰関数群は、一つの集合として解析します。
+        各関数の自由変数を求める際には、
+        同じ相互再帰関数群に属する関数名を自由変数集合から除きます。
+    </p>
+
+    <pre><code>let rec even n =
+    if is_zero(n) then
+        true
+    else
+        let next = pred(n) in
+        odd next
 and odd n =
-    if n = 0 then false else even (n - 1)
+    if is_zero(n) then
+        false
+    else
+        let next = pred(n) in
+        even next
 in
 even x</code></pre>
 
-<p>
-    <code>even</code>と<code>odd</code>が外側の自由変数を持たない場合は、
-    両方をトップレベル関数として直接呼び出せます。
-</p>
+    <p>
+        外側の自由変数を持たず、各関数が既知の呼出し先としてだけ使用される場合は、
+        すべて直接呼出しにできます。
+    </p>
 
-<pre><code>function even(n):
-    ...
-    apply_direct odd [n1]
+    <pre><code>function even_code(n; ) =
+    if is_zero(n) then
+        true
+    else
+        let next = pred(n) in
+        apply_direct odd_code [next; ]
 
-function odd(n):
-    ...
-    apply_direct even [n1]
+function odd_code(n; ) =
+    if is_zero(n) then
+        false
+    else
+        let next = pred(n) in
+        apply_direct even_code [next; ]
 
-apply_direct even [x]</code></pre>
+apply_direct even_code [x; ]</code></pre>
 
-<p>
-    外側の自由変数を持つ場合は、その自由変数を保持するクロージャを作成します。
-    相互再帰する各関数が互いを値として必要とする場合は、
-    関数群を同時に初期化できるクロージャ集合として扱います。
-</p>
+    <p>
+        相互再帰関数群が外側の自由変数を参照する場合は、
+        各トップレベル関数定義の自由変数列へ、その値を追加します。
+        呼出し位置から必要な自由変数が分かる場合は、
+        相互再帰呼出しでも直接渡せます。
+    </p>
 
-<h3>直接呼出しの判定</h3>
+    <p>
+        相互再帰関数同士を関数値として参照する場合は、
+        複数のクロージャを相互参照させる初期化処理が必要になります。
+        この処理は通常の
+        <code>make_closure</code>だけでは循環初期化を表しにくいため、
+        後続の低水準化で次のいずれかとして実装します。
+    </p>
 
-<p>
-    次の条件を満たす呼出しは、<code>apply_direct</code>へ変換できます。
-</p>
+    <ul>
+        <li>必要なクロージャ領域を先にすべて確保し、その後で各フィールドを書き込む</li>
+        <li>相互再帰関数群で一つの共有環境を作り、各クロージャから共有環境を参照する</li>
+        <li>相互再帰関数群全体を一つの再帰環境ブロックとして表現する</li>
+    </ul>
 
-<ul>
-    <li>呼出し先の関数定義がコンパイル時に判明している</li>
-    <li>呼出し先に必要な環境をコンパイラが渡せる</li>
-    <li>呼出し先の関数値が別の値へ置き換えられる可能性がない</li>
-</ul>
+    <h2>直接呼出しとクロージャ呼出し</h2>
 
-<p>
-    それ以外の呼出しは、<code>apply_closure</code>へ変換します。
-</p>
-<h2>自由変数</h2>
+    <p>
+        関数適用は、呼出し先と環境がコンパイル時に確定するかどうかによって分類します。
+    </p>
 
-<p>
-    関数の本体で使用される変数のうち、
-    その関数の引数でも、その関数内で定義された変数でもないものを自由変数と呼びます。
-</p>
+    <table>
+        <thead>
+            <tr>
+                <th>条件</th>
+                <th>生成する呼出し</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    コードラベルが確定し、
+                    必要な自由変数を呼出し位置から直接渡せる
+                </th>
+                <td><code>apply_direct</code></td>
+                <td>
+                    コードラベルを直接呼び出し、
+                    通常の実引数と自由変数を明示的に渡す
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    関数が引数、戻り値、データ構造のフィールドなどから得られ、
+                    呼出し先が実行時に決まる
+                </th>
+                <td><code>apply_closure</code></td>
+                <td>
+                    クロージャからコード位置と環境を取得して間接的に呼び出す
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    コードラベルは判明しているが、
+                    関数値そのものもプログラム内で必要になる
+                </th>
+                <td>
+                    呼出しには<code>apply_direct</code>を使用できるが、
+                    関数値が必要な位置では<code>make_closure</code>を生成する
+                </td>
+                <td>
+                    直接呼出し可能性とクロージャ作成の必要性は別に判定する
+                </td>
+            </tr>
+        </tbody>
+    </table>
 
-<pre><code>let make_adder x =
-    fun y -&gt; x + y</code></pre>
+    <h2>無名関数の変換例</h2>
 
-<p>
-    内側の関数では、<code>y</code>は引数ですが、
-    <code>x</code>は外側の関数で定義された自由変数です。
-</p>
+    <pre><code>let make_adder =
+    fun x -&gt;
+        fun y -&gt;
+            int_add(x, y)
+in
+make_adder</code></pre>
 
-<h2>クロージャ変換</h2>
+    <p>
+        内側の関数では
+        <code>x</code>が自由変数です。
+        二つの関数をトップレベルへ移動します。
+    </p>
 
-<p>
-    自由変数を持つ関数を、トップレベルの関数定義とクロージャの作成に分離します。
-</p>
+    <pre><code>function add_code(y; x) =
+    int_add(x, y)
 
-<pre><code>let make_adder x =
-    fun y -&gt; x + y</code></pre>
+function make_adder_code(x; ) =
+    make_closure add_code [x]
 
-<p>上の関数を、次のように変換します。</p>
+make_closure make_adder_code []</code></pre>
 
-<pre><code>function add_code(closure, y):
-    x = get_free_variable closure 0
-    x + y
+    <p>
+        <code>make_adder_code</code>は自由変数を持ちませんが、
+        プログラムの結果として関数値を返すため、
+        空の環境を持つクロージャを作成します。
+    </p>
 
-function make_adder(x):
-    make_closure add_code [x]</code></pre>
+    <h2>呼出しの変換例</h2>
 
-<p>
-    クロージャには、関数本体のコード位置と自由変数を格納します。
-</p>
+    <h3>既知の関数の直接呼出し</h3>
 
-<pre><code>closure:
-    code = add_code
-    free_variables = [x]</code></pre>
+    <pre><code>let rec add x y =
+    int_add(x, y)
+in
+add a b</code></pre>
 
-<h2>直接呼出しとクロージャ呼出し</h2>
+    <pre><code>function add_code(x, y; ) =
+    int_add(x, y)
 
-<p>
-    呼出し先の関数がコンパイル時に分かる場合は、関数を直接呼び出します。
-</p>
+apply_direct add_code [a; b; ]</code></pre>
 
-<pre><code>let add x y = x + y in
-add 1 2</code></pre>
+    <h3>関数引数のクロージャ呼出し</h3>
 
-<p>上の関数適用は、次のようになります。</p>
+    <pre><code>let apply =
+    fun f x -&gt;
+        f x
+in
+apply</code></pre>
 
-<pre><code>apply_direct add [1; 2]</code></pre>
+    <pre><code>function apply_code(f, x; ) =
+    apply_closure f [x]
 
-<p>
-    呼出し先が実行時に決まる場合は、クロージャを経由して呼び出します。
-</p>
+make_closure apply_code []</code></pre>
 
-<pre><code>let apply f x = f x</code></pre>
+    <p>
+        関数
+        <code>f</code>のコード位置は、
+        <code>apply_code</code>をコンパイルする時点では分かりません。
+        そのため、
+        <code>f x</code>はクロージャ呼出しになります。
+    </p>
 
-<p>上の関数適用は、次のようになります。</p>
+    <h2>大域関数の変換例</h2>
 
-<pre><code>apply_closure f [x]</code></pre>
+    <p>
+        次の大域再帰関数定義を考えます。
+    </p>
 
+    <pre><code>let rec factorial n =
+    if is_zero(n) then
+        1
+    else
+        let previous = pred(n) in
+        let result = factorial previous in
+        int_mul(n, result)
 
+in
+factorial input</code></pre>
 
-<h2>クロージャ変換の結果</h2>
+    <p>
+        関数本体をトップレベル関数定義へ変換し、
+        既知の自己再帰呼出しとプログラム本体からの呼出しを直接呼出しにします。
+    </p>
 
-<p>
-    クロージャ変換が終わると、局所的な関数定義と無名関数は残りません。
-    すべての関数本体はトップレベル関数定義へ移動します。
-</p>
+    <pre><code>function factorial_code(n; ) =
+    if is_zero(n) then
+        1
+    else
+        let previous = pred(n) in
+        let result =
+            apply_direct factorial_code [previous; ]
+        in
+        int_mul(n, result)
 
-<ul>
-    <li>自由変数を持たない既知の関数は直接呼び出す</li>
-    <li>自由変数を持つ関数はクロージャとして作成する</li>
-    <li>呼出し先が既知なら<code>apply_direct</code>を使用する</li>
-    <li>呼出し先が実行時に決まるなら<code>apply_closure</code>を使用する</li>
-    <li>クロージャへ格納する自由変数は明示的なリストになる</li>
-</ul>
+in
+apply_direct factorial_code [input; ]</code></pre>
 
-<p>
-    次のデータ表現の具体化では、
-    <code>make_closure</code>をヒープ確保とフィールド書き込みへ変換し、
-    <code>apply_closure</code>をコードアドレスの読み出しと間接呼出しへ変換します。
-</p>
+    <h2>クロージャ変換で保持する情報</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>情報</th>
+                <th>内容</th>
+                <th>使用箇所</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>コードラベル</th>
+                <td>各関数本体を一意に識別するラベル</td>
+                <td>直接呼出し、クロージャ作成、コード生成</td>
+            </tr>
+            <tr>
+                <th>通常の仮引数</th>
+                <td>ソース関数が明示的に受け取る引数の列</td>
+                <td>呼出し規約、関数本体の変数環境</td>
+            </tr>
+            <tr>
+                <th>自由変数列</th>
+                <td>
+                    関数が外側のスコープから取得する値の列。
+                    クロージャ内の配置順序もこの列によって決定する
+                </td>
+                <td>クロージャ作成、直接呼出し、環境の低水準化</td>
+            </tr>
+            <tr>
+                <th>関数型</th>
+                <td>引数型と戻り値型</td>
+                <td>呼出しの検証、呼出し規約、後続の低水準化</td>
+            </tr>
+            <tr>
+                <th>既知関数集合</th>
+                <td>コードラベルと必要な自由変数がコンパイル時に分かる関数の集合</td>
+                <td><code>apply_direct</code>と<code>apply_closure</code>の選択</td>
+            </tr>
+            <tr>
+                <th>クロージャ必要性</th>
+                <td>関数が値として使用され、実際のクロージャ作成が必要かどうか</td>
+                <td>不要な<code>make_closure</code>の削除</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>クロージャ変換で変化しないもの</h2>
+
+    <ul>
+        <li>大域値定義と局所値定義の評価順序は変更しない</li>
+        <li>プリミティブ演算の種類とオペランド順序は変更しない</li>
+        <li>条件分岐と<code>switch</code>の分岐構造は変更しない</li>
+        <li>ブロックのタグ、フィールド数、フィールド順序は変更しない</li>
+        <li>フィールドの読出しと書込みの意味は変更しない</li>
+        <li>例外送出、例外処理、エフェクト実行の制御上の意味は変更しない</li>
+        <li>K正規化によって明示された左から右の評価順序は保存する</li>
+        <li>変数と関数の型は保存する</li>
+    </ul>
+
+    <h2>クロージャ変換後に成立する条件</h2>
+
+    <ul>
+        <li>すべての関数本体がトップレベル関数定義として表現されている</li>
+        <li>式の中に<code>fun</code>が残っていない</li>
+        <li>式の中に局所的な<code>let rec</code>が残っていない</li>
+        <li>大域的な<code>let rec</code>がトップレベル関数定義へ変換されている</li>
+        <li>各トップレベル関数定義の通常の仮引数が明示されている</li>
+        <li>各トップレベル関数定義が必要とする自由変数の列が明示されている</li>
+        <li>クロージャへ格納する自由変数と、関数定義の自由変数列の順序が一致している</li>
+        <li>関数値が必要な位置には<code>make_closure</code>が生成されている</li>
+        <li>コンパイル時に呼出し先と環境が確定する呼出しは<code>apply_direct</code>になっている</li>
+        <li>呼出し先が実行時に決まる呼出しは<code>apply_closure</code>になっている</li>
+        <li><code>apply_direct</code>には通常の実引数と必要な自由変数が明示されている</li>
+        <li><code>apply_closure</code>の関数部分とすべての実引数が変数である</li>
+        <li>クロージャが不要な既知関数については、不要な<code>make_closure</code>を省略できる</li>
+        <li>すべてのトップレベル関数定義とクロージャ値に型情報が付与されている</li>
+        <li>パターン、<code>match</code>、モジュール宣言、型宣言など、前段階で除去された構文は再導入されていない</li>
+    </ul>
+
+    <h2>次の変換との関係</h2>
+
+    <p>
+        クロージャ中間表現では、クロージャを論理的な
+        「コードラベルと自由変数の組」として表します。
+        次の低水準化では、この論理表現を具体的なヒープ上のデータへ変換します。
+    </p>
+
+    <ul>
+        <li><code>make_closure</code>をクロージャブロックの確保と初期化へ変換する</li>
+        <li><code>apply_direct</code>を既知のコードラベルへの直接呼出しへ変換する</li>
+        <li><code>apply_closure</code>をコード位置の読出し、環境の受渡し、間接呼出しへ変換する</li>
+        <li>トップレベル関数定義の自由変数列を、環境ポインタからのフィールド読出しへ変換する</li>
+        <li>相互再帰クロージャが必要な場合は、確保と初期化を分離して循環参照を構築する</li>
+    </ul>
 </body>
 </html>

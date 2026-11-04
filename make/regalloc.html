@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title></title>
+    <title>レジスタ割当てとコード生成</title>
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
 </head>
@@ -11,1240 +11,1562 @@
     <div class="site-header">
         <button class="theme-toggle" type="button"></button>
     </div>
-</body>
-<h1>レジスタ割当てとコード生成</h1>
-
-<p>
-    仮想レジスタ中間表現に生存変数解析とレジスタ割当てを行い、
-    仮想レジスタを物理レジスタまたはスタックスロットへ配置します。
-    その後、スタックフレームを確定し、基本ブロックを線形化して
-    アセンブリを生成します。
-</p>
-
-<ul>
-    <li>仮想レジスタ中間表現<br>↓ 生存変数解析・レジスタ割当て・spill</li>
-    <li>物理レジスタ中間表現<br>↓ スタックフレーム配置・線形化</li>
-    <li>アセンブリ</li>
-</ul>
-
-<h2>レジスタ割当てとコード生成の規則</h2>
-
-<p>
-    <span class="math">R</span>[<span class="math">P</span>]は、
-    仮想レジスタ中間表現のプログラム<span class="math">P</span>を
-    物理レジスタ中間表現へ変換した結果を表します。
-</p>
-
-<p>
-    各仮想レジスタには、物理レジスタまたはスタックスロットを割り当てます。
-    <span class="math">loc</span>(<span class="math">v</span>)は、
-    仮想レジスタ<span class="math">v</span>の割当て先を表します。
-</p>
-
-<pre><code>loc(v) ::= register(r) | stack(s)</code></pre>
-
-<h3>プログラム全体の変換</h3>
-
-<table>
-    <tr>
-        <th>仮想レジスタ中間表現</th>
-        <td>物理レジスタ中間表現</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">D</span><sub>1</sub> ...
-            <span class="math">D</span><sub>n</sub><code>;</code>
-            <span class="math">F</span><sub>1</sub> ...
-            <span class="math">F</span><sub>m</sub>
-        </th>
-        <td>
-            静的データ
-            <span class="math">D</span><sub>1</sub> ...
-            <span class="math">D</span><sub>n</sub>と、
-            変換した関数
-            <span class="math">R</span>[<span class="math">F</span><sub>1</sub>] ...
-            <span class="math">R</span>[<span class="math">F</span><sub>m</sub>]
-        </td>
-    </tr>
-</table>
-
-<h3>関数定義の変換</h3>
-
-<table>
-    <tr>
-        <th>仮想レジスタ中間表現</th>
-        <td>物理レジスタ中間表現</td>
-    </tr>
-    <tr>
-        <th>
-            <code>function</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>) {</code>
-            <span class="math">B</span><sub>1</sub> ...
-            <span class="math">B</span><sub>m</sub>
-            <code>}</code>
-        </th>
-        <td>
-            <code>function</code>
-            <span class="math">f</span>
-            <code>{</code><br>
-            関数入口処理<br>
-            引数位置から<span class="math">loc</span>(<span class="math">v</span><sub>1</sub>) ...
-            <span class="math">loc</span>(<span class="math">v</span><sub>n</sub>)への並列コピー<br>
-            <span class="math">R</span>[<span class="math">B</span><sub>1</sub>] ...
-            <span class="math">R</span>[<span class="math">B</span><sub>m</sub>]<br>
-            <code>}</code>
-        </td>
-    </tr>
-</table>
-
-<h3>割当て先が物理レジスタの場合</h3>
-
-<table>
-    <tr>
-        <th>割当て</th>
-        <td>変換後</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">loc</span>(<span class="math">v</span>)
-            <code>= register(</code><span class="math">r</span><code>)</code>
-        </th>
-        <td>
-            仮想レジスタ<span class="math">v</span>を
-            物理レジスタ<span class="math">r</span>へ置き換える
-        </td>
-    </tr>
-</table>
-
-<h3>割当て先がスタックスロットの場合</h3>
-
-<table>
-    <tr>
-        <th>仮想レジスタの使用方法</th>
-        <td>変換後</td>
-    </tr>
-    <tr>
-        <th>
-            spillされた<span class="math">v</span>を読み出す
-        </th>
-        <td>
-            命令の直前で一時レジスタへ
-            <code>load</code>する
-        </td>
-    </tr>
-    <tr>
-        <th>
-            spillされた<span class="math">v</span>へ書き込む
-        </th>
-        <td>
-            一時レジスタで値を生成し、命令の直後で
-            <code>store</code>する
-        </td>
-    </tr>
-    <tr>
-        <th>
-            spillされた<span class="math">v</span>を読み書きする
-        </th>
-        <td>
-            命令の直前で<code>load</code>し、
-            命令の直後で<code>store</code>する
-        </td>
-    </tr>
-</table>
-
-<h3>通常命令の変換</h3>
-
-<table>
-    <tr>
-        <th>仮想レジスタ中間表現</th>
-        <td>物理レジスタ中間表現</td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>li</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">i</span>
-        </th>
-        <td>
-            <code>li</code>
-            <span class="math">r</span><sub>d</sub><code>,</code>
-            <span class="math">i</span><br>
-            必要なら
-            <code>store</code>
-            <span class="math">r</span><sub>d</sub><code>,</code>
-            <span class="math">slot</span>(<span class="math">v</span><sub>d</sub>)
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>la</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">L</span>
-        </th>
-        <td>
-            <code>la</code>
-            <span class="math">r</span><sub>d</sub><code>,</code>
-            <span class="math">L</span><br>
-            必要なら
-            <code>store</code>
-            <span class="math">r</span><sub>d</sub><code>,</code>
-            <span class="math">slot</span>(<span class="math">v</span><sub>d</sub>)
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>mov</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>s</sub>
-        </th>
-        <td>
-            必要なら<span class="math">v</span><sub>s</sub>を
-            <span class="math">r</span><sub>s</sub>へ<code>load</code>し、<br>
-            <code>mov</code>
-            <span class="math">r</span><sub>d</sub><code>,</code>
-            <span class="math">r</span><sub>s</sub><br>
-            必要なら<span class="math">r</span><sub>d</sub>を
-            <span class="math">slot</span>(<span class="math">v</span><sub>d</sub>)へ
-            <code>store</code>する
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <span class="math">op</span>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>1</sub><code>,</code>
-            <span class="math">v</span><sub>2</sub>
-        </th>
-        <td>
-            必要なら入力を
-            <span class="math">r</span><sub>1</sub>と
-            <span class="math">r</span><sub>2</sub>へ<code>load</code>し、<br>
-            <span class="math">op</span>
-            <span class="math">r</span><sub>d</sub><code>,</code>
-            <span class="math">r</span><sub>1</sub><code>,</code>
-            <span class="math">r</span><sub>2</sub><br>
-            必要なら結果を
-            <span class="math">slot</span>(<span class="math">v</span><sub>d</sub>)へ
-            <code>store</code>する
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>addi</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>s</sub><code>,</code>
-            <span class="math">i</span>
-        </th>
-        <td>
-            必要なら<span class="math">v</span><sub>s</sub>を
-            <span class="math">r</span><sub>s</sub>へ<code>load</code>し、<br>
-            <code>addi</code>
-            <span class="math">r</span><sub>d</sub><code>,</code>
-            <span class="math">r</span><sub>s</sub><code>,</code>
-            <span class="math">i</span><br>
-            必要なら結果を<code>store</code>する
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>load</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">i</span><code>(</code><span class="math">v</span><sub>b</sub><code>)</code>
-        </th>
-        <td>
-            必要なら<span class="math">v</span><sub>b</sub>を
-            <span class="math">r</span><sub>b</sub>へ<code>load</code>し、<br>
-            <code>load</code>
-            <span class="math">r</span><sub>d</sub><code>,</code>
-            <span class="math">i</span><code>(</code><span class="math">r</span><sub>b</sub><code>)</code><br>
-            必要なら結果を<code>store</code>する
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>store</code>
-            <span class="math">v</span><sub>s</sub><code>,</code>
-            <span class="math">i</span><code>(</code><span class="math">v</span><sub>b</sub><code>)</code>
-        </th>
-        <td>
-            必要なら<span class="math">v</span><sub>s</sub>と
-            <span class="math">v</span><sub>b</sub>を一時レジスタへ<code>load</code>し、<br>
-            <code>store</code>
-            <span class="math">r</span><sub>s</sub><code>,</code>
-            <span class="math">i</span><code>(</code><span class="math">r</span><sub>b</sub><code>)</code>
-        </td>
-    </tr>
-</table>
-
-<h3>関数呼出しの変換</h3>
-
-<table>
-    <tr>
-        <th>仮想レジスタ中間表現</th>
-        <td>物理レジスタ中間表現</td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>call</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            呼出し後にも必要なcaller-saveレジスタを保存し、<br>
-            引数を<code>r1</code>から<code>r4</code>およびスタックへ並列コピーし、<br>
-            <code>call</code> <span class="math">f</span><br>
-            保存したcaller-saveレジスタを復元し、<br>
-            <code>r1</code>を<span class="math">loc</span>(<span class="math">v</span><sub>d</sub>)へ移動する
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>callr</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">v</span><sub>f</sub>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            呼出し後にも必要なcaller-saveレジスタを保存し、<br>
-            クロージャを<code>r13</code>へ配置し、<br>
-            引数を規定の位置へ並列コピーし、<br>
-            コードアドレスを一時レジスタへ読み出して<code>callr</code>し、<br>
-            caller-saveレジスタを復元し、<br>
-            <code>r1</code>を<span class="math">loc</span>(<span class="math">v</span><sub>d</sub>)へ移動する
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>runtime_call</code>
-            <span class="math">v</span><sub>d</sub><code>,</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            引数をランタイムAPIの呼出し規約に従って配置し、<br>
-            <code>call</code> <span class="math">f</span><br>
-            <code>r1</code>を<span class="math">loc</span>(<span class="math">v</span><sub>d</sub>)へ移動する
-        </td>
-    </tr>
-</table>
-
-<h3>終端命令の変換</h3>
-
-<table>
-    <tr>
-        <th>仮想レジスタ中間表現</th>
-        <td>物理レジスタ中間表現</td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>jump</code>
-            <span class="math">L</span>
-        </th>
-        <td>
-            <code>jump</code>
-            <span class="math">L</span>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>branch</code>
-            <span class="math">v</span><code>,</code>
-            <span class="math">L</span><sub>1</sub><code>,</code>
-            <span class="math">L</span><sub>2</sub>
-        </th>
-        <td>
-            必要なら<span class="math">v</span>を
-            <span class="math">r</span>へ<code>load</code>し、<br>
-            <code>brnz</code>
-            <span class="math">r</span><code>,</code>
-            <span class="math">L</span><sub>1</sub><br>
-            <code>jump</code>
-            <span class="math">L</span><sub>2</sub>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>switch</code>
-            <span class="math">v</span>
-            <code>[</code>
-            <span class="math">i</span><sub>1</sub><code>:</code>
-            <span class="math">L</span><sub>1</sub><code>,</code> ...
-            <code>]</code>
-        </th>
-        <td>
-            必要なら<span class="math">v</span>を物理レジスタへ<code>load</code>し、<br>
-            比較命令と条件分岐の列、またはジャンプテーブルへ変換する
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>return</code>
-            <span class="math">v</span>
-        </th>
-        <td>
-            <span class="math">v</span>を<code>r1</code>へ移動し、<br>
-            共通の関数出口ブロックへ<code>jump</code>する
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>tailcall</code>
-            <span class="math">f</span>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            引数を規定の位置へ並列コピーし、<br>
-            callee-saveレジスタと戻りアドレスを復元し、<br>
-            現在のスタックフレームを破棄し、<br>
-            <code>jump</code>
-            <span class="math">f</span>
-        </td>
-    </tr>
-
-    <tr>
-        <th>
-            <code>tailcallr</code>
-            <span class="math">v</span><sub>f</sub>
-            <code>(</code><span class="math">v</span><sub>1</sub><code>,</code> ...
-            <code>,</code> <span class="math">v</span><sub>n</sub><code>)</code>
-        </th>
-        <td>
-            呼出し先アドレスを一時レジスタに保持し、<br>
-            クロージャを<code>r13</code>へ配置し、<br>
-            引数を規定の位置へ並列コピーし、<br>
-            現在のスタックフレームを破棄し、<br>
-            <code>jumpr</code>で呼出し先へ移動する
-        </td>
-    </tr>
-
-    <tr>
-        <th><code>halt</code></th>
-        <td><code>halt</code></td>
-    </tr>
-
-    <tr class="advanced">
-        <th>
-            <code>raise</code>
-            <span class="math">v</span>
-        </th>
-        <td>
-            例外値を<code>r1</code>へ配置し、
-            例外処理ランタイムへ移動する
-        </td>
-    </tr>
-</table>
-
-<h3>スタックフレームの具体化</h3>
-
-<table>
-    <tr>
-        <th>抽象的な位置</th>
-        <td>具体的な位置</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">stack</span>(<span class="math">s</span>)
-        </th>
-        <td>
-            <span class="math">offset</span>(<span class="math">s</span>)
-            <code>(r14)</code>
-        </td>
-    </tr>
-    <tr>
-        <th>保存する<code>r15</code></th>
-        <td>関数ごとに割り当てた戻りアドレス保存位置</td>
-    </tr>
-    <tr>
-        <th>保存するcallee-saveレジスタ</th>
-        <td>関数ごとに割り当てた保存位置</td>
-    </tr>
-    <tr>
-        <th>第5引数以降</th>
-        <td>呼出し用引数領域のスタックスロット</td>
-    </tr>
-</table>
-
-<h3>関数入口と関数出口の生成</h3>
-
-<table>
-    <tr>
-        <th>処理</th>
-        <td>生成する命令</td>
-    </tr>
-    <tr>
-        <th>関数入口</th>
-        <td>
-            <code>addi r14, r14, -frame_size</code><br>
-            <code>store r15, saved_r15_offset(r14)</code><br>
-            使用するcallee-saveレジスタの保存
-        </td>
-    </tr>
-    <tr>
-        <th>関数出口</th>
-        <td>
-            callee-saveレジスタの復元<br>
-            <code>load r15, saved_r15_offset(r14)</code><br>
-            <code>addi r14, r14, frame_size</code><br>
-            <code>ret</code>
-        </td>
-    </tr>
-</table>
-
-<h3>線形化</h3>
-
-<table>
-    <tr>
-        <th>物理レジスタ中間表現</th>
-        <td>アセンブリ</td>
-    </tr>
-    <tr>
-        <th>基本ブロックの集合</th>
-        <td>ラベル付きの線形な命令列</td>
-    </tr>
-    <tr>
-        <th>
-            <code>branch r, L1, L2</code>
-        </th>
-        <td>
-            一方のブロックを直後へ配置し、<br>
-            <code>brz</code>または<code>brnz</code>と
-            必要な<code>jump</code>へ変換する
-        </td>
-    </tr>
-    <tr>
-        <th>直後のブロックへの<code>jump</code></th>
-        <td>削除する</td>
-    </tr>
-    <tr>
-        <th>到達不能な基本ブロック</th>
-        <td>削除する</td>
-    </tr>
-</table>
-
-<h2>生存変数解析</h2>
-
-<p>
-    ある命令位置より後で値が使用される可能性があるとき、
-    その値を保持する仮想レジスタは、その位置で生存しているといいます。
-</p>
-
-<pre><code>li  v1, 10
-li  v2, 20
-add v3, v1, v2
-mul v4, v3, v3
-return v4</code></pre>
-
-<p>
-    <code>v1</code>と<code>v2</code>は、<code>add</code>まで生存しています。
-    <code>add</code>の後では使用されないため、その後は同じ物理レジスタを
-    別の値に再利用できます。
-</p>
-
-<h3>useとdef</h3>
-
-<p>各命令について、使用する仮想レジスタと定義する仮想レジスタを求めます。</p>
-
-<table>
-    <tr>
-        <th>
-            <span class="math">use</span>(<span class="math">I</span>)
-        </th>
-        <td>命令<span class="math">I</span>が読み出す仮想レジスタ</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">def</span>(<span class="math">I</span>)
-        </th>
-        <td>命令<span class="math">I</span>が新しい値を書き込む仮想レジスタ</td>
-    </tr>
-</table>
-
-<table>
-    <tr>
-        <th>命令</th>
-        <td><span class="math">use</span></td>
-        <td><span class="math">def</span></td>
-    </tr>
-    <tr>
-        <th><code>li v1, 10</code></th>
-        <td><code>{}</code></td>
-        <td><code>{v1}</code></td>
-    </tr>
-    <tr>
-        <th><code>mov v1, v2</code></th>
-        <td><code>{v2}</code></td>
-        <td><code>{v1}</code></td>
-    </tr>
-    <tr>
-        <th><code>add v1, v2, v3</code></th>
-        <td><code>{v2, v3}</code></td>
-        <td><code>{v1}</code></td>
-    </tr>
-    <tr>
-        <th><code>load v1, 0(v2)</code></th>
-        <td><code>{v2}</code></td>
-        <td><code>{v1}</code></td>
-    </tr>
-    <tr>
-        <th><code>store v1, 0(v2)</code></th>
-        <td><code>{v1, v2}</code></td>
-        <td><code>{}</code></td>
-    </tr>
-    <tr>
-        <th><code>branch v1, L1, L2</code></th>
-        <td><code>{v1}</code></td>
-        <td><code>{}</code></td>
-    </tr>
-    <tr>
-        <th><code>return v1</code></th>
-        <td><code>{v1}</code></td>
-        <td><code>{}</code></td>
-    </tr>
-</table>
-
-<h3>命令の前後の生存集合</h3>
-
-<table>
-    <tr>
-        <th>
-            <span class="math">live_in</span>(<span class="math">I</span>)
-        </th>
-        <td>命令<span class="math">I</span>の直前で生存する仮想レジスタ</td>
-    </tr>
-    <tr>
-        <th>
-            <span class="math">live_out</span>(<span class="math">I</span>)
-        </th>
-        <td>命令<span class="math">I</span>の直後で生存する仮想レジスタ</td>
-    </tr>
-</table>
-
-<pre><code>live_in(I) =
-    use(I) ∪ (live_out(I) - def(I))</code></pre>
-
-<p>
-    通常命令の<code>live_out</code>は、次の命令の<code>live_in</code>です。
-    基本ブロックの終端では、すべての後続ブロックの
-    <code>live_in</code>の和集合を使用します。
-</p>
-
-<pre><code>live_out(B) =
-    後続ブロックSについて live_in(S) の和集合</code></pre>
-
-<p>
-    ループを含む場合は、生存集合が変化しなくなるまで
-    制御フローグラフを繰り返し解析します。
-</p>
-
-<h2>生存区間</h2>
-
-<p>
-    各仮想レジスタについて、値が定義されてから最後に使用されるまでの範囲を
-    生存区間として求めます。
-</p>
-
-<pre><code>v1: [0, 3]
-v2: [1, 3]
-v3: [3, 5]
-v4: [5, 6]</code></pre>
-
-<p>
-    生存区間が重なる仮想レジスタは、同じ物理レジスタを同時に使用できません。
-</p>
-
-<p>
-    分岐やループを含む場合、単純な命令番号の区間は実際の生存範囲より
-    広くなることがあります。基本実装では安全側に広い区間を使用します。
-</p>
-
-<h2>割当て可能な物理レジスタ</h2>
-
-<p>
-    仮想CPUは16本の物理レジスタを持ちますが、
-    すべてを通常の値へ割り当てられるわけではありません。
-</p>
-
-<table>
-    <tr>
-        <th>レジスタ</th>
-        <td>レジスタ割当てでの扱い</td>
-    </tr>
-    <tr>
-        <th><code>r0</code></th>
-        <td>常に0であるため割り当てない</td>
-    </tr>
-    <tr>
-        <th><code>r1</code>～<code>r4</code></th>
-        <td>引数と戻り値に使用する</td>
-    </tr>
-    <tr>
-        <th><code>r5</code>～<code>r9</code></th>
-        <td>caller-saveの汎用レジスタ</td>
-    </tr>
-    <tr>
-        <th><code>r10</code>～<code>r12</code></th>
-        <td>callee-saveの汎用レジスタ</td>
-    </tr>
-    <tr>
-        <th><code>r13</code></th>
-        <td>クロージャポインタとして予約する</td>
-    </tr>
-    <tr>
-        <th><code>r14</code></th>
-        <td>スタックポインタとして予約する</td>
-    </tr>
-    <tr>
-        <th><code>r15</code></th>
-        <td>戻りアドレスとして予約する</td>
-    </tr>
-</table>
-
-<p>
-    基本実装では、通常の値へ割り当てるレジスタを
-    <code>r5</code>から<code>r12</code>までとします。
-</p>
-
-<h2>レジスタ割当て</h2>
-
-<p>
-    各仮想レジスタを、物理レジスタまたはスタックスロットへ割り当てます。
-</p>
-
-<pre><code>v0 -&gt; r5
-v1 -&gt; r6
-v2 -&gt; stack slot 0
-v3 -&gt; r5</code></pre>
-
-<p>
-    同時に生存する仮想レジスタには、異なる物理レジスタを割り当てます。
-    生存期間が重ならない仮想レジスタは、同じ物理レジスタを共有できます。
-</p>
-
-<h3>線形走査レジスタ割当て</h3>
-
-<p>
-    基本実装では、線形走査によるレジスタ割当てを使用します。
-</p>
-
-<ol>
-    <li>各仮想レジスタの生存区間を求める</li>
-    <li>生存区間を開始位置の順に並べる</li>
-    <li>終了した生存区間を割当て中の集合から取り除く</li>
-    <li>空いている物理レジスタを現在の生存区間へ割り当てる</li>
-    <li>空きがない場合は、いずれかの値をspillする</li>
-</ol>
-
-<p>
-    終了位置が遠い値をspill候補にすると、
-    近くで使用される値を物理レジスタへ残しやすくなります。
-</p>
-
-<h2>関数呼出しと生存値</h2>
-
-<p>
-    関数呼出しは、caller-saveレジスタの内容を変更する可能性があります。
-    呼出し後にも必要な値は、呼出しをまたいで生存しています。
-</p>
-
-<pre><code>add  v3, v1, v2
-call v4, f(v5)
-mul  v6, v3, v4</code></pre>
-
-<p>
-    <code>v3</code>は関数呼出し後にも使用されます。
-    <code>v3</code>をcaller-saveレジスタへ割り当てる場合は、
-    呼出し前に保存し、呼出し後に復元しなければなりません。
-</p>
-
-<p>
-    基本実装では、呼出しをまたいで生存する値を
-    callee-saveレジスタへ優先的に割り当てます。
-    割り当てられない場合はスタックへ退避します。
-</p>
-
-<h2>spill</h2>
-
-<p>
-    利用可能な物理レジスタに収まらない値は、
-    関数のスタックフレーム内にあるspill slotへ配置します。
-</p>
-
-<pre><code>v2 -&gt; spill slot 0
-v7 -&gt; spill slot 1</code></pre>
-
-<p>
-    spillされた値を使用する命令の前には<code>load</code>を挿入し、
-    spillされた値を定義する命令の後には<code>store</code>を挿入します。
-</p>
-
-<h3>spillされた値の読み出し</h3>
-
-<p>次の命令で、<code>v2</code>がspillされているとします。</p>
-
-<pre><code>add v3, v1, v2</code></pre>
-
-<p>一時レジスタへ値を読み出してから演算します。</p>
-
-<pre><code>load temporary, spill_slot_0
-add  r5, r6, temporary</code></pre>
-
-<h3>spillされた値への書き込み</h3>
-
-<p>次の命令で、結果の<code>v3</code>がspillされているとします。</p>
-
-<pre><code>add v3, v1, v2</code></pre>
-
-<p>一時レジスタで計算し、結果をスタックへ書き込みます。</p>
-
-<pre><code>add   temporary, r5, r6
-store temporary, spill_slot_0</code></pre>
-
-<h3>一時レジスタ</h3>
-
-<p>
-    spillとreloadのために必要な一時レジスタは、
-    通常のレジスタ割当てから除外して予約します。
-</p>
-
-<p>
-    基本実装では、<code>r8</code>と<code>r9</code>を
-    spill処理用の一時レジスタとして予約しても構いません。
-    その場合、通常の値へ割り当てるcaller-saveレジスタは
-    <code>r5</code>から<code>r7</code>までになります。
-</p>
-
-<h2>物理レジスタ中間表現</h2>
-
-<p>
-    レジスタ割当てとspill命令の挿入が終わると、
-    仮想レジスタはすべて物理レジスタまたはスタックスロットへ置き換えられます。
-</p>
-
-<table>
-    <tr>
-        <th><span class="math">r</span> ::=</th>
-        <td>物理レジスタ</td>
-    </tr>
-    <tr>
-        <th>
-            <code>r0</code> | <code>r1</code> | ... | <code>r15</code>
-        </th>
-        <td>仮想CPUのレジスタ</td>
-    </tr>
-</table>
-
-<p>
-    物理レジスタ中間表現は、仮想レジスタ中間表現と同じく、
-    関数と基本ブロックの集合として表します。
-</p>
-
-<p>
-    通常命令と終端命令の構造も同じですが、
-    オペランドには物理レジスタを使用します。
-    spill slotのオフセットは、次のスタックフレーム配置で確定します。
-</p>
-
-<h2>呼出し規約への変換</h2>
-
-<p>
-    仮想レジスタ中間表現の関数呼出しを、
-    仮想CPUの呼出し規約に従う命令列へ変換します。
-</p>
-
-<pre><code>call v_result, f(v1, v2, v3)</code></pre>
-
-<p>例えば、次のように変換します。</p>
-
-<pre><code>mov  r1, register_of(v1)
-mov  r2, register_of(v2)
-mov  r3, register_of(v3)
+
+    <h1>レジスタ割当てとコード生成</h1>
+
+    <p>
+        仮想レジスタ中間表現に生存変数解析とレジスタ割当てを行い、
+        各仮想レジスタを物理レジスタまたはスタックスロットへ配置します。
+        その後、spill処理、呼出し規約の具体化、スタックフレーム配置、
+        基本ブロックの線形化を行い、アセンブリを生成します。
+    </p>
+
+    <ul>
+        <li>仮想レジスタ中間表現</li>
+        <li>↓ 生存変数解析・レジスタ割当て・spill</li>
+        <li>物理レジスタ中間表現</li>
+        <li>↓ 呼出し規約の具体化・スタックフレーム配置・線形化</li>
+        <li>アセンブリ</li>
+    </ul>
+
+    <p>
+        レジスタ割当てとコード生成は、関数ごとに実行します。
+        静的データと外部関数宣言は保持し、
+        各関数の仮想レジスタ、基本ブロック、通常命令、終端命令だけを具体化します。
+    </p>
+
+    <h2>物理レジスタ中間表現のプログラム</h2>
+
+    <p>
+        物理レジスタ中間表現のプログラムを
+        <span class="math">P</span>、
+        外部関数宣言を
+        <span class="math">X</span>、
+        静的データを
+        <span class="math">D</span>、
+        物理レジスタ関数を
+        <span class="math">F</span>
+        で表します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">P</span> ::=
+                    <span class="math">X</span><sub>1</sub> ...
+                    <span class="math">X</span><sub>l</sub>
+                    <span class="math">D</span><sub>1</sub> ...
+                    <span class="math">D</span><sub>m</sub>
+                    <span class="math">F</span><sub>1</sub> ...
+                    <span class="math">F</span><sub>n</sub>
+                </th>
+                <td>物理レジスタプログラム</td>
+                <td>
+                    外部関数宣言、静的データ、および物理レジスタへ割り当てられた
+                    関数定義の集合
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>物理レジスタ関数の構文</h2>
+
+    <p>
+        物理レジスタ関数は、入口ブロック、基本ブロックの集合、
+        スタックフレーム情報、使用するcallee-saveレジスタの集合を持ちます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">F</span> ::=
+                    <code>function</code>
+                    <span class="math">f</span>
+                    <code>entry</code>
+                    <span class="math">L</span><sub>entry</sub>
+                    <code>frame</code>
+                    <span class="math">frame</span>
+                    <code>{</code>
+                    <span class="math">B</span><sub>1</sub> ...
+                    <span class="math">B</span><sub>n</sub>
+                    <code>}</code>
+                </th>
+                <td>物理レジスタ関数</td>
+                <td>
+                    物理レジスタ命令、スタック操作、呼出し処理を含む
+                    基本ブロックの集合
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>基本ブロックの構文</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">B</span> ::=
+                    <span class="math">L</span><code>:</code>
+                    <span class="math">I</span><sub>1</sub> ...
+                    <span class="math">I</span><sub>n</sub>
+                    <span class="math">T</span>
+                </th>
+                <td>物理レジスタ基本ブロック</td>
+                <td>
+                    ラベル、物理レジスタ通常命令列、および終端命令からなる
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>物理レジスタ</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>レジスタ</th>
+                <th>用途</th>
+                <th>レジスタ割当てでの扱い</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>r0</code></th>
+                <td>常に0を保持するゼロレジスタ</td>
+                <td>通常の値には割り当てない</td>
+            </tr>
+            <tr>
+                <th><code>r1</code>から<code>r4</code></th>
+                <td>第1引数から第4引数。<code>r1</code>は戻り値にも使用する</td>
+                <td>呼出し規約用として予約する</td>
+            </tr>
+            <tr>
+                <th><code>r5</code>から<code>r9</code></th>
+                <td>caller-saveの汎用レジスタ</td>
+                <td>呼出しをまたがない値へ優先的に割り当てる</td>
+            </tr>
+            <tr>
+                <th><code>r10</code>から<code>r12</code></th>
+                <td>callee-saveの汎用レジスタ</td>
+                <td>呼出しをまたいで生存する値へ優先的に割り当てる</td>
+            </tr>
+            <tr>
+                <th><code>r13</code></th>
+                <td>クロージャ環境ポインタ</td>
+                <td>通常の値には割り当てない</td>
+            </tr>
+            <tr>
+                <th><code>r14</code></th>
+                <td>スタックポインタ</td>
+                <td>通常の値には割り当てない</td>
+            </tr>
+            <tr>
+                <th><code>r15</code></th>
+                <td>戻りアドレス</td>
+                <td>通常の値には割り当てない</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        基本仕様では
+        <code>r5</code>から
+        <code>r12</code>までを割当て候補とします。
+        spill処理専用の一時レジスタを予約する場合は、
+        予約したレジスタを割当て候補から除外します。
+    </p>
+
+    <h2>割当て先</h2>
+
+    <p>
+        仮想レジスタ
+        <span class="math">v</span>の割当て先を
+        <span class="math">loc</span><code>(</code><span class="math">v</span><code>)</code>
+        と表します。
+    </p>
+
+    <pre><code>loc(v) ::= register(r) | stack(s)</code></pre>
+
+    <table>
+        <thead>
+            <tr>
+                <th>割当て先</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>register(</code><span class="math">r</span><code>)</code>
+                </th>
+                <td>
+                    仮想レジスタの値を物理レジスタ
+                    <span class="math">r</span>へ保持する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>stack(</code><span class="math">s</span><code>)</code>
+                </th>
+                <td>
+                    仮想レジスタの値を抽象スタックスロット
+                    <span class="math">s</span>へ保持する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>生存変数解析</h2>
+
+    <p>
+        ある命令位置より後で値が使用される可能性がある場合、
+        その値を保持する仮想レジスタは、その位置で生存しています。
+        各命令について使用集合と定義集合を求めます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>集合</th>
+                <th>定義</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">use</span><code>(</code><span class="math">I</span><code>)</code>
+                </th>
+                <td>命令<span class="math">I</span>が読み出す仮想レジスタの集合</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">def</span><code>(</code><span class="math">I</span><code>)</code>
+                </th>
+                <td>命令<span class="math">I</span>が新しい値を書き込む仮想レジスタの集合</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">live_in</span><code>(</code><span class="math">I</span><code>)</code>
+                </th>
+                <td>命令<span class="math">I</span>の直前で生存する仮想レジスタの集合</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">live_out</span><code>(</code><span class="math">I</span><code>)</code>
+                </th>
+                <td>命令<span class="math">I</span>の直後で生存する仮想レジスタの集合</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <pre><code>live_in(I) =
+    use(I) ∪ (live_out(I) - def(I))
+
+live_out(B) =
+    後続ブロック S について live_in(S) の和集合</code></pre>
+
+    <p>
+        ループを含む場合は、すべての生存集合が変化しなくなるまで
+        制御フローグラフを反復して解析します。
+    </p>
+
+    <h2>命令の使用集合と定義集合</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>命令</th>
+                <th><span class="math">use</span></th>
+                <th><span class="math">def</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>li vd, w</code></th>
+                <td>∅</td>
+                <td>{<code>vd</code>}</td>
+            </tr>
+            <tr>
+                <th><code>la vd, L</code></th>
+                <td>∅</td>
+                <td>{<code>vd</code>}</td>
+            </tr>
+            <tr>
+                <th><code>mov vd, vs</code></th>
+                <td>{<code>vs</code>}</td>
+                <td>{<code>vd</code>}</td>
+            </tr>
+            <tr>
+                <th><code>op vd, v1, v2</code></th>
+                <td>{<code>v1</code>, <code>v2</code>}</td>
+                <td>{<code>vd</code>}</td>
+            </tr>
+            <tr>
+                <th><code>unop vd, vs</code></th>
+                <td>{<code>vs</code>}</td>
+                <td>{<code>vd</code>}</td>
+            </tr>
+            <tr>
+                <th><code>opi vd, vs, i</code></th>
+                <td>{<code>vs</code>}</td>
+                <td>{<code>vd</code>}</td>
+            </tr>
+            <tr>
+                <th><code>load vd, i(vb)</code></th>
+                <td>{<code>vb</code>}</td>
+                <td>{<code>vd</code>}</td>
+            </tr>
+            <tr>
+                <th><code>store vs, i(vb)</code></th>
+                <td>{<code>vs</code>, <code>vb</code>}</td>
+                <td>∅</td>
+            </tr>
+            <tr>
+                <th><code>load_global vd, g</code></th>
+                <td>∅</td>
+                <td>{<code>vd</code>}</td>
+            </tr>
+            <tr>
+                <th><code>store_global g, vs</code></th>
+                <td>{<code>vs</code>}</td>
+                <td>∅</td>
+            </tr>
+            <tr>
+                <th><code>call vd, f(v1, ..., vn)</code></th>
+                <td>{<code>v1</code>, ..., <code>vn</code>}</td>
+                <td>{<code>vd</code>}</td>
+            </tr>
+            <tr>
+                <th><code>callr vd, vf(v1, ..., vn)</code></th>
+                <td>{<code>vf</code>, <code>v1</code>, ..., <code>vn</code>}</td>
+                <td>{<code>vd</code>}</td>
+            </tr>
+            <tr>
+                <th><code>runtime_call vd, f(v1, ..., vn)</code></th>
+                <td>{<code>v1</code>, ..., <code>vn</code>}</td>
+                <td>{<code>vd</code>}</td>
+            </tr>
+            <tr>
+                <th><code>jump L</code></th>
+                <td>∅</td>
+                <td>∅</td>
+            </tr>
+            <tr>
+                <th><code>branch v, L1, L2</code></th>
+                <td>{<code>v</code>}</td>
+                <td>∅</td>
+            </tr>
+            <tr>
+                <th><code>switch v [...]</code></th>
+                <td>{<code>v</code>}</td>
+                <td>∅</td>
+            </tr>
+            <tr>
+                <th><code>return v</code></th>
+                <td>{<code>v</code>}</td>
+                <td>∅</td>
+            </tr>
+            <tr>
+                <th><code>tailcall f(v1, ..., vn)</code></th>
+                <td>{<code>v1</code>, ..., <code>vn</code>}</td>
+                <td>∅</td>
+            </tr>
+            <tr>
+                <th><code>tailcallr vf(v1, ..., vn)</code></th>
+                <td>{<code>vf</code>, <code>v1</code>, ..., <code>vn</code>}</td>
+                <td>∅</td>
+            </tr>
+            <tr>
+                <th><code>halt v</code></th>
+                <td>{<code>v</code>}</td>
+                <td>∅</td>
+            </tr>
+            <tr class="advanced">
+                <th><code>raise v</code></th>
+                <td>{<code>v</code>}</td>
+                <td>∅</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>生存区間</h2>
+
+    <p>
+        各仮想レジスタについて、値が定義されてから最後に使用されるまでの
+        命令位置を生存区間として求めます。
+        生存区間が重なる仮想レジスタは、
+        同じ物理レジスタを同時に使用できません。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>情報</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><span class="math">start</span><code>(v)</code></th>
+                <td>仮想レジスタ<span class="math">v</span>が最初に定義または必要になる位置</td>
+            </tr>
+            <tr>
+                <th><span class="math">end</span><code>(v)</code></th>
+                <td>仮想レジスタ<span class="math">v</span>が最後に生存する位置</td>
+            </tr>
+            <tr>
+                <th><span class="math">crosses_call</span><code>(v)</code></th>
+                <td>生存区間内に関数呼出しが存在するかどうか</td>
+            </tr>
+            <tr class="advanced">
+                <th><span class="math">is_gc_root</span><code>(v)</code></th>
+                <td>発展　仮想レジスタがGCで追跡すべき値を保持するかどうか</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        分岐やループを含む場合、単純な命令番号による一つの区間は、
+        実際の生存範囲より広くなることがあります。
+        基本実装では、安全側に広い区間を使用します。
+    </p>
+
+    <h2>線形走査レジスタ割当て</h2>
+
+    <p>
+        基本実装では、線形走査法を使用します。
+        生存区間を開始位置順に処理し、
+        終了した区間が使用していた物理レジスタを再利用します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>段階</th>
+                <th>処理</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>1</th>
+                <td>各仮想レジスタの生存区間を求める</td>
+            </tr>
+            <tr>
+                <th>2</th>
+                <td>生存区間を開始位置の昇順に並べる</td>
+            </tr>
+            <tr>
+                <th>3</th>
+                <td>現在位置より前に終了した区間をactive集合から除去する</td>
+            </tr>
+            <tr>
+                <th>4</th>
+                <td>空いている物理レジスタを現在の区間へ割り当てる</td>
+            </tr>
+            <tr>
+                <th>5</th>
+                <td>空きがない場合は現在またはactive集合内の区間をspillする</td>
+            </tr>
+            <tr>
+                <th>6</th>
+                <td>決定した割当て先を<span class="math">loc</span><code>(v)</code>へ記録する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        呼出しをまたいで生存する値には
+        <code>r10</code>から
+        <code>r12</code>までのcallee-saveレジスタを優先します。
+        呼出しをまたがない値には
+        <code>r5</code>から
+        <code>r9</code>までのcaller-saveレジスタを優先します。
+    </p>
+
+    <p>
+        利用できる物理レジスタがない場合は、
+        終了位置が最も遠い区間をspill候補とします。
+        現在の区間の終了位置がspill候補より遠い場合は、
+        現在の区間を直接spillできます。
+    </p>
+
+    <h2>レジスタ割当てとコード生成</h2>
+
+    <p>
+        仮想レジスタプログラム
+        <span class="math">P</span>のレジスタ割当てを
+        <span class="math">R</span><code>⟦</code><span class="math">P</span><code>⟧</code>
+        と表します。
+        命令の各入力オペランドを物理レジスタへ用意し、
+        命令結果を物理レジスタまたはspillスロットへ保存します。
+    </p>
+
+    <h2>プログラム全体の変換</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>仮想レジスタ中間表現</th>
+                <th>物理レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">X</span><sub>1</sub> ...
+                    <span class="math">X</span><sub>l</sub>
+                    <span class="math">D</span><sub>1</sub> ...
+                    <span class="math">D</span><sub>m</sub>
+                    <span class="math">F</span><sub>1</sub> ...
+                    <span class="math">F</span><sub>n</sub>
+                </th>
+                <td>
+                    <span class="math">X</span><sub>1</sub> ...
+                    <span class="math">X</span><sub>l</sub>
+                    <span class="math">D</span><sub>1</sub> ...
+                    <span class="math">D</span><sub>m</sub>
+                    <span class="math">R</span><code>⟦</code><span class="math">F</span><sub>1</sub><code>⟧</code> ...
+                    <span class="math">R</span><code>⟦</code><span class="math">F</span><sub>n</sub><code>⟧</code>
+                </td>
+                <td>
+                    外部関数宣言と静的データを保持し、
+                    各関数を独立に解析して変換する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>外部関数宣言と静的データの変換</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>仮想レジスタ中間表現</th>
+                <th>物理レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>external</code>
+                    <span class="math">f</span>
+                    <code>=</code>
+                    <span class="math">name</span>
+                </th>
+                <td>
+                    <code>external</code>
+                    <span class="math">f</span>
+                    <code>=</code>
+                    <span class="math">name</span>
+                </td>
+                <td>外部関数宣言をそのまま保持する</td>
+            </tr>
+            <tr>
+                <th>文字列、浮動小数点数、静的ブロック</th>
+                <td>同じラベルと内容を持つ静的データ</td>
+                <td>静的データをそのまま保持する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>関数定義の変換</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>仮想レジスタ中間表現</th>
+                <th>物理レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>function</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>n</sub>
+                    <code>) entry</code>
+                    <span class="math">L</span><sub>entry</sub>
+                    <code>{</code>
+                    <span class="math">B</span><sub>1</sub> ...
+                    <span class="math">B</span><sub>m</sub>
+                    <code>}</code>
+                </th>
+                <td>
+                    <pre><code>function f entry L_entry frame frame_info {
+L_entry:
+    function_prologue
+    parallel_copy argument_locations
+                  to loc(v1), ..., loc(vn)
+    R⟦entry instructions⟧
+    R⟦entry terminator⟧
+
+R⟦B2⟧
+...
+R⟦Bm⟧
+
+L_exit:
+    function_epilogue
+    ret
+}</code></pre>
+                </td>
+                <td>
+                    生存変数解析とレジスタ割当てを行い、
+                    入口処理、引数受取り、spill処理、出口処理を追加する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>仮引数の変換</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>仮引数</th>
+                <th>到着位置</th>
+                <th>関数入口での変換</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>第1引数から第4引数</th>
+                <td><code>r1</code>から<code>r4</code></td>
+                <td>
+                    到着レジスタから
+                    <span class="math">loc</span><code>(v)</code>へ並列コピーする
+                </td>
+            </tr>
+            <tr>
+                <th>第5引数以降</th>
+                <td>呼出し元が用意したスタック引数領域</td>
+                <td>
+                    引数スロットから
+                    <span class="math">loc</span><code>(v)</code>へ読み込む
+                </td>
+            </tr>
+            <tr>
+                <th>クロージャ環境</th>
+                <td><code>r13</code></td>
+                <td>
+                    必要な場合は
+                    <code>r13</code>から対応する割当て先へコピーする
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>spillの一般規則</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>仮想レジスタの使用方法</th>
+                <th>変換</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">loc</span><code>(v) = register(r)</code>
+                </th>
+                <td>
+                    命令中の仮想レジスタ
+                    <span class="math">v</span>を物理レジスタ
+                    <span class="math">r</span>へ置き換える
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">loc</span><code>(v) = stack(s)</code>で
+                    <span class="math">v</span>を読み出す
+                </th>
+                <td>
+                    命令の直前で
+                    <code>load temporary, slot(s)(r14)</code>
+                    を生成し、命令では
+                    <code>temporary</code>を使用する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">loc</span><code>(v) = stack(s)</code>で
+                    <span class="math">v</span>を定義する
+                </th>
+                <td>
+                    命令結果を一時レジスタへ生成し、
+                    直後で
+                    <code>store temporary, slot(s)(r14)</code>
+                    を生成する
+                </td>
+            </tr>
+            <tr>
+                <th>同じ命令で複数のspill値を使用する</th>
+                <td>
+                    各入力を異なる一時レジスタへ読み込み、
+                    命令終了後に必要な結果だけをspillスロットへ保存する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>通常命令の変換</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>仮想レジスタ中間表現</th>
+                <th>物理レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>li</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">w</span>
+                </th>
+                <td>
+                    <pre><code>li r_d, w
+必要なら:
+store r_d, slot(v_d)(r14)</code></pre>
+                </td>
+                <td>即値を宛先レジスタへ読み込み、spill先なら保存する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>la</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">L</span>
+                </th>
+                <td>
+                    <pre><code>la r_d, L
+必要なら:
+store r_d, slot(v_d)(r14)</code></pre>
+                </td>
+                <td>ラベルアドレスを読み込み、spill先なら保存する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>mov</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>s</sub>
+                </th>
+                <td>
+                    <pre><code>必要なら:
+load r_s, slot(v_s)(r14)
+
+mov r_d, r_s
+
+必要なら:
+store r_d, slot(v_d)(r14)</code></pre>
+                </td>
+                <td>
+                    入力を物理レジスタへ用意し、
+                    宛先へコピーして必要ならspillスロットへ保存する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">op</span>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code>
+                    <span class="math">v</span><sub>2</sub>
+                </th>
+                <td>
+                    <pre><code>必要なら:
+load r_1, slot(v_1)(r14)
+load r_2, slot(v_2)(r14)
+
+op r_d, r_1, r_2
+
+必要なら:
+store r_d, slot(v_d)(r14)</code></pre>
+                </td>
+                <td>二つの入力を用意して演算し、必要なら結果をspillする</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">unop</span>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>s</sub>
+                </th>
+                <td>
+                    <pre><code>必要なら:
+load r_s, slot(v_s)(r14)
+
+unop r_d, r_s
+
+必要なら:
+store r_d, slot(v_d)(r14)</code></pre>
+                </td>
+                <td>入力を用意して単項演算し、必要なら結果をspillする</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">opi</span>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>s</sub><code>,</code>
+                    <span class="math">i</span>
+                </th>
+                <td>
+                    <pre><code>必要なら:
+load r_s, slot(v_s)(r14)
+
+opi r_d, r_s, i
+
+必要なら:
+store r_d, slot(v_d)(r14)</code></pre>
+                </td>
+                <td>入力レジスタと即値を使って演算する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>load</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">i</span><code>(</code><span class="math">v</span><sub>b</sub><code>)</code>
+                </th>
+                <td>
+                    <pre><code>必要なら:
+load r_b, slot(v_b)(r14)
+
+load r_d, i(r_b)
+
+必要なら:
+store r_d, slot(v_d)(r14)</code></pre>
+                </td>
+                <td>基底アドレスを用意してメモリを読み出す</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>store</code>
+                    <span class="math">v</span><sub>s</sub><code>,</code>
+                    <span class="math">i</span><code>(</code><span class="math">v</span><sub>b</sub><code>)</code>
+                </th>
+                <td>
+                    <pre><code>必要なら:
+load r_s, slot(v_s)(r14)
+load r_b, slot(v_b)(r14)
+
+store r_s, i(r_b)</code></pre>
+                </td>
+                <td>書込み値と基底アドレスを用意してメモリへ書き込む</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>load_global</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">g</span>
+                </th>
+                <td>
+                    <pre><code>la temporary, g
+load r_d, 0(temporary)
+
+必要なら:
+store r_d, slot(v_d)(r14)</code></pre>
+                </td>
+                <td>大域値のラベルから値を読み出す</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>store_global</code>
+                    <span class="math">g</span><code>,</code>
+                    <span class="math">v</span><sub>s</sub>
+                </th>
+                <td>
+                    <pre><code>必要なら:
+load r_s, slot(v_s)(r14)
+
+la temporary, g
+store r_s, 0(temporary)</code></pre>
+                </td>
+                <td>大域値のラベルが指す領域へ値を書き込む</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>関数呼出しの変換</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>仮想レジスタ中間表現</th>
+                <th>物理レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>call</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    <pre><code>save_live_caller_save_registers
+
+parallel_copy loc(v1), ..., loc(vn)
+              to r1, ..., r4,
+                 outgoing_argument_slots
+
 call f
-mov  register_of(v_result), r1</code></pre>
 
-<p>
-    第5引数以降は、呼出し規約に従ってスタックへ配置します。
-</p>
+move r1 to loc(v_d)
+restore_live_caller_save_registers</code></pre>
+                </td>
+                <td>
+                    生存するcaller-save値を保護し、
+                    引数を配置して直接呼出しを行い、
+                    戻り値を宛先へ保存する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>callr</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">v</span><sub>f</sub>
+                    <code>(</code>
+                    <span class="math">v</span><sub>env</sub><code>,</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    <pre><code>save_live_caller_save_registers
 
-<h3>クロージャ呼出し</h3>
+move loc(v_env) to r13
+move loc(v_f) to temporary_code
+parallel_copy loc(v1), ..., loc(vn)
+              to r1, ..., r4,
+                 outgoing_argument_slots
 
-<p>
-    クロージャ呼出しでは、クロージャポインタを<code>r13</code>へ配置します。
-</p>
+callr temporary_code
 
-<pre><code>mov   r13, closure_register
-load  temporary, 0(r13)
-callr temporary</code></pre>
+move r1 to loc(v_d)
+restore_live_caller_save_registers</code></pre>
+                </td>
+                <td>
+                    クロージャ環境を
+                    <code>r13</code>へ置き、
+                    コードアドレスを保持して間接呼出しを行う
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>runtime_call</code>
+                    <span class="math">v</span><sub>d</sub><code>,</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    <pre><code>save_live_caller_save_registers
 
-<h3>caller-saveレジスタ</h3>
+parallel_copy loc(v1), ..., loc(vn)
+              to runtime_argument_locations
 
-<p>
-    呼出し後にも必要なcaller-saveレジスタの値は、
-    呼出し前にスタックへ保存し、呼出し後に復元します。
-</p>
+call f
 
-<pre><code>store r5, caller_save_slot(r14)
-call  f
-load  r5, caller_save_slot(r14)</code></pre>
+move r1 to loc(v_d)
+restore_live_caller_save_registers</code></pre>
+                </td>
+                <td>
+                    ランタイムAPIの呼出し規約に従って引数を配置する。
+                    GCセーフポイントの場合は、生存するGCルートも記録する
+                </td>
+            </tr>
+            <tr>
+                <th>戻り値を持たない呼出し</th>
+                <td>
+                    戻り値を
+                    <span class="math">loc</span><code>(v_d)</code>へ移動する処理を省略する
+                </td>
+                <td>副作用だけを目的とする呼出しを処理する</td>
+            </tr>
+        </tbody>
+    </table>
 
-<h3>callee-saveレジスタ</h3>
+    <p>
+        戻り値をspillスロットへ配置する場合は、
+        caller-saveレジスタを復元する前に
+        <code>r1</code>からspillスロットへ保存します。
+        これにより、復元処理によって戻り値を失いません。
+    </p>
 
-<p>
-    関数内で使用するcallee-saveレジスタは、
-    関数入口で保存し、すべての通常の関数出口で復元します。
-</p>
+    <h2>終端命令の変換</h2>
 
-<h2>並列コピー</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>仮想レジスタ中間表現</th>
+                <th>物理レジスタ中間表現</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>jump</code>
+                    <span class="math">L</span>
+                </th>
+                <td>
+                    <code>jump</code>
+                    <span class="math">L</span>
+                </td>
+                <td>分岐先ラベルをそのまま保持する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>branch</code>
+                    <span class="math">v</span><code>,</code>
+                    <span class="math">L</span><sub>true</sub><code>,</code>
+                    <span class="math">L</span><sub>false</sub>
+                </th>
+                <td>
+                    <pre><code>必要なら:
+load r_condition, slot(v)(r14)
 
-<p>
-    関数の引数をレジスタへ配置するときは、
-    複数のコピーを同時に行う並列コピーとして扱います。
-</p>
+brnz r_condition, L_true
+jump L_false</code></pre>
+                </td>
+                <td>条件値を物理レジスタへ用意し、条件分岐と無条件分岐へ変換する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>switch</code>
+                    <span class="math">v</span>
+                    <code>[</code>
+                    <span class="math">w</span><sub>1</sub><code>:</code>
+                    <span class="math">L</span><sub>1</sub><code>,</code> ...
+                    <code>, default:</code>
+                    <span class="math">L</span><sub>d</sub>
+                    <code>]</code>
+                </th>
+                <td>
+                    判定値を物理レジスタへ用意し、
+                    比較命令と条件分岐の列へ変換する
+                </td>
+                <td>
+                    各比較値を順番に検査し、
+                    一致しなければ既定分岐へ移動する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>return</code>
+                    <span class="math">v</span>
+                </th>
+                <td>
+                    <pre><code>move loc(v) to r1
+jump L_exit</code></pre>
+                </td>
+                <td>
+                    戻り値を
+                    <code>r1</code>へ配置し、共通の関数出口へ移動する
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>tailcall</code>
+                    <span class="math">f</span>
+                    <code>(</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    <pre><code>parallel_copy loc(v1), ..., loc(vn)
+              to tail_argument_locations
 
-<p>例えば、次の引数配置を考えます。</p>
+restore_callee_save_registers
+restore r15
+destroy_current_frame
+jump f</code></pre>
+                </td>
+                <td>
+                    引数を安全な位置へ配置してから現在のフレームを破棄し、
+                    呼出し先へジャンプする
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>tailcallr</code>
+                    <span class="math">v</span><sub>f</sub>
+                    <code>(</code>
+                    <span class="math">v</span><sub>env</sub><code>,</code>
+                    <span class="math">v</span><sub>1</sub><code>,</code> ...
+                    <code>,</code>
+                    <span class="math">v</span><sub>n</sub><code>)</code>
+                </th>
+                <td>
+                    <pre><code>move loc(v_f) to temporary_code
+move loc(v_env) to temporary_environment
+parallel_copy loc(v1), ..., loc(vn)
+              to tail_argument_locations
 
-<pre><code>r1 &lt;- r2
-r2 &lt;- r1</code></pre>
+restore_callee_save_registers
+restore r15
+destroy_current_frame
 
-<p>
-    単純に上から実行すると元の<code>r1</code>が失われます。
-    そのため、一時レジスタを使用します。
-</p>
+mov r13, temporary_environment
+jumpr temporary_code</code></pre>
+                </td>
+                <td>
+                    コードアドレスと環境をフレーム破棄前に保護し、
+                    間接ジャンプする
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>halt</code>
+                    <span class="math">v</span>
+                </th>
+                <td>
+                    必要なら値を規定の終了値レジスタへ移動し、
+                    <code>halt</code>を生成する
+                </td>
+                <td>プログラムを停止する</td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>raise</code>
+                    <span class="math">v</span>
+                </th>
+                <td>
+                    <pre><code>move loc(v) to r1
+jump runtime_raise</code></pre>
+                </td>
+                <td>発展　例外値を規定位置へ配置し、例外ランタイムへ移動する</td>
+            </tr>
+        </tbody>
+    </table>
 
-<pre><code>mov temporary, r1
+    <h2><code>switch</code>の具体化</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>条件</th>
+                <th>変換方式</th>
+                <th>生成する処理</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>分岐数が少ない</th>
+                <td>線形な比較列</td>
+                <td>
+                    各値について
+                    <code>li</code>、
+                    <code>seq</code>、
+                    <code>brnz</code>を生成し、
+                    最後に既定分岐へジャンプする
+                </td>
+            </tr>
+            <tr>
+                <th>分岐数が多いが値が疎である</th>
+                <td>比較木</td>
+                <td>
+                    値の大小比較による二分探索形式の分岐木を生成できる
+                </td>
+            </tr>
+            <tr class="advanced">
+                <th>発展　値が十分に密である</th>
+                <td>ジャンプテーブル</td>
+                <td>
+                    最小値と最大値の範囲検査後に、
+                    テーブルから分岐先アドレスを読み出して間接ジャンプする
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>並列コピー</h2>
+
+    <p>
+        関数引数、戻り値、関数入口の仮引数を移動するときは、
+        複数のコピーを同時に行う並列コピーとして扱います。
+        コピー元を上書きしない順序へ並べ替え、
+        循環がある場合だけ一時領域を使用します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>コピー関係</th>
+                <th>変換</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>循環がない</th>
+                <td>コピー元として今後必要な値を上書きしない順序で<code>mov</code>する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>r1 &lt;- r2</code>、
+                    <code>r2 &lt;- r1</code>
+                </th>
+                <td>
+                    <pre><code>mov temporary, r1
 mov r1, r2
 mov r2, temporary</code></pre>
+                </td>
+            </tr>
+            <tr>
+                <th>物理レジスタとスタックスロットの循環</th>
+                <td>一時レジスタまたは専用の一時スタックスロットで循環を切る</td>
+            </tr>
+            <tr>
+                <th>コピー元とコピー先が同じ</th>
+                <td>コピーを削除する</td>
+            </tr>
+        </tbody>
+    </table>
 
-<p>
-    コピー関係に循環がなければ、元の値を上書きしない順序でコピーします。
-    循環がある場合だけ一時レジスタまたは一時スタックスロットを使用します。
-</p>
+    <h2>スタックフレーム</h2>
 
-<h2>スタックフレーム配置</h2>
+    <p>
+        スタックフレームは、保存領域、spill領域、
+        caller-save領域、一時領域、呼出し用引数領域から構成します。
+    </p>
 
-<p>
-    各関数について、保存領域、spill領域、呼出し用領域の位置を決定します。
-</p>
+    <table>
+        <thead>
+            <tr>
+                <th>領域</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>戻りアドレス保存領域</th>
+                <td>関数入口時の<code>r15</code></td>
+            </tr>
+            <tr>
+                <th>callee-save保存領域</th>
+                <td>関数内で使用する<code>r10</code>から<code>r12</code></td>
+            </tr>
+            <tr>
+                <th>spill領域</th>
+                <td>物理レジスタへ割り当てられなかった仮想レジスタ</td>
+            </tr>
+            <tr>
+                <th>caller-save保存領域</th>
+                <td>関数呼出しをまたいで保持するcaller-saveレジスタ</td>
+            </tr>
+            <tr>
+                <th>並列コピー一時領域</th>
+                <td>レジスタだけでは循環を解消できない並列コピーに使用する</td>
+            </tr>
+            <tr>
+                <th>呼出し用引数領域</th>
+                <td>現在の関数が行う呼出しの第5引数以降を配置する</td>
+            </tr>
+            <tr class="advanced">
+                <th>GCルート情報</th>
+                <td>発展　GCセーフポイントでポインタを保持するスロットを記録する</td>
+            </tr>
+        </tbody>
+    </table>
 
-<table>
-    <tr>
-        <th>領域</th>
-        <td>内容</td>
-    </tr>
-    <tr>
-        <th>保存領域</th>
-        <td>戻りアドレスと使用するcallee-saveレジスタ</td>
-    </tr>
-    <tr>
-        <th>spill領域</th>
-        <td>物理レジスタへ割り当てられなかった値</td>
-    </tr>
-    <tr>
-        <th>caller-save領域</th>
-        <td>関数呼出しをまたいで保持するcaller-saveレジスタ</td>
-    </tr>
-    <tr>
-        <th>引数領域</th>
-        <td>第5引数以降の受渡しに使用する領域</td>
-    </tr>
-    <tr class="advanced">
-        <th>GC情報</th>
-        <td>発展　ヒープポインタを保持するスタックスロット</td>
-    </tr>
-</table>
+    <pre><code>frame_size =
+    saved_return_address_words
+    + saved_callee_register_words
+    + spill_slot_words
+    + caller_save_slot_words
+    + temporary_slot_words
+    + outgoing_argument_words
+    + padding_words</code></pre>
 
-<p>
-    スタックフレームの大きさは、必要な全領域のワード数から決定します。
-</p>
+    <p>
+        フレーム全体は、VMの呼出し規約が要求する境界へ整列します。
+        スタックスロットは
+        <code>r14</code>からのワード単位オフセットへ変換します。
+    </p>
 
-<pre><code>frame_size =
-    saved_register_count
-    + spill_slot_count
-    + caller_save_slot_count
-    + outgoing_argument_count</code></pre>
+    <h2>抽象スタックスロットの具体化</h2>
 
-<h3>スタックスロットの配置</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>抽象的な位置</th>
+                <th>具体的な位置</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>stack(</code><span class="math">s</span><code>)</code>
+                </th>
+                <td>
+                    <span class="math">offset</span><code>(</code><span class="math">s</span><code>)(r14)</code>
+                </td>
+            </tr>
+            <tr>
+                <th>保存する<code>r15</code></th>
+                <td><code>saved_r15_offset(r14)</code></td>
+            </tr>
+            <tr>
+                <th>保存するcallee-saveレジスタ<span class="math">r</span></th>
+                <td><code>saved_offset(r)(r14)</code></td>
+            </tr>
+            <tr>
+                <th>caller-saveレジスタ<span class="math">r</span>の保存位置</th>
+                <td><code>caller_save_offset(r)(r14)</code></td>
+            </tr>
+            <tr>
+                <th>第5引数以降</th>
+                <td><code>outgoing_argument_offset(i)(r14)</code></td>
+            </tr>
+        </tbody>
+    </table>
 
-<p>抽象的なスタックスロットへ、<code>r14</code>からのオフセットを割り当てます。</p>
+    <h2>関数入口と関数出口の生成</h2>
 
-<pre><code>saved r15    -&gt; 5(r14)
-saved r10    -&gt; 4(r14)
-spill slot 0 -&gt; 3(r14)
-spill slot 1 -&gt; 2(r14)
-caller slot  -&gt; 1(r14)
-argument 5   -&gt; 0(r14)</code></pre>
-
-<h2>関数入口</h2>
-
-<p>
-    関数入口では、スタックフレームを確保し、
-    戻りアドレスと使用するcallee-saveレジスタを保存します。
-</p>
-
-<pre><code>function_label:
-    addi  r14, r14, -frame_size
-    store r15, saved_r15_offset(r14)
-    store r10, saved_r10_offset(r14)
-    store r11, saved_r11_offset(r14)</code></pre>
-
-<p>
-    使用しないcallee-saveレジスタは保存しません。
-</p>
-
-<h2>関数出口</h2>
-
-<p>
-    関数出口では、戻り値を<code>r1</code>へ配置し、
-    保存したレジスタを復元してスタックフレームを破棄します。
-</p>
-
-<pre><code>mov   r1, result_register
-load  r11, saved_r11_offset(r14)
-load  r10, saved_r10_offset(r14)
-load  r15, saved_r15_offset(r14)
-addi  r14, r14, frame_size
-ret</code></pre>
-
-<p>
-    関数内に複数の<code>return</code>がある場合は、
-    共通の関数出口ブロックへジャンプさせることができます。
-</p>
-
-<h2>末尾呼出し</h2>
-
-<p>
-    末尾呼出しでは、現在の関数へ戻る必要がないため、
-    新しい戻りアドレスとスタックフレームを作りません。
-</p>
-
-<ol>
-    <li>呼出し先の引数を求める</li>
-    <li>引数を呼出し規約で定めた位置へ並列コピーする</li>
-    <li>保存したcallee-saveレジスタと戻りアドレスを復元する</li>
-    <li>現在のスタックフレームを破棄する</li>
-    <li>呼出し先へジャンプする</li>
-</ol>
-
-<pre><code>; 引数を配置する
-mov  r1, next_argument_1
-mov  r2, next_argument_2
-
-; 保存した値を復元する
-load r10, saved_r10_offset(r14)
-load r15, saved_r15_offset(r14)
-
-; フレームを破棄する
-addi r14, r14, frame_size
-
-; 呼出し先へ移動する
-jump next_function</code></pre>
-
-<h3>間接末尾呼出し</h3>
-
-<p>
-    クロージャへの末尾呼出しでは、
-    クロージャポインタを<code>r13</code>へ配置し、
-    コードアドレスへ間接ジャンプします。
-</p>
-
-<pre><code>mov   r13, closure_register
-load  temporary, 0(r13)
-addi  r14, r14, frame_size
-jumpr temporary</code></pre>
-
-<h2>線形化</h2>
-
-<p>
-    物理レジスタ中間表現の基本ブロックを、
-    ラベルとジャンプを持つ一列の命令列へ並べます。
-</p>
-
-<p>次の基本ブロックを考えます。</p>
-
-<pre><code>entry:
-    branch r5, then_block, else_block
-
-then_block:
-    add r6, r1, r2
-    jump end_block
-
-else_block:
-    sub r6, r1, r2
-    jump end_block
-
-end_block:
-    return r6</code></pre>
-
-<p>線形化後は、例えば次のようになります。</p>
-
-<pre><code>entry:
-    brz r5, else_block
-
-then_block:
-    add  r6, r1, r2
-    jump end_block
-
-else_block:
-    sub  r6, r1, r2
-
-end_block:
-    mov  r1, r6
-    jump function_exit</code></pre>
-
-<p>
-    次に実行するブロックを命令列上の直後へ配置できる場合は、
-    不要なジャンプを削除します。
-</p>
-
-<h3>ブロックの配置順序</h3>
-
-<p>
-    基本実装では、関数の入口ブロックから深さ優先で基本ブロックを並べます。
-    まだ配置されていない後続ブロックを、可能な限り直後へ配置します。
-</p>
-
-<p>
-    到達不能な基本ブロックは、線形化前に削除できます。
-</p>
-
-<h2>switchの出力</h2>
-
-<p>
-    仮想CPUに多方向分岐命令を直接持たせない場合、
-    <code>switch</code>を比較と条件分岐の列へ変換します。
-</p>
-
-<pre><code>switch r5 [
-    0: case_0,
-    1: case_1,
-    2: case_2
-]</code></pre>
-
-<p>分岐数が少ない場合は、次のように変換できます。</p>
-
-<pre><code>li   temporary, 0
-seq  temporary, r5, temporary
-brnz temporary, case_0
-
-li   temporary, 1
-seq  temporary, r5, temporary
-brnz temporary, case_1
-
-jump case_2</code></pre>
-
-<p class="advanced">
-    発展仕様では、分岐数が多く値が連続している場合に
-    ジャンプテーブルを使用できます。
-</p>
-
-<h2>アセンブリ出力</h2>
-
-<p>
-    線形化された物理レジスタ命令を、
-    仮想CPUのアセンブリ文法に従って出力します。
-</p>
-
-<p>主に次の内容を出力します。</p>
-
-<ul>
-    <li><code>.text</code>セクション</li>
-    <li>関数ラベルと命令列</li>
-    <li><code>.data</code>セクション</li>
-    <li>文字列、浮動小数点数、定数ブロック</li>
-    <li><code>.global</code>と<code>.extern</code></li>
-    <li><code>.entry</code>によるエントリポイント</li>
-</ul>
-
-<pre><code>.text
-.global main
-.entry main
-
-main:
-    addi  r14, r14, -2
-    store r15, 1(r14)
-
-    li    r1, 85
-    call  runtime_print_int
-
-    li    r1, 1
-    load  r15, 1(r14)
-    addi  r14, r14, 2
+    <table>
+        <thead>
+            <tr>
+                <th>処理</th>
+                <th>生成する命令</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>関数入口</th>
+                <td>
+                    <pre><code>addi r14, r14, -frame_size
+store r15, saved_r15_offset(r14)
+store used_callee_save_registers
+parallel_copy incoming_arguments
+              to allocated_locations</code></pre>
+                </td>
+                <td>
+                    フレームを確保し、戻りアドレスと使用するcallee-saveレジスタを保存する
+                </td>
+            </tr>
+            <tr>
+                <th>共通関数出口</th>
+                <td>
+                    <pre><code>L_exit:
+    restore used_callee_save_registers
+    load r15, saved_r15_offset(r14)
+    addi r14, r14, frame_size
     ret</code></pre>
+                </td>
+                <td>
+                    保存した状態を復元し、フレームを破棄して呼出し元へ戻る
+                </td>
+            </tr>
+            <tr>
+                <th>leaf関数の入口</th>
+                <td>
+                    フレーム領域が不要で
+                    <code>r15</code>も上書きしない場合は、
+                    フレーム確保と戻りアドレス保存を省略できる
+                </td>
+                <td>呼出しを行わない小さな関数の入口処理を削減する</td>
+            </tr>
+        </tbody>
+    </table>
 
-<h2>静的データの出力</h2>
+    <h2>基本ブロックの線形化</h2>
 
-<p>
-    低水準中間表現から保持されている静的データを、
-    <code>.data</code>セクションへ出力します。
-</p>
+    <p>
+        物理レジスタ中間表現の基本ブロックを、
+        ラベル付きの一列の命令列へ並べます。
+        入口ブロックから到達可能なブロックだけを配置します。
+    </p>
 
-<pre><code>.data
+    <table>
+        <thead>
+            <tr>
+                <th>物理レジスタ中間表現</th>
+                <th>アセンブリ命令列</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>基本ブロックの集合</th>
+                <td>入口ブロックから選択した順番に並べたラベル付き命令列</td>
+                <td>基本実装では深さ優先順で配置する</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>branch r, L_true, L_false</code>
+                </th>
+                <td>
+                    <pre><code>brnz r, L_true
+jump L_false</code></pre>
+                </td>
+                <td>
+                    一方の分岐先が直後にある場合は、
+                    条件を反転して無条件ジャンプを一つ削除できる
+                </td>
+            </tr>
+            <tr>
+                <th>直後のブロックへの<code>jump</code></th>
+                <td>命令を削除する</td>
+                <td>実行はそのまま次のラベルへ進む</td>
+            </tr>
+            <tr>
+                <th>到達不能な基本ブロック</th>
+                <td>出力しない</td>
+                <td>入口ブロックから到達できないコードを除去する</td>
+            </tr>
+            <tr>
+                <th>複数の前任ブロックを持つブロック</th>
+                <td>ラベルを保持する</td>
+                <td>すべての分岐元が同じラベルを参照する</td>
+            </tr>
+        </tbody>
+    </table>
 
-string_0:
-    .string "hello"
+    <h2>アセンブリの出力</h2>
 
-float_0:
-    .word 0x40091eb851eb851f</code></pre>
+    <table>
+        <thead>
+            <tr>
+                <th>物理レジスタ中間表現</th>
+                <th>アセンブリ</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>外部関数宣言</th>
+                <td><code>.extern</code>宣言</td>
+                <td>外部シンボルをアセンブラまたはリンカへ通知する</td>
+            </tr>
+            <tr>
+                <th>公開関数</th>
+                <td><code>.global</code>宣言と関数ラベル</td>
+                <td>他のコンパイル単位から参照できるシンボルを出力する</td>
+            </tr>
+            <tr>
+                <th><code>main</code>関数</th>
+                <td><code>.entry main</code></td>
+                <td>プログラムのエントリポイントを指定する</td>
+            </tr>
+            <tr>
+                <th>関数と線形化済み命令列</th>
+                <td><code>.text</code>セクション</td>
+                <td>コードラベルと命令を順番に出力する</td>
+            </tr>
+            <tr>
+                <th>文字列と静的ブロック</th>
+                <td><code>.data</code>セクション</td>
+                <td>ヘッダ、フィールド、バイト列、ラベル参照を出力する</td>
+            </tr>
+            <tr class="advanced">
+                <th>浮動小数点定数</th>
+                <td><code>.data</code>内の64ビットワード</td>
+                <td>発展　IEEE 754 binary64のビット列を出力する</td>
+            </tr>
+            <tr>
+                <th>ラベル参照</th>
+                <td>シンボルまたは再配置対象</td>
+                <td>アセンブラまたはリンカが具体的なアドレスを解決する</td>
+            </tr>
+        </tbody>
+    </table>
 
-<p>
-    静的ブロックには、ヘッダとフィールドを順番に出力します。
-    関数や静的データへの参照はラベルとして出力し、
-    アセンブラまたはリンカがアドレスを解決します。
-</p>
+    <h2>物理レジスタ中間表現の検査</h2>
 
-<h2>物理レジスタ中間表現の検査</h2>
+    <ul>
+        <li>すべての仮想レジスタが除去されている</li>
+        <li>使用される物理レジスタが<code>r0</code>から<code>r15</code>の範囲にある</li>
+        <li><code>r0</code>への書込み結果を使用していない</li>
+        <li><code>r13</code>、<code>r14</code>、<code>r15</code>の予約用途が守られている</li>
+        <li>すべてのspillスロットに具体的なフレームオフセットがある</li>
+        <li>同一命令で必要な一時レジスタ数が予約数を超えていない</li>
+        <li>各基本ブロックが一つの終端命令を持つ</li>
+        <li>すべての分岐先ラベルが同じ関数内に存在する</li>
+        <li>関数呼出しの引数数と配置が呼出し規約に従っている</li>
+        <li>戻り値が<code>r1</code>へ配置されている</li>
+        <li>通常の関数出口でcallee-saveレジスタと<code>r15</code>が復元される</li>
+        <li>通常の関数出口で<code>r14</code>が入口時の値へ戻る</li>
+        <li>末尾呼出しの前に現在のスタックフレームが安全に破棄される</li>
+        <li>間接呼出しと間接末尾呼出しでコードアドレスがフレーム破棄前に保護される</li>
+        <li>並列コピーに循環がある場合、一時レジスタまたは一時スロットが使用される</li>
+        <li class="advanced">発展　GCセーフポイントで生存するポインタの位置が記録されている</li>
+    </ul>
 
-<p>
-    アセンブリ出力の前に、少なくとも次の条件を検査します。
-</p>
+    <h2>変換後に成立する条件</h2>
 
-<ul>
-    <li>すべての仮想レジスタが除去されていること</li>
-    <li>使用される物理レジスタが<code>r0</code>から<code>r15</code>の範囲内であること</li>
-    <li><code>r0</code>への有効な書き込みを期待していないこと</li>
-    <li><code>r13</code>、<code>r14</code>、<code>r15</code>の予約用途が守られていること</li>
-    <li>すべてのspill slotに具体的なオフセットがあること</li>
-    <li>すべての基本ブロックが終端命令を持つこと</li>
-    <li>すべての分岐先ラベルが同じ関数内に存在すること</li>
-    <li>関数呼出しの引数数が呼出し規約に従っていること</li>
-    <li>通常の関数出口でスタックポインタが復元されること</li>
-</ul>
+    <ul>
+        <li>すべての仮想レジスタが物理レジスタまたはスタックスロットへ割り当てられている</li>
+        <li>同時に生存する二つの値が同じ物理レジスタへ不正に割り当てられていない</li>
+        <li>spillされた値の各使用前に必要なreloadが挿入されている</li>
+        <li>spillされた値の各定義後に必要なstoreが挿入されている</li>
+        <li>呼出しをまたいで生存するcaller-save値が保護されている</li>
+        <li>使用するcallee-saveレジスタが関数入口と出口で保存および復元されている</li>
+        <li>関数の仮引数が呼出し規約上の到着位置から割当て先へ移動されている</li>
+        <li>関数呼出しの実引数が引数レジスタまたはスタック引数領域へ配置されている</li>
+        <li>関数の戻り値が<code>r1</code>を通して返されている</li>
+        <li>各関数のスタックフレームサイズと各スロットのオフセットが確定している</li>
+        <li>通常の関数出口が共通出口ブロックへ統合されている</li>
+        <li>末尾呼出しが新しいスタックフレームを作らないジャンプへ変換されている</li>
+        <li>基本ブロックがラベル付きの線形な命令列へ変換されている</li>
+        <li>直後のブロックへの不要なジャンプが削除されている</li>
+        <li>到達不能な基本ブロックが出力されていない</li>
+        <li><code>switch</code>が比較列、比較木、またはジャンプテーブルへ変換されている</li>
+        <li>外部関数宣言、静的データ、コードラベルがアセンブリへ出力されている</li>
+    </ul>
 
-<h2>コード生成の結果</h2>
+    <h2>次の段階との関係</h2>
 
-<ul>
-    <li>すべての仮想レジスタが物理レジスタまたはスタックスロットへ配置される</li>
-    <li>spillされた値に対するloadとstoreが挿入される</li>
-    <li>関数呼出しが呼出し規約に従う命令列へ変換される</li>
-    <li>関数ごとのスタックフレームが決定される</li>
-    <li>末尾呼出しがフレームを増やさないジャンプへ変換される</li>
-    <li>基本ブロックがラベル付き命令列へ線形化される</li>
-    <li>静的データとコードがアセンブリとして出力される</li>
-</ul>
+    <p>
+        出力されたアセンブリは、アセンブラによって解析され、
+        ラベル解決、命令エンコード、静的データ配置を経て
+        実行可能形式へ変換されます。
+    </p>
 
-<p>
-    出力されたアセンブリはアセンブラによって実行可能命令列へ変換され、
-    仮想CPUによって実行されます。
-</p>
+    <ul>
+        <li>アセンブリを命令、レジスタ、即値、ラベルへ構文解析する</li>
+        <li>各命令のオペランド数と範囲を検査する</li>
+        <li><code>.text</code>と<code>.data</code>の配置を決定する</li>
+        <li>コードラベルとデータラベルのアドレスを決定する</li>
+        <li>外部シンボルと再配置情報を処理する</li>
+        <li>仮想CPUが読み込める実行可能形式を生成する</li>
+    </ul>
+</body>
 </html>

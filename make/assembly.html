@@ -1,0 +1,1930 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アセンブラ</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="site-header">
+        <button class="theme-toggle" type="button"></button>
+    </div>
+
+    <h1>アセンブラ</h1>
+
+    <p>
+        コード生成によって出力されたアセンブリを解析し、
+        疑似命令の展開、シンボル表の作成、ラベル解決、
+        静的データの配置を行って、仮想CPUが直接読み込める実行可能形式へ変換します。
+    </p>
+
+    <ul>
+        <li>アセンブリ</li>
+        <li>↓ 構文解析・疑似命令展開・ラベル解決・静的データ配置</li>
+        <li>実行可能形式</li>
+    </ul>
+
+    <p>
+        基本仕様では、仮想命令を固定長のビット列へ符号化しません。
+        アセンブラは、命令をOCamlのデータ型で表された命令配列へ変換します。
+        命令のバイトコード符号化、オブジェクト形式、リンカは発展仕様とします。
+    </p>
+
+    <h2>アセンブリプログラムの構文</h2>
+
+    <p>
+        アセンブリプログラムを
+        <span class="math">P</span>、
+        アセンブリ項目を
+        <span class="math">u</span>、
+        命令を
+        <span class="math">I</span>、
+        ディレクティブを
+        <span class="math">D</span>、
+        ラベルを
+        <span class="math">L</span>
+        で表します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <span class="math">P</span> ::=
+                    <span class="math">u</span><sub>1</sub> ...
+                    <span class="math">u</span><sub>n</sub>
+                </th>
+                <td>アセンブリプログラム</td>
+                <td>アセンブリ項目を順番に並べたもの</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">u</span> ::=
+                    <span class="math">I</span>
+                </th>
+                <td>命令</td>
+                <td>仮想CPUの基本命令またはアセンブラの疑似命令</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">u</span> ::=
+                    <span class="math">L</span><code>:</code>
+                </th>
+                <td>ラベル定義</td>
+                <td>現在のコード位置またはデータ位置へ名前を付ける</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">u</span> ::=
+                    <span class="math">D</span>
+                </th>
+                <td>ディレクティブ</td>
+                <td>
+                    セクション、静的データ、シンボル、
+                    エントリポイントなどを指定する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>字句要素</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>字句要素</th>
+                <th>構文</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>識別子</th>
+                <td>
+                    英字またはアンダースコアで始まり、
+                    英数字、アンダースコア、ピリオドが続く文字列
+                </td>
+                <td>命令名、ディレクティブ名、シンボル名に使用する</td>
+            </tr>
+            <tr>
+                <th>ラベル</th>
+                <td><span class="math">L</span></td>
+                <td>コードまたは静的データの位置を表す識別子</td>
+            </tr>
+            <tr>
+                <th>レジスタ</th>
+                <td>
+                    <code>r0</code> | <code>r1</code> | ... | <code>r15</code>
+                </td>
+                <td>仮想CPUの16本の物理レジスタ</td>
+            </tr>
+            <tr>
+                <th>10進整数</th>
+                <td><code>42</code>、<code>-42</code></td>
+                <td>10進表記の符号付き整数</td>
+            </tr>
+            <tr>
+                <th>16進整数</th>
+                <td><code>0x2a</code>、<code>-0x2a</code></td>
+                <td>16進表記の符号付き整数</td>
+            </tr>
+            <tr>
+                <th>2進整数</th>
+                <td><code>0b101010</code>、<code>-0b101010</code></td>
+                <td>2進表記の符号付き整数</td>
+            </tr>
+            <tr>
+                <th>文字列</th>
+                <td><code>"hello\n"</code></td>
+                <td>ダブルクォートで囲んだ文字列リテラル</td>
+            </tr>
+            <tr>
+                <th>コメント</th>
+                <td><code>;</code>から行末まで</td>
+                <td>アセンブラが無視する説明文</td>
+            </tr>
+            <tr>
+                <th>改行</th>
+                <td>LFまたはCRLF</td>
+                <td>命令、ラベル、ディレクティブの区切り</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        整数リテラルのアンダースコア区切りを許可する場合は、
+        <code>1_000_000</code>のように数字の間だけで使用できるものとします。
+        解析後の値は符号付き64ビット整数の範囲内でなければなりません。
+    </p>
+
+    <h2>文字列のエスケープ</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>表記</th>
+                <th>文字</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>\\</code></th>
+                <td>バックスラッシュ</td>
+            </tr>
+            <tr>
+                <th><code>\"</code></th>
+                <td>ダブルクォート</td>
+            </tr>
+            <tr>
+                <th><code>\n</code></th>
+                <td>改行</td>
+            </tr>
+            <tr>
+                <th><code>\r</code></th>
+                <td>復帰</td>
+            </tr>
+            <tr>
+                <th><code>\t</code></th>
+                <td>水平タブ</td>
+            </tr>
+            <tr>
+                <th><code>\0</code></th>
+                <td>ヌル文字</td>
+            </tr>
+            <tr>
+                <th><code>\xHH</code></th>
+                <td>2桁の16進数で指定した1バイト</td>
+            </tr>
+            <tr>
+                <th><code>\u{H...}</code></th>
+                <td>Unicodeコードポイント</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>命令の一般構文</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><span class="math">op</span></th>
+                <td>オペランドを持たない命令</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">op a</span><sub>1</sub>
+                </th>
+                <td>1個のオペランドを持つ命令</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">op a</span><sub>1</sub><code>,</code>
+                    <span class="math">a</span><sub>2</sub>
+                </th>
+                <td>2個のオペランドを持つ命令</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">op a</span><sub>1</sub><code>,</code>
+                    <span class="math">a</span><sub>2</sub><code>,</code>
+                    <span class="math">a</span><sub>3</sub>
+                </th>
+                <td>3個のオペランドを持つ命令</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>オペランド</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>構文</th>
+                <th>名称</th>
+                <th>使用箇所</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><span class="math">r</span></th>
+                <td>レジスタ</td>
+                <td>演算、転送、アドレス、間接ジャンプ</td>
+            </tr>
+            <tr>
+                <th><span class="math">i</span></th>
+                <td>整数即値</td>
+                <td>即値読込み、即値演算、trap番号、データ</td>
+            </tr>
+            <tr>
+                <th><span class="math">L</span></th>
+                <td>ラベル</td>
+                <td>直接ジャンプ、直接呼出し、アドレス取得、データ参照</td>
+            </tr>
+            <tr>
+                <th>
+                    <span class="math">o</span><code>(</code><span class="math">r</span><code>)</code>
+                </th>
+                <td>メモリアドレス</td>
+                <td>
+                    レジスタ
+                    <span class="math">r</span>を基底とし、
+                    <span class="math">o</span>ワードを加えたアドレス
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        メモリアドレスとメモリオフセットはワード単位です。
+        たとえば
+        <code>2(r5)</code>は、
+        <code>r5</code>が示すアドレスから2ワード先を表します。
+    </p>
+
+    <h2>セクション</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ディレクティブ</th>
+                <th>効果</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>.text</code></th>
+                <td>
+                    現在のセクションをコード領域へ変更する。
+                    以降には命令とコードラベルを配置する
+                </td>
+            </tr>
+            <tr>
+                <th><code>.data</code></th>
+                <td>
+                    現在のセクションを静的データ領域へ変更する。
+                    以降にはデータとデータラベルを配置する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        最初のセクション指定より前に命令またはデータが現れた場合は、
+        アセンブルエラーとします。
+        ラベルは現在選択されているセクションに属します。
+    </p>
+
+    <h2>シンボルディレクティブ</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ディレクティブ</th>
+                <th>効果</th>
+                <th>基本仕様での扱い</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>.global</code>
+                    <span class="math">L</span>
+                </th>
+                <td>ラベル<span class="math">L</span>を外部へ公開する</td>
+                <td>単一ファイルでも受理するが、実質的な効果はない</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>.extern</code>
+                    <span class="math">L</span>
+                </th>
+                <td>別の単位で定義されるシンボルを宣言する</td>
+                <td>
+                    ランタイムシンボルとして既知でなければ、
+                    単一ファイルのアセンブル時に未解決シンボルエラーとする
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>.entry</code>
+                    <span class="math">L</span>
+                </th>
+                <td>仮想CPUが最初に実行するコードラベルを指定する</td>
+                <td>プログラム全体で高々1回だけ指定できる</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        <code>.entry</code>がない場合は、
+        <code>main</code>をエントリポイントとして使用します。
+        <code>main</code>も定義されていない場合はエラーとします。
+    </p>
+
+    <h2>静的データディレクティブ</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ディレクティブ</th>
+                <th>配置するデータ</th>
+                <th>データ位置の変化</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>.word</code>
+                    <span class="math">i</span>
+                </th>
+                <td>符号付き64ビット整数を1ワード配置する</td>
+                <td>1ワード進む</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>.word</code>
+                    <span class="math">L</span>
+                </th>
+                <td>コードまたはデータラベルのアドレスを1ワード配置する</td>
+                <td>1ワード進む</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>.zero</code>
+                    <span class="math">n</span>
+                </th>
+                <td><span class="math">n</span>ワードを0で初期化する</td>
+                <td><span class="math">n</span>ワード進む</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>.string</code>
+                    <span class="math">s</span>
+                </th>
+                <td>
+                    UTF-8へ変換した文字列を、
+                    ランタイムの文字列表現に従って配置する
+                </td>
+                <td>文字列の静的表現に必要なワード数だけ進む</td>
+            </tr>
+            <tr>
+                <th>
+                    <code>.align</code>
+                    <span class="math">n</span>
+                </th>
+                <td>
+                    現在位置が
+                    <span class="math">n</span>ワード境界になるまで0を配置する
+                </td>
+                <td>必要なパディング分だけ進む</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        <code>.zero</code>のワード数は0以上でなければなりません。
+        <code>.align</code>の境界は1以上の2の冪とします。
+    </p>
+
+    <h2>文字列の静的表現</h2>
+
+    <p>
+        <code>.string</code>は、単なるバイト列ではなく、
+        ランタイムが文字列として認識できる静的ブロックを生成します。
+        基本仕様では次の構造を使用します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>位置</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>ヘッダ</th>
+                <td>文字列タグと文字列ブロックのワード数</td>
+            </tr>
+            <tr>
+                <th>フィールド0</th>
+                <td>UTF-8のバイト長を表すタグ付き整数</td>
+            </tr>
+            <tr>
+                <th>フィールド1以降</th>
+                <td>UTF-8バイト列を8バイトずつ格納したワード</td>
+            </tr>
+            <tr>
+                <th>末尾</th>
+                <td>不足するバイトを0で埋める</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        データラベルはフィールド0の位置を指し、
+        ヘッダはその1ワード前に配置します。
+        これにより、静的文字列を通常のヒープブロックと同じ規則で参照できます。
+    </p>
+
+    <h2>基本命令</h2>
+
+    <p>
+        基本命令は、仮想CPUが直接実行する命令です。
+        アセンブラは命令名、オペランド数、オペランドの種類を検査し、
+        対応する命令値を生成します。
+    </p>
+
+    <h3>定数と転送</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ</th>
+                <th>実行可能形式</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>li rd, i</code></th>
+                <td><code>Li (rd, i)</code></td>
+                <td>即値<span class="math">i</span>を<code>rd</code>へ格納する</td>
+            </tr>
+            <tr>
+                <th><code>la rd, L</code></th>
+                <td>
+                    コードラベルなら<code>LoadCodeAddress (rd, code_address(L))</code>、
+                    データラベルなら<code>LoadDataAddress (rd, data_address(L))</code>
+                </td>
+                <td>ラベル<span class="math">L</span>が指すアドレスを取得する</td>
+            </tr>
+            <tr>
+                <th><code>mov rd, rs</code></th>
+                <td><code>Move (rd, rs)</code></td>
+                <td><code>rs</code>の値を<code>rd</code>へコピーする</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>整数演算</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ</th>
+                <th>実行可能形式</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>add rd, rs1, rs2</code></th>
+                <td><code>Add (rd, rs1, rs2)</code></td>
+                <td>64ビット加算</td>
+            </tr>
+            <tr>
+                <th><code>sub rd, rs1, rs2</code></th>
+                <td><code>Sub (rd, rs1, rs2)</code></td>
+                <td>64ビット減算</td>
+            </tr>
+            <tr>
+                <th><code>mul rd, rs1, rs2</code></th>
+                <td><code>Mul (rd, rs1, rs2)</code></td>
+                <td>64ビット乗算</td>
+            </tr>
+            <tr>
+                <th><code>div rd, rs1, rs2</code></th>
+                <td><code>Div (rd, rs1, rs2)</code></td>
+                <td>符号付き除算。除数が0の場合は実行時エラー</td>
+            </tr>
+            <tr>
+                <th><code>rem rd, rs1, rs2</code></th>
+                <td><code>Rem (rd, rs1, rs2)</code></td>
+                <td>符号付き剰余。除数が0の場合は実行時エラー</td>
+            </tr>
+            <tr>
+                <th><code>addi rd, rs, i</code></th>
+                <td><code>AddImmediate (rd, rs, i)</code></td>
+                <td><code>rs</code>へ即値<span class="math">i</span>を加える</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>ビット演算</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ</th>
+                <th>実行可能形式</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>and rd, rs1, rs2</code></th>
+                <td><code>BitAnd (rd, rs1, rs2)</code></td>
+                <td>ビット論理積</td>
+            </tr>
+            <tr>
+                <th><code>or rd, rs1, rs2</code></th>
+                <td><code>BitOr (rd, rs1, rs2)</code></td>
+                <td>ビット論理和</td>
+            </tr>
+            <tr>
+                <th><code>xor rd, rs1, rs2</code></th>
+                <td><code>BitXor (rd, rs1, rs2)</code></td>
+                <td>ビット排他的論理和</td>
+            </tr>
+            <tr>
+                <th><code>not rd, rs</code></th>
+                <td><code>BitNot (rd, rs)</code></td>
+                <td>64ビットのビット反転</td>
+            </tr>
+            <tr>
+                <th><code>shl rd, rs1, rs2</code></th>
+                <td><code>ShiftLeft (rd, rs1, rs2)</code></td>
+                <td><code>rs2</code>の下位6ビットで左シフトする</td>
+            </tr>
+            <tr>
+                <th><code>shr rd, rs1, rs2</code></th>
+                <td><code>ShiftRightLogical (rd, rs1, rs2)</code></td>
+                <td><code>rs2</code>の下位6ビットで論理右シフトする</td>
+            </tr>
+            <tr>
+                <th><code>sar rd, rs1, rs2</code></th>
+                <td><code>ShiftRightArithmetic (rd, rs1, rs2)</code></td>
+                <td><code>rs2</code>の下位6ビットで算術右シフトする</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>比較</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ</th>
+                <th>実行可能形式</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>seq rd, rs1, rs2</code></th>
+                <td><code>SetEqual (rd, rs1, rs2)</code></td>
+                <td>等しければ生の整数1、異なれば生の整数0を格納する</td>
+            </tr>
+            <tr>
+                <th><code>slt rd, rs1, rs2</code></th>
+                <td><code>SetLessThan (rd, rs1, rs2)</code></td>
+                <td>
+                    符号付き比較で
+                    <code>rs1 &lt; rs2</code>なら生の整数1、
+                    それ以外なら0を格納する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        比較命令が生成する0と1は、生の機械整数です。
+        ソース言語の真偽値として利用する場合は、
+        コード生成側がタグ付けを行います。
+    </p>
+
+    <h3>メモリアクセス</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ</th>
+                <th>実行可能形式</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>load rd, o(rs)</code></th>
+                <td><code>Load (rd, rs, o)</code></td>
+                <td>
+                    <code>rs + o</code>番地の1ワードを
+                    <code>rd</code>へ読み出す
+                </td>
+            </tr>
+            <tr>
+                <th><code>store rs, o(rd)</code></th>
+                <td><code>Store (rs, rd, o)</code></td>
+                <td>
+                    <code>rs</code>の値を
+                    <code>rd + o</code>番地へ書き込む
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>ジャンプと分岐</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ</th>
+                <th>実行可能形式</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>jump L</code></th>
+                <td><code>Jump (code_address(L))</code></td>
+                <td>コードラベル<span class="math">L</span>へ移動する</td>
+            </tr>
+            <tr>
+                <th><code>jumpr rs</code></th>
+                <td><code>JumpRegister rs</code></td>
+                <td><code>rs</code>が示す命令位置へ移動する</td>
+            </tr>
+            <tr>
+                <th><code>brz rs, L</code></th>
+                <td><code>BranchZero (rs, code_address(L))</code></td>
+                <td><code>rs</code>が0ならラベル<span class="math">L</span>へ移動する</td>
+            </tr>
+            <tr>
+                <th><code>brnz rs, L</code></th>
+                <td><code>BranchNonZero (rs, code_address(L))</code></td>
+                <td><code>rs</code>が0でなければラベル<span class="math">L</span>へ移動する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>関数呼出し</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ</th>
+                <th>実行可能形式</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>jal rd, L</code></th>
+                <td><code>JumpAndLink (rd, code_address(L))</code></td>
+                <td>
+                    次の命令位置を
+                    <code>rd</code>へ保存し、
+                    コードラベル<span class="math">L</span>へ移動する
+                </td>
+            </tr>
+            <tr>
+                <th><code>jalr rd, rs</code></th>
+                <td><code>JumpAndLinkRegister (rd, rs)</code></td>
+                <td>
+                    次の命令位置を
+                    <code>rd</code>へ保存し、
+                    <code>rs</code>が示す命令位置へ移動する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>ランタイム呼出しと停止</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ</th>
+                <th>実行可能形式</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>trap n</code></th>
+                <td><code>Trap n</code></td>
+                <td>番号<span class="math">n</span>のホスト側ランタイム処理を実行する</td>
+            </tr>
+            <tr>
+                <th><code>halt</code></th>
+                <td><code>Halt</code></td>
+                <td>仮想CPUの停止状態を真にする</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>疑似命令の展開</h2>
+
+    <p>
+        疑似命令は仮想CPUが直接実行しません。
+        アセンブラがラベル位置を計算する前に、
+        一つ以上の基本命令へ展開します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>疑似命令</th>
+                <th>展開後の基本命令</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>nop</code></th>
+                <td><code>mov r0, r0</code></td>
+                <td>実行状態を変化させない</td>
+            </tr>
+            <tr>
+                <th><code>neg rd, rs</code></th>
+                <td><code>sub rd, r0, rs</code></td>
+                <td>符号を反転する</td>
+            </tr>
+            <tr>
+                <th><code>subi rd, rs, i</code></th>
+                <td><code>addi rd, rs, -i</code></td>
+                <td>即値を減算する</td>
+            </tr>
+            <tr>
+                <th><code>sne rd, rs1, rs2</code></th>
+                <td>
+                    <pre><code>seq rd, rs1, rs2
+xori rd, rd, 1</code></pre>
+                </td>
+                <td>二つの値が異なるかを判定する</td>
+            </tr>
+            <tr>
+                <th><code>sle rd, rs1, rs2</code></th>
+                <td>
+                    <pre><code>slt rd, rs2, rs1
+xori rd, rd, 1</code></pre>
+                </td>
+                <td><code>rs1 &lt;= rs2</code>を判定する</td>
+            </tr>
+            <tr>
+                <th><code>sgt rd, rs1, rs2</code></th>
+                <td><code>slt rd, rs2, rs1</code></td>
+                <td><code>rs1 &gt; rs2</code>を判定する</td>
+            </tr>
+            <tr>
+                <th><code>sge rd, rs1, rs2</code></th>
+                <td>
+                    <pre><code>slt rd, rs1, rs2
+xori rd, rd, 1</code></pre>
+                </td>
+                <td><code>rs1 &gt;= rs2</code>を判定する</td>
+            </tr>
+            <tr>
+                <th><code>andi rd, rs, i</code></th>
+                <td>
+                    <pre><code>li temporary, i
+and rd, rs, temporary</code></pre>
+                </td>
+                <td>即値とのビット論理積</td>
+            </tr>
+            <tr>
+                <th><code>ori rd, rs, i</code></th>
+                <td>
+                    <pre><code>li temporary, i
+or rd, rs, temporary</code></pre>
+                </td>
+                <td>即値とのビット論理和</td>
+            </tr>
+            <tr>
+                <th><code>xori rd, rs, i</code></th>
+                <td>
+                    <pre><code>li temporary, i
+xor rd, rs, temporary</code></pre>
+                </td>
+                <td>即値との排他的論理和</td>
+            </tr>
+            <tr>
+                <th><code>shli rd, rs, i</code></th>
+                <td>
+                    <pre><code>li temporary, i
+shl rd, rs, temporary</code></pre>
+                </td>
+                <td>即値による左シフト</td>
+            </tr>
+            <tr>
+                <th><code>shri rd, rs, i</code></th>
+                <td>
+                    <pre><code>li temporary, i
+shr rd, rs, temporary</code></pre>
+                </td>
+                <td>即値による論理右シフト</td>
+            </tr>
+            <tr>
+                <th><code>sari rd, rs, i</code></th>
+                <td>
+                    <pre><code>li temporary, i
+sar rd, rs, temporary</code></pre>
+                </td>
+                <td>即値による算術右シフト</td>
+            </tr>
+            <tr>
+                <th><code>call L</code></th>
+                <td><code>jal r15, L</code></td>
+                <td>戻りアドレスを<code>r15</code>へ保存する直接呼出し</td>
+            </tr>
+            <tr>
+                <th><code>callr rs</code></th>
+                <td><code>jalr r15, rs</code></td>
+                <td>戻りアドレスを<code>r15</code>へ保存する間接呼出し</td>
+            </tr>
+            <tr>
+                <th><code>ret</code></th>
+                <td><code>jalr r0, r15</code></td>
+                <td>戻りアドレスへ移動し、リンク値を破棄する</td>
+            </tr>
+            <tr>
+                <th><code>push rs</code></th>
+                <td>
+                    <pre><code>addi r14, r14, -1
+store rs, 0(r14)</code></pre>
+                </td>
+                <td>スタックへ1ワード保存する</td>
+            </tr>
+            <tr>
+                <th><code>pop rd</code></th>
+                <td>
+                    <pre><code>load rd, 0(r14)
+addi r14, r14, 1</code></pre>
+                </td>
+                <td>スタックから1ワード読み出す</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        即値付きビット演算の展開に使用する
+        <code>temporary</code>は、コード生成で予約した一時レジスタへ置き換えます。
+        アセンブラが一時レジスタを暗黙に選ぶ設計にすると、
+        入力プログラムの値を破壊する可能性があります。
+        したがって、基本仕様ではコード生成時に基本命令へ展開しておくか、
+        アセンブリ上で使用する一時レジスタを明示するものとします。
+    </p>
+
+    <h2>アセンブリから実行可能形式への変換</h2>
+
+    <p>
+        アセンブリプログラム
+        <span class="math">P</span>から実行可能形式への変換を
+        <span class="math">A</span><code>⟦</code><span class="math">P</span><code>⟧</code>
+        と表します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ</th>
+                <th>実行可能形式</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    アセンブリ項目
+                    <span class="math">u</span><sub>1</sub> ...
+                    <span class="math">u</span><sub>n</sub>
+                </th>
+                <td>
+                    <pre><code>{
+    code = assembled_code;
+    data = assembled_data;
+    entry = resolved_entry;
+}</code></pre>
+                </td>
+                <td>
+                    疑似命令を展開し、コードラベルとデータラベルを解決して、
+                    命令配列、静的データ、エントリポイントを生成する
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>アセンブラの中間表現</h2>
+
+    <p>
+        構文解析直後は、ラベル参照を未解決のまま保持します。
+        命令、ラベル、ディレクティブを次のような構文木で表現できます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>種類</th>
+                <th>主な内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>Instruction</code></th>
+                <td>命令名、オペランド列、ソース位置</td>
+            </tr>
+            <tr>
+                <th><code>Label</code></th>
+                <td>ラベル名、ソース位置</td>
+            </tr>
+            <tr>
+                <th><code>Directive</code></th>
+                <td>ディレクティブ名、引数列、ソース位置</td>
+            </tr>
+            <tr>
+                <th><code>Register</code></th>
+                <td>0以上15以下のレジスタ番号</td>
+            </tr>
+            <tr>
+                <th><code>Immediate</code></th>
+                <td>符号付き64ビット整数</td>
+            </tr>
+            <tr>
+                <th><code>Symbol</code></th>
+                <td>未解決のコードラベルまたはデータラベル</td>
+            </tr>
+            <tr>
+                <th><code>Memory</code></th>
+                <td>ワードオフセットと基底レジスタ</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>第1パス</h2>
+
+    <p>
+        第1パスでは、疑似命令展開後のコード位置とデータ位置を計算し、
+        すべての定義済みラベルをシンボル表へ登録します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ項目</th>
+                <th>第1パスの処理</th>
+                <th>位置の変化</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>.text</code></th>
+                <td>現在のセクションをコードへ変更する</td>
+                <td>変化しない</td>
+            </tr>
+            <tr>
+                <th><code>.data</code></th>
+                <td>現在のセクションをデータへ変更する</td>
+                <td>変化しない</td>
+            </tr>
+            <tr>
+                <th>コードセクション内のラベル</th>
+                <td>
+                    現在のコード位置を
+                    <code>CodeSymbol</code>として登録する
+                </td>
+                <td>変化しない</td>
+            </tr>
+            <tr>
+                <th>データセクション内のラベル</th>
+                <td>
+                    現在のデータ位置を
+                    <code>DataSymbol</code>として登録する
+                </td>
+                <td>変化しない</td>
+            </tr>
+            <tr>
+                <th>基本命令</th>
+                <td>オペランドの形を検査する</td>
+                <td>コード位置を1進める</td>
+            </tr>
+            <tr>
+                <th>疑似命令</th>
+                <td>展開後の基本命令数を求める</td>
+                <td>展開後の命令数だけコード位置を進める</td>
+            </tr>
+            <tr>
+                <th><code>.word</code></th>
+                <td>データセクションであることを検査する</td>
+                <td>データ位置を1進める</td>
+            </tr>
+            <tr>
+                <th><code>.zero n</code></th>
+                <td><span class="math">n</span>が0以上であることを検査する</td>
+                <td>データ位置を<span class="math">n</span>進める</td>
+            </tr>
+            <tr>
+                <th><code>.string s</code></th>
+                <td>文字列の静的表現に必要なワード数を求める</td>
+                <td>必要なワード数だけデータ位置を進める</td>
+            </tr>
+            <tr>
+                <th><code>.align n</code></th>
+                <td>現在のデータ位置を境界<span class="math">n</span>へ切り上げる</td>
+                <td>パディング分だけデータ位置を進める</td>
+            </tr>
+            <tr>
+                <th><code>.entry L</code></th>
+                <td>エントリポイント候補としてラベル名を記録する</td>
+                <td>変化しない</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>シンボル表</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>シンボル値</th>
+                <th>意味</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <code>CodeSymbol</code>
+                    <span class="math">p</span>
+                </th>
+                <td>
+                    命令配列の位置
+                    <span class="math">p</span>を指すコードラベル
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <code>DataSymbol</code>
+                    <span class="math">o</span>
+                </th>
+                <td>
+                    静的データ領域先頭から
+                    <span class="math">o</span>ワード離れたデータラベル
+                </td>
+            </tr>
+            <tr class="advanced">
+                <th>
+                    <code>ExternalSymbol</code>
+                    <span class="math">name</span>
+                </th>
+                <td>発展　リンク時に解決する外部シンボル</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        同じラベル名を複数回定義してはなりません。
+        コードラベルとデータラベルも同じ名前空間を使用します。
+    </p>
+
+    <h2>第2パス</h2>
+
+    <p>
+        第2パスでは、命令と静的データを実際に生成し、
+        すべてのラベル参照をシンボル表の値へ置き換えます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ項目</th>
+                <th>第2パスの変換</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>ラベル定義</th>
+                <td>出力しない</td>
+                <td>位置はすでにシンボル表へ記録されている</td>
+            </tr>
+            <tr>
+                <th>基本命令</th>
+                <td>対応する命令値を命令配列へ追加する</td>
+                <td>レジスタと即値を検査済みの値へ変換する</td>
+            </tr>
+            <tr>
+                <th>疑似命令</th>
+                <td>展開後の基本命令値を順番に追加する</td>
+                <td>疑似命令自体は実行可能形式へ残さない</td>
+            </tr>
+            <tr>
+                <th><code>jump L</code>など</th>
+                <td>
+                    ラベル
+                    <span class="math">L</span>をコード位置へ置き換える
+                </td>
+                <td>データラベルを指定した場合はエラー</td>
+            </tr>
+            <tr>
+                <th><code>la rd, L</code></th>
+                <td>
+                    シンボルの種類に応じて、
+                    コードアドレスまたはロード後のデータアドレスを生成する
+                </td>
+                <td>コードとデータの両方を参照できる</td>
+            </tr>
+            <tr>
+                <th><code>.word i</code></th>
+                <td>整数<span class="math">i</span>をデータ配列へ追加する</td>
+                <td>64ビットのビット列を保存する</td>
+            </tr>
+            <tr>
+                <th><code>.word L</code></th>
+                <td>
+                    ラベル
+                    <span class="math">L</span>のアドレスをデータ配列へ追加する
+                </td>
+                <td>コードアドレスまたはデータアドレスを格納する</td>
+            </tr>
+            <tr>
+                <th><code>.zero n</code></th>
+                <td>0を<span class="math">n</span>ワード追加する</td>
+                <td>予約領域を0で初期化する</td>
+            </tr>
+            <tr>
+                <th><code>.string s</code></th>
+                <td>文字列のヘッダ、長さ、UTF-8データを追加する</td>
+                <td>ラベルはフィールド0を指す</td>
+            </tr>
+            <tr>
+                <th><code>.align n</code></th>
+                <td>必要な数の0ワードを追加する</td>
+                <td>データ位置を指定境界へ整列する</td>
+            </tr>
+            <tr>
+                <th><code>.entry L</code></th>
+                <td>コード位置を実行可能形式の<code>entry</code>へ設定する</td>
+                <td>データラベルを指定した場合はエラー</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>コードアドレスとデータアドレス</h2>
+
+    <p>
+        仮想CPUでは、コードアドレスは命令配列の添字、
+        データアドレスはVMメモリ内のワードアドレスです。
+        両者は64ビット値としてレジスタや静的データへ格納できますが、
+        使用できる命令が異なります。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アドレス</th>
+                <th>表現</th>
+                <th>使用命令</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>コードアドレス</th>
+                <td>命令配列内の0以上の添字</td>
+                <td><code>jumpr</code>、<code>jalr</code></td>
+            </tr>
+            <tr>
+                <th>データアドレス</th>
+                <td>VMメモリ内のワード位置</td>
+                <td><code>load</code>、<code>store</code></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        コードアドレスを
+        <code>load</code>や
+        <code>store</code>へ使用した場合、
+        またはデータアドレスを
+        <code>jumpr</code>や
+        <code>jalr</code>へ使用した場合は実行時エラーとします。
+        OCaml実装では、検査のためにアドレスの種類を別の型で保持しても構いません。
+    </p>
+
+    <h2>静的データのロード時再配置</h2>
+
+    <p>
+        データラベルは、第1パスでは静的データ領域内の相対位置として記録します。
+        実際のメモリアドレスは、VMが実行可能形式をロードするときに決まります。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>値</th>
+                <th>ロード時の変換</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>データラベルの相対位置<span class="math">o</span></th>
+                <td>
+                    <code>data_base +</code>
+                    <span class="math">o</span>
+                </td>
+            </tr>
+            <tr>
+                <th>コードラベルの位置<span class="math">p</span></th>
+                <td>命令配列の位置<span class="math">p</span>をそのまま使用する</td>
+            </tr>
+            <tr>
+                <th>静的データ内のデータラベル参照</th>
+                <td>ロード時にデータ基底アドレスを加える</td>
+            </tr>
+            <tr>
+                <th>静的データ内のコードラベル参照</th>
+                <td>命令配列内の位置をコードアドレスとして格納する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>実行可能形式</h2>
+
+    <p>
+        基本仕様の実行可能形式は、
+        ラベル解決済みの命令配列、静的データ、
+        データ内のアドレス情報、エントリポイントを持ちます。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>フィールド</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>code</code></th>
+                <td>ラベル解決済みの基本命令配列</td>
+            </tr>
+            <tr>
+                <th><code>data</code></th>
+                <td>静的データの64ビットワード配列</td>
+            </tr>
+            <tr>
+                <th><code>data_relocations</code></th>
+                <td>
+                    データ内でコードアドレスまたはデータアドレスとして
+                    解釈すべき位置
+                </td>
+            </tr>
+            <tr>
+                <th><code>entry</code></th>
+                <td>最初に実行する命令配列内の位置</td>
+            </tr>
+            <tr>
+                <th><code>globals</code></th>
+                <td>公開シンボル名と解決済み位置の対応</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <pre><code>type executable = {
+    code : instruction array;
+    data : int64 array;
+    data_relocations : relocation array;
+    entry : int;
+    globals : symbol_table;
+}</code></pre>
+
+    <p>
+        分割コンパイルを実装しない段階では、
+        <code>globals</code>と未解決の外部再配置を省略できます。
+        ただし、静的データ内のデータアドレスをロード時に補正するため、
+        必要な再配置情報は保持します。
+    </p>
+
+    <h2>命令のOCaml表現</h2>
+
+    <pre><code>type register = int
+
+type instruction =
+    | Li of register * int64
+    | LoadCodeAddress of register * int
+    | LoadDataAddress of register * int
+    | Move of register * register
+    | Add of register * register * register
+    | Sub of register * register * register
+    | Mul of register * register * register
+    | Div of register * register * register
+    | Rem of register * register * register
+    | AddImmediate of register * register * int64
+    | BitAnd of register * register * register
+    | BitOr of register * register * register
+    | BitXor of register * register * register
+    | BitNot of register * register
+    | ShiftLeft of register * register * register
+    | ShiftRightLogical of register * register * register
+    | ShiftRightArithmetic of register * register * register
+    | SetEqual of register * register * register
+    | SetLessThan of register * register * register
+    | Load of register * register * int
+    | Store of register * register * int
+    | Jump of int
+    | JumpRegister of register
+    | BranchZero of register * int
+    | BranchNonZero of register * int
+    | JumpAndLink of register * int
+    | JumpAndLinkRegister of register * register
+    | Trap of int
+    | Halt</code></pre>
+
+    <p>
+        レジスタ番号は0以上15以下でなければなりません。
+        コード位置とメモリオフセットのOCaml型は、
+        実装上必要な最大サイズに応じて
+        <code>int</code>または
+        <code>int64</code>を使用します。
+    </p>
+
+    <h2>アセンブラ全体の処理</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>段階</th>
+                <th>入力</th>
+                <th>処理</th>
+                <th>出力</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>1. 字句解析</th>
+                <td>アセンブリテキスト</td>
+                <td>識別子、整数、文字列、記号、改行へ分割する</td>
+                <td>トークン列</td>
+            </tr>
+            <tr>
+                <th>2. 構文解析</th>
+                <td>トークン列</td>
+                <td>命令、ラベル、ディレクティブを構築する</td>
+                <td>アセンブリ構文木</td>
+            </tr>
+            <tr>
+                <th>3. 疑似命令展開</th>
+                <td>アセンブリ構文木</td>
+                <td>疑似命令を基本命令列へ変換する</td>
+                <td>基本命令だけを含む構文木</td>
+            </tr>
+            <tr>
+                <th>4. 第1パス</th>
+                <td>展開済み構文木</td>
+                <td>コード位置とデータ位置を計算し、ラベルを登録する</td>
+                <td>シンボル表と各セクションのサイズ</td>
+            </tr>
+            <tr>
+                <th>5. 第2パス</th>
+                <td>構文木とシンボル表</td>
+                <td>ラベルを解決し、命令配列とデータを生成する</td>
+                <td>未ロードの実行可能形式</td>
+            </tr>
+            <tr>
+                <th>6. 検査</th>
+                <td>未ロードの実行可能形式</td>
+                <td>命令、アドレス、エントリポイント、データサイズを検査する</td>
+                <td>検査済み実行可能形式</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>変換例</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ</th>
+                <th>実行可能形式</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <pre><code>.text
+.global main
+.entry main
+
+main:
+    li   r1, 40
+    li   r2, 2
+    add  r1, r1, r2
+    trap 1
+    halt</code></pre>
+                </th>
+                <td>
+                    <pre><code>code[0] = Li (1, 40)
+code[1] = Li (2, 2)
+code[2] = Add (1, 1, 2)
+code[3] = Trap 1
+code[4] = Halt
+
+entry = 0</code></pre>
+                </td>
+            </tr>
+            <tr>
+                <th>
+                    <pre><code>.text
+.entry loop
+
+loop:
+    addi r1, r1, -1
+    brnz r1, loop
+    halt</code></pre>
+                </th>
+                <td>
+                    <pre><code>code[0] = AddImmediate (1, 1, -1)
+code[1] = BranchNonZero (1, 0)
+code[2] = Halt
+
+entry = 0</code></pre>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>静的データの変換例</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>アセンブリ</th>
+                <th>生成結果</th>
+                <th>説明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>
+                    <pre><code>.data
+
+pair:
+    .word 3
+    .word 5</code></pre>
+                </th>
+                <td>
+                    <pre><code>data[0] = 3
+data[1] = 5
+
+symbol["pair"] = DataSymbol 0</code></pre>
+                </td>
+                <td>二つのワードを連続して配置する</td>
+            </tr>
+            <tr>
+                <th>
+                    <pre><code>.data
+
+closure:
+    .word function_code
+    .word 85</code></pre>
+                </th>
+                <td>
+                    <pre><code>data[0] = code_address(function_code)
+data[1] = 85
+
+relocation[0] = CodeAddress</code></pre>
+                </td>
+                <td>関数コードへの参照を含む静的データを生成する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>ランタイムシンボル</h2>
+
+    <p>
+        コード生成器が
+        <code>runtime_alloc</code>や
+        <code>runtime_print_int</code>などを通常の関数として呼び出す場合、
+        アセンブラは対応するランタイムコードを同じプログラムへ結合するか、
+        既知のランタイムシンボルとして解決します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>方式</th>
+                <th>処理</th>
+                <th>基本仕様での採用</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>ランタイムアセンブリ結合</th>
+                <td>
+                    ランタイム関数を通常のアセンブリとして
+                    ユーザープログラムと同時にアセンブルする
+                </td>
+                <td>採用する</td>
+            </tr>
+            <tr>
+                <th>既知シンボルからtrapへ変換</th>
+                <td>
+                    一部のランタイム関数呼出しを、
+                    対応する
+                    <code>trap</code>命令を含むラッパーへ解決する
+                </td>
+                <td>入出力、終了、メモリ確保などに使用できる</td>
+            </tr>
+            <tr class="advanced">
+                <th>外部リンク</th>
+                <td>発展　ランタイムを別オブジェクトとしてリンクする</td>
+                <td>分割コンパイル導入後に使用する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>trap番号</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>命令</th>
+                <th>処理</th>
+                <th>引数</th>
+                <th>戻り値</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th><code>trap 0</code></th>
+                <td>プログラムの終了</td>
+                <td><code>r1</code>の終了コード</td>
+                <td>戻らない</td>
+            </tr>
+            <tr>
+                <th><code>trap 1</code></th>
+                <td>整数の出力</td>
+                <td><code>r1</code>のタグ付き整数</td>
+                <td><code>r1</code>に単位値</td>
+            </tr>
+            <tr>
+                <th><code>trap 2</code></th>
+                <td>文字の出力</td>
+                <td><code>r1</code>のタグ付き文字コード</td>
+                <td><code>r1</code>に単位値</td>
+            </tr>
+            <tr>
+                <th><code>trap 3</code></th>
+                <td>文字の入力</td>
+                <td>なし</td>
+                <td><code>r1</code>に読み込んだ文字</td>
+            </tr>
+            <tr>
+                <th><code>trap 4</code></th>
+                <td>文字列の出力</td>
+                <td><code>r1</code>の文字列ポインタ</td>
+                <td><code>r1</code>に単位値</td>
+            </tr>
+            <tr>
+                <th><code>trap 5</code></th>
+                <td>1行の入力</td>
+                <td>なし</td>
+                <td><code>r1</code>に文字列ポインタ</td>
+            </tr>
+            <tr>
+                <th><code>trap 6</code></th>
+                <td>メモリの確保</td>
+                <td><code>r1</code>の生のワード数</td>
+                <td><code>r1</code>に確保領域の先頭アドレス</td>
+            </tr>
+            <tr>
+                <th><code>trap 7</code></th>
+                <td>実行時エラーの報告</td>
+                <td><code>r1</code>のエラー番号またはエラー値</td>
+                <td>戻らない</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>アセンブルエラー</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>分類</th>
+                <th>条件</th>
+                <th>報告する情報</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>字句エラー</th>
+                <td>不正な文字、閉じていない文字列、不正なエスケープ</td>
+                <td>ファイル名、行、列、不正な字句</td>
+            </tr>
+            <tr>
+                <th>構文エラー</th>
+                <td>命令、ラベル、ディレクティブの構文が正しくない</td>
+                <td>行、列、期待した構文、実際のトークン</td>
+            </tr>
+            <tr>
+                <th>未知の命令</th>
+                <td>命令セットに存在しない命令名を使用した</td>
+                <td>命令名とソース位置</td>
+            </tr>
+            <tr>
+                <th>オペランドエラー</th>
+                <td>オペランド数または種類が命令仕様と一致しない</td>
+                <td>命令名、期待した形式、実際のオペランド</td>
+            </tr>
+            <tr>
+                <th>レジスタエラー</th>
+                <td><code>r0</code>から<code>r15</code>以外を指定した</td>
+                <td>レジスタ名とソース位置</td>
+            </tr>
+            <tr>
+                <th>即値範囲エラー</th>
+                <td>整数が命令またはデータの許容範囲を超えた</td>
+                <td>即値、許容範囲、ソース位置</td>
+            </tr>
+            <tr>
+                <th>重複ラベル</th>
+                <td>同じラベルを複数回定義した</td>
+                <td>ラベル名、最初の定義位置、重複した定義位置</td>
+            </tr>
+            <tr>
+                <th>未定義ラベル</th>
+                <td>定義も外部宣言もないラベルを参照した</td>
+                <td>ラベル名と参照位置</td>
+            </tr>
+            <tr>
+                <th>ラベル種別エラー</th>
+                <td>ジャンプ命令でデータラベルを参照した</td>
+                <td>ラベル名、要求された種類、実際の種類</td>
+            </tr>
+            <tr>
+                <th>セクションエラー</th>
+                <td>コード領域へデータ、またはデータ領域へ命令を置いた</td>
+                <td>現在のセクションと項目の種類</td>
+            </tr>
+            <tr>
+                <th>エントリエラー</th>
+                <td>
+                    <code>.entry</code>が複数ある、
+                    または指定先がコードラベルではない
+                </td>
+                <td>指定されたラベルとソース位置</td>
+            </tr>
+            <tr>
+                <th>整列エラー</th>
+                <td><code>.align</code>の値が1以上の2の冪ではない</td>
+                <td>指定値とソース位置</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>実行可能形式の検査</h2>
+
+    <ul>
+        <li>エントリポイントが命令配列の範囲内にある</li>
+        <li>各命令のレジスタ番号が0以上15以下である</li>
+        <li>各直接ジャンプ先と直接呼出し先が命令配列の範囲内にある</li>
+        <li>各命令のオペランドが命令仕様と一致している</li>
+        <li>静的データがVMのメモリへ収まる</li>
+        <li>静的データ内の再配置位置がデータ配列の範囲内にある</li>
+        <li>コード再配置がコード位置を指している</li>
+        <li>データ再配置が静的データ内の位置を指している</li>
+        <li>未知のtrap番号を基本仕様の実行可能形式へ含めていない</li>
+    </ul>
+
+    <h2>発展　オブジェクト形式</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>フィールド</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="advanced">
+                <th><code>code</code></th>
+                <td>発展　ラベルの一部が未解決の命令列</td>
+            </tr>
+            <tr class="advanced">
+                <th><code>data</code></th>
+                <td>発展　静的データ</td>
+            </tr>
+            <tr class="advanced">
+                <th><code>symbols</code></th>
+                <td>発展　このオブジェクト内で定義されたシンボル</td>
+            </tr>
+            <tr class="advanced">
+                <th><code>imports</code></th>
+                <td>発展　別のオブジェクトから参照するシンボル</td>
+            </tr>
+            <tr class="advanced">
+                <th><code>exports</code></th>
+                <td>発展　他のオブジェクトへ公開するシンボル</td>
+            </tr>
+            <tr class="advanced">
+                <th><code>relocations</code></th>
+                <td>発展　リンク時に書き換えるコード位置またはデータ位置</td>
+            </tr>
+            <tr class="advanced">
+                <th><code>entry_candidate</code></th>
+                <td>発展　エントリポイント候補のシンボル</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>発展　リンカ</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>段階</th>
+                <th>処理</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="advanced">
+                <th>1</th>
+                <td>複数のオブジェクトのコード領域とデータ領域を結合する</td>
+            </tr>
+            <tr class="advanced">
+                <th>2</th>
+                <td>公開シンボルを一つの大域シンボル表へ登録する</td>
+            </tr>
+            <tr class="advanced">
+                <th>3</th>
+                <td>各外部シンボルを大域シンボル表から解決する</td>
+            </tr>
+            <tr class="advanced">
+                <th>4</th>
+                <td>結合後のコード位置とデータ位置に基づいて再配置を適用する</td>
+            </tr>
+            <tr class="advanced">
+                <th>5</th>
+                <td>エントリポイントを決定する</td>
+            </tr>
+            <tr class="advanced">
+                <th>6</th>
+                <td>最終的な実行可能形式を生成して検査する</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>発展　命令の符号化</h2>
+
+    <p class="advanced">
+        基本仕様では命令をOCamlの代数的データ型として保持します。
+        固定長または可変長バイトコードを導入する場合は、
+        命令コード、レジスタ番号、即値、オフセット、
+        コードアドレスのビット配置を別途定義します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>必要な仕様</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="advanced">
+                <th>命令形式</th>
+                <td>命令コードと各オペランドのビット幅</td>
+            </tr>
+            <tr class="advanced">
+                <th>即値形式</th>
+                <td>符号拡張、ゼロ拡張、範囲外即値の展開方法</td>
+            </tr>
+            <tr class="advanced">
+                <th>アドレス形式</th>
+                <td>絶対アドレス、相対アドレス、再配置形式</td>
+            </tr>
+            <tr class="advanced">
+                <th>デコード</th>
+                <td>仮想CPUがバイト列から命令を復元する規則</td>
+            </tr>
+            <tr class="advanced">
+                <th>互換性</th>
+                <td>実行可能形式のバージョン番号と検査規則</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>アセンブル後に成立する条件</h2>
+
+    <ul>
+        <li>すべての疑似命令が基本命令へ展開されている</li>
+        <li>命令配列にラベル定義、ディレクティブ、コメントが残っていない</li>
+        <li>すべてのコードラベル参照が命令配列内の位置へ解決されている</li>
+        <li>すべてのデータラベル参照が静的データ内の位置または再配置情報へ変換されている</li>
+        <li>各命令のオペランド数と種類が命令仕様に一致している</li>
+        <li>すべてのレジスタ番号が0以上15以下である</li>
+        <li>すべての整数即値が許容範囲内にある</li>
+        <li>静的データがワード配列として配置されている</li>
+        <li>文字列がランタイムの静的文字列表現へ変換されている</li>
+        <li>エントリポイントが一つの有効なコード位置へ解決されている</li>
+        <li>実行可能形式がVMの事前検査を通過できる</li>
+        <li class="advanced">発展　外部シンボルがリンカによって解決されている</li>
+        <li class="advanced">発展　すべてのリンク時再配置が適用されている</li>
+    </ul>
+
+    <h2>次の段階との関係</h2>
+
+    <p>
+        仮想CPUは、アセンブラが生成した実行可能形式をロードし、
+        静的データをメモリへ配置してから、
+        エントリポイントにプログラムカウンタを設定します。
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ロード処理</th>
+                <th>内容</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th>命令列の設定</th>
+                <td><code>executable.code</code>を仮想CPUのコード領域へ設定する</td>
+            </tr>
+            <tr>
+                <th>静的データの配置</th>
+                <td><code>executable.data</code>をメモリの静的データ領域へコピーする</td>
+            </tr>
+            <tr>
+                <th>再配置</th>
+                <td>データ基底アドレスが必要な静的データ参照を補正する</td>
+            </tr>
+            <tr>
+                <th>エントリポイント</th>
+                <td><code>pc</code>を<code>executable.entry</code>へ設定する</td>
+            </tr>
+            <tr>
+                <th>レジスタ</th>
+                <td>
+                    <code>r0</code>から<code>r13</code>と
+                    <code>r15</code>を0へ初期化する
+                </td>
+            </tr>
+            <tr>
+                <th>スタック</th>
+                <td><code>r14</code>をスタック領域の終端アドレスへ設定する</td>
+            </tr>
+            <tr>
+                <th>実行開始</th>
+                <td><code>halted</code>を偽にして命令実行ループを開始する</td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+</html>
